@@ -99,6 +99,14 @@ def assert_candidate(out: Path) -> dict:
                 raise AssertionError(relative + ": password input active without server readiness")
             if any("disabled" not in button for button in page.submit_buttons):
                 raise AssertionError(relative + ": credential submission active without server readiness")
+        if relative == "index.html":
+            if 'id="playground-fixture"' in html:
+                raise AssertionError("landing embeds a duplicate fixture instead of the canonical JSON asset")
+            fixture = out / "assets/playground-fixture.json"
+            if not fixture.is_file() or not json.loads(fixture.read_text("utf-8")).get("surface"):
+                raise AssertionError("standalone playground fixture is missing or malformed")
+            if 'fetch("/assets/playground-fixture.json"' not in (out / "assets/playground.js").read_text("utf-8"):
+                raise AssertionError("playground controller must consume only the canonical fixture")
         if relative == "conta/index.html" and "noindex" not in page.robots:
             raise AssertionError(relative + ": account portal must not be indexed")
         if relative in {"index.html", "conta/index.html"}:
