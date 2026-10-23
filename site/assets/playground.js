@@ -1,5 +1,5 @@
 /* Public marketing simulation only. No product imports, persistence, network or identity. */
-(() => {
+(async () => {
   "use strict";
   const root = document.querySelector(".playground");
   if (!root) return;
@@ -10,12 +10,27 @@
   const t = (messageId, variables) => i18n.t(messageId, variables);
   const local = source => i18n.fromSource(source);
   const deviceLabel = device => local(device === "phone" ? "telefone" : "notebook");
-  const fixtureNode = document.querySelector("#playground-fixture");
+  // One presentation fixture, versioned inside the Site bundle. No inline
+  // 159 KB duplicate in HTML and no runtime imports from the Surface source.
   let fixture;
   try {
-    fixture = JSON.parse(fixtureNode?.textContent ?? "");
-    if (fixture?.$schema !== "prototype-ordax.public-playground-fixture/1") throw new Error("schema");
+    const response = await fetch("/assets/playground-fixture.json", {
+      credentials: "omit", redirect: "error", cache: "no-cache",
+    });
+    if (!response.ok) throw new Error("fixture-unavailable");
+    const expectedLength = Number(response.headers.get("content-length") || "0");
+    if (!Number.isFinite(expectedLength) || expectedLength > 512000) throw new Error("fixture-too-large");
+    const payload = await response.text();
+    if (payload.length > 512000) throw new Error("fixture-too-large");
+    fixture = JSON.parse(payload);
+    if (fixture?.$schema !== "prototype-ordax.public-playground-fixture/1"
+        || !Array.isArray(fixture.apps)
+        || !Array.isArray(fixture?.home?.rail_apps)
+        || typeof fixture?.surface?.chrome !== "string"
+        || typeof fixture?.surface?.views?.home !== "string") throw new Error("fixture-schema");
+    root.dataset.fixtureReady = "true";
   } catch {
+    root.dataset.fixtureReady = "false";
     const status = root.querySelector(".demo-status");
     if (status) status.textContent = "A demonstração está indisponível enquanto a fixture pública é atualizada.";
     return;
