@@ -46,3 +46,28 @@ O catálogo de downloads é **vazio** se o publicador não fornecer uma projeç�
 ## Próximos passos e estado preciso
 
 Consultar [Auditoria](docs/AUDIT.md), [Decisões](docs/DECISIONS.md) e [Handoff](docs/HANDOFF.md). As transferências PNG e o build independente com integridade foram comprovados no [CI](https://github.com/ordaxsystems/ordax-site/actions/runs/40039062149). Permanecem pendentes a publicação **oficial** de marca/demonstração e ofertas pelos owners, comparação visual/acessibilidade/SEO em staging e a integração/cutover atômicos no `ordax-os`. O [CI mais recente](https://github.com/ordaxsystems/ordax-site/actions/runs/40039633625) confirma a apresentação de referência em quatro planos, sem habilitar billing. Nada disso é autorização para deploy.
+
+
+## Site SSOT, SEO e prova real de browser
+
+`contracts/site-routes.json` é o inventário único de rotas e indexação consumido por builder, testes de localização e Chrome. O domínio canônico **não** pertence a esse contrato: a origem HTTPS é injetada pelo owner de deployment por `--public-origin` (no CI candidato: `https://ordax.com.br`). O build gera canonical/OpenGraph, `robots.txt` e `sitemap.xml` apenas no artefato; Conta/Identity/entrada Web têm `noindex`.
+
+A landing lê **um** `/assets/playground-fixture.json` de mesma origem, com falha indisponível explícita. Foi removida a segunda fixture embutida na landing (~159 KB), sem copiar fonte executável da Surface. O controlador mantém um único landmark `main` para acessibilidade.
+
+CI de candidato: `python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence` usa ChromeDriver pré-instalado, exercita 11 rotas em 1440, 390 e 320 px, guarda capturas e relatório e mantém APIs de autenticação indisponíveis em loopback. A execução [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365) não substitui uma auditoria WCAG completa ou auth E2E em staging.
+
+**Comando de build independente atualizado:**
+
+```sh
+python3 scripts/build.py build \
+  --source-commit <SHA40_DO_SITE> \
+  --brand-dir artifacts/brand/os-migration-70b0f7eb \
+  --offers-dir artifacts/offers/os-migration-70b0f7eb \
+  --public-origin https://ordax.com.br \
+  --out out/site
+python3 scripts/build.py verify --out out/site
+python3 scripts/smoke_static.py --out out/site
+python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence
+```
+
+Os snapshots de marca/ofertas continuam sendo **apenas materiais de migração verificados**, não autorizações de publicação ou SSOT substitutos.

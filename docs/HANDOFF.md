@@ -31,3 +31,12 @@
 - Jamais transformar candidato CI em autorização de produção: ainda exige os artefatos oficiais de marca/planos/demonstração e E2E de staging.
 - Revalidar `ordax-os/main` e PRs concorrentes antes de qualquer alteração compartilhada.
 - Atualizar este arquivo após cada PR/CI/gate concluído; SSOT do projeto são seus códigos/contratos externos, não este handoff.
+
+
+## Execução adicional (2026-10-23)
+- `site/assets/playground.js` agora consome uma única fixture JSON de mesma origem com verificação de schema/limite de tamanho; removidos **159.242 bytes** de duplicação inline no `site/index.html`. O componente visual não duplica o landmark `main` da landing.
+- `scripts/browser_smoke.py` exerce `11 × 3 = 33` cenários no Chrome, captura telas e verifica viewport, navegação, IDs, nomes acessíveis, recursos externos e estados fail-closed de login/cadastro/recovery. [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40040885269).
+- `contracts/site-routes.json` é novo SSOT de páginas e política de indexação. `scripts/site_seo.py` gera canonical/OpenGraph, `robots.txt` e `sitemap.xml` com origem fornecida por deployment. CINCO páginas informativas indexáveis; as SEIS rotas autenticadas ou não habilitadas possuem noindex. [CI final da fase SEO PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365).
+- O Site deixou aviso de compatibilidade na [ordax-os#2198](https://github.com/ordaxsystems/ordax-os/pull/2198) sobre snapshots antigos após remoção da fonte visual.
+- As verificações de nomes/overflow no Chrome são boas provas iniciais, mas **não** há auditoria WCAG com contraste, navegação por leitor de tela ou E2E do gateway autenticado em staging. Não declarar esses gates PASS por inferência.
+- Continua sem permissão de deploy em produção. `ordax-site#1` permanece draft e `ordax-os#2196` é documentação, não repoint.

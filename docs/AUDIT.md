@@ -39,3 +39,11 @@
 5. Exercitar autenticação, sessão, recovery e catálogo em staging **sem habilitar funcionalidades indevidas**.
 6. **PREPARED** — PR documental [ordax-os#2196](https://github.com/ordaxsystems/ordax-os/pull/2196) registra o handoff, sem alterar caminhos. O repoint de ownership, CI/deploy e remoção duplicada exige uma **outra PR** após reconciliação Surface.
 7. Só então retirar fonte duplicada do OS mediante prova de equivalência; sem publicar produção automaticamente.
+
+
+## Evolução de provas da extração (2026-10-23)
+- Browser ChromeDriver sem dependências de produção: 11 rotas × três resoluções = 33 checks, 0 falhas no [CI](https://github.com/ordaxsystems/ordax-site/actions/runs/40040704257). Corrigido segundo landmark `main` causado pela inserção do snapshot da Surface, sem editar o snapshot gerado.
+- Single fixture: a landing deixou de serializar `playground-fixture.json` dentro de `index.html`. Diferença source: **159.242 bytes** a menos no HTML inicial; o JavaScript agora consome a única fixture same-origin, valida schema e falha fechado se não encontrar o recurso. [Prova Chrome após remoção](https://github.com/ordaxsystems/ordax-site/actions/runs/40040885269).
+- SEO: `contracts/site-routes.json` substitui inventários hardcoded redundantes em scripts e testes. A origem canônica é fornecida pelo deployment; conteúdo do Site não controla domínio. 5 URLs informativas no sitemap; Conta, login, cadastro, recuperação e entrada Web noindex. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365).
+- [ordax-os#2198](https://github.com/ordaxsystems/ordax-os/pull/2198) em draft mexe no workflow e na apresentação pública derivada ao remover fontes visuais. Compatibilidade e fase de repoint do Site **devem ser reconciliadas antes do merge**, sem restabelecer source espelhado.
+- **Pendente:** publicação oficial dos pacotes de brand/preview/offers; diff visual e WCAG completos, autenticação real end-to-end em staging, CI de repoint e cutover no OS, aprovação separada de produção.

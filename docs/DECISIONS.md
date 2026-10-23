@@ -11,3 +11,8 @@
 **SITE-ADR-005 — Segurança de deployment:** GitHub Actions verifica candidato sem segredos nem deploy. Produção/domínios/credentials exigem autorização independente e serão configurados fora do PR de extração.
 
 **SITE-ADR-006 — Catálogos externos:** contratos oficiais de Identity, entitlements e releases não são copiados como SSOT. Inputs públicos autorizados são projeções versionadas/digestadas. O Site é consumidor, não publicador.
+
+
+**SITE-ADR-007 — Uma fixture pública, sem serialização inline (2026-10-23):** o playground usa apenas `site/assets/playground-fixture.json` por fetch same-origin; o HTML não guarda uma cópia de ~159 KB. Snapshot vindo de Surface permanece somente leitura, com schema e falha fechada.
+
+**SITE-ADR-008 — Rotas e SEO sem controle de domínio (2026-10-23):** `contracts/site-routes.json` controla indexabilidade e os testes. O build só gera canonical, OpenGraph, sitemap e robots com `--public-origin` explícito vindo do owner de deployment; esse input não transfere ownership de DNS nem publica nada.

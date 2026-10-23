@@ -27,3 +27,11 @@ Branch -> auditoria de diffs e conflitos -> testes de rotas/i18n/segurança -> p
 
 ## Status
 Extração é **candidata em draft**; todos os assets originais, incluindo dois PNGs grandes, foram preservados. Build CI independente, smoke estático e snapshot de ofertas/brand de migração aprovados. Falta a publicação **oficial** desses insumos pelo owner Surface/Platform, E2E de browser e cutover no OS. Nenhum build de produção autorizado.
+
+
+## Gates de implementação atualmente verificados
+- Testes ChromeDriver: 11 rotas × 3 viewports; screenshots no artefato CI [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365).
+- Landing: somente `site/assets/playground-fixture.json`; proibido recolocar fixture inline como segundo estado.
+- `contracts/site-routes.json`: único catálogo de rotas do Site; robots, sitemap e testes o consomem.
+- `--public-origin` deve ser fornecido pelo owner de deployment (OS/Platform); nunca mover DNS ou aceitar origem definida pelo browser.
+- A PR concorrente [ordax-os#2198](https://github.com/ordaxsystems/ordax-os/pull/2198) envolve remoção de fonte visual. O Site ainda requer material oficial versionado e não autoriza o cutover por essa PR.
