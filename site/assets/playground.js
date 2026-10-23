@@ -1,4 +1,4 @@
-/* Public marketing simulation only. No product imports, persistence, network or identity. */
+/* Public marketing simulation only. One same-origin static fixture request; no product imports, persistence or identity. */
 (async () => {
   "use strict";
   const root = document.querySelector(".playground");
