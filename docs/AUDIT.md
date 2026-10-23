@@ -4,10 +4,10 @@
 - Origem: `ordaxsystems/ordax-os`, branch `main`, revisão observada `70b0f7eb5d5085be0d4f176f5232def37c7a2a24`.
 - Árvore original da apresentação: `sites/public/`, Git tree `bc516a313eaa78a83652237a6d9d0cdbf295d28b` (36 blobs de arquivo, com 11 rotas HTML).
 - Implementação original: `tools/public-site/`, incluindo build, geradores Meridian, validação legal, catálogo público, deploy e smoke.
-- Artefato novo: `site/`; todo HTML, JS, CSS e i18n copiado de origem sem reconstrução por IA; PNG/JPEG pequenos copiados preservando **o mesmo blob SHA Git**.
-- **Pendência de duas imagens originais**: `site/assets/aurora-titanium.png` (blob `e4574877f57a66574d001ebcfbfc8718782a2c23`, 2016680 bytes) e `site/assets/download-hero.png` (blob `7c23ed6070890d81a11474108f0a52a0965ce501`, 1629858 bytes). Não fabricar alternativas. Transferir os bytes com Git via executor CI autorizado e verificar SHA do blob antes de propor cutover.
+- Artefato novo: `site/`; todo HTML, JS, CSS e i18n copiado de origem sem reconstrução por IA; Todos os seis PNG/JPEG do site copiados preservando **o mesmo blob SHA Git**.
+- **Imagens originais transferidas e comprovadas**: `site/assets/aurora-titanium.png` (Git blob `e4574877f57a66574d001ebcfbfc8718782a2c23`, 2016680 bytes) e `site/assets/download-hero.png` (Git blob `7c23ed6070890d81a11474108f0a52a0965ce501`, 1629858 bytes). Um workflow temporário fez checkout do commit OS exato e verificou `git hash-object` antes de gravar ambas; [execução aprovada](https://github.com/ordaxsystems/ordax-site/actions/runs/40038857924). O workflow foi retirado depois da importação, sem legado permanente.
 - O snapshot `site/assets/surface-snapshot.json` + CSS, `playground-fixture.json` são artefatos **gerados** de demonstração, nunca imports dinâmicos. A procedência original deve permanecer identificável, e atualizações futuras devem consumir artefatos publicados pelo owner da Surface.
-- Fonts, símbolo, tokens e wallpaper continuam **fora** do site até serem publicados como artefato de marca versionado; `scripts/build.py` exige manifesto e SHA-256 de cada recurso.
+- Fontes, símbolo, tokens e wallpaper foram **preservados como artefato de migração separado do source** em `artifacts/brand/os-migration-70b0f7eb`, com manifesto, origem OS pinada e SHA-256 por arquivo ([prova de geração](https://github.com/ordaxsystems/ordax-site/actions/runs/40038988099)). Esse artefato permite build independente, mas **não** substitui o futuro artefato publicado e mantido pelo owner oficial de marca/Surface.
 
 ## Dependências e owner correto
 | Subsistema | Fonte anterior | Destino/correção |
@@ -31,10 +31,10 @@
 - Outras PRs de Foundation, USB, Creator, Conta e OS não são responsabilidade desta extração.
 
 ## Gates de cutover
-1. Copiar imagens originais pendentes e verificar byte-for-byte.
-2. Publicar brand artifact e demo com origem/revisão/impressão digital independentes do pipeline OS.
+1. **PASS** — todas as imagens originais preservadas e blobs verificados.
+2. **PARTIAL** — snapshot imutável de migração da marca gerado; artefatos oficiais da Surface e demo ainda precisam de publicação pelo owner.
 3. Consumir um catálogo comercial público autorizado (se houver) sem copiar contrato de entitlements.
-4. Rodar build estático autônomo e testes em CI, com screenshots comparativos e validação WCAG/responsividade/SEO por rota.
+4. **PARTIAL** — build e verificação independentes aprovados no [CI de candidato](https://github.com/ordaxsystems/ordax-site/actions/runs/40039062149); screenshots, WCAG, responsividade e SEO ainda requerem prova em staging.
 5. Exercitar autenticação, sessão, recovery e catálogo em staging **sem habilitar funcionalidades indevidas**.
 6. Atualizar ownership/caminhos, CI e deploy orquestrador do OS em PR separada, reconciliar com Surface e validar referências.
 7. Só então retirar fonte duplicada do OS mediante prova de equivalência; sem publicar produção automaticamente.
