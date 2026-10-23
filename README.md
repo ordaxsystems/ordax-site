@@ -26,12 +26,12 @@ node tests/test_localization.mjs
 
 ## Build de candidato
 
-O bundle real exige que a origem tenha todos os arquivos originais, incluindo duas imagens PNG ainda pendentes, além do artefato oficial de marca. Não usa cópias do código da Surface nem monta o produto Web:
+O bundle já inclui **todos os arquivos originais do portal**, com os seis binários de imagem preservando seus Git SHAs. O CI usa o snapshot auditado de marca `artifacts/brand/os-migration-70b0f7eb` e gera o candidato estático sem compilar a Surface nem montar o produto Web. Este snapshot de migração **não** é ainda uma publicação oficial da Surface:
 
 ```sh
 python3 scripts/build.py build \
   --source-commit <SHA40_DO_SITE> \
-  --brand-dir <ARTEFATO_ORDAX_BRAND_VERIFICADO> \
+  --brand-dir artifacts/brand/os-migration-70b0f7eb \
   --out out/site
 python3 scripts/build.py verify --out out/site
 ```
@@ -42,4 +42,4 @@ O catálogo de downloads é **vazio** se o publicador não fornecer uma projeç�
 
 ## Próximos passos e estado preciso
 
-Consultar [Auditoria](docs/AUDIT.md), [Decisões](docs/DECISIONS.md) e [Handoff](docs/HANDOFF.md). Falta concluir as duas transferências PNG, receber marca/snapshot publicados e provar CI/build/paridade antes de propor remoção do portal duplicado em `ordax-os`. Nada disso é autorização para deploy.
+Consultar [Auditoria](docs/AUDIT.md), [Decisões](docs/DECISIONS.md) e [Handoff](docs/HANDOFF.md). As transferências PNG e o build independente com integridade foram comprovados no [CI](https://github.com/ordaxsystems/ordax-site/actions/runs/40039062149). Permanecem pendentes a publicação oficial de marca/demonstração pela Surface, projeção do catálogo de planos, comparação visual/acessibilidade/SEO em staging e a integração/cutover atômicos no `ordax-os`. Nada disso é autorização para deploy.
