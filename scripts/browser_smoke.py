@@ -19,12 +19,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-
-ROUTES = (
-    "/", "/download/", "/login/", "/cadastro/", "/recuperar/",
-    "/recuperar/nova-senha/", "/conta/", "/licencas/", "/privacidade/",
-    "/termos/", "/web/",
-)
+from site_routes import PATHS as ROUTES
 VIEWPORTS = ((1440, 900), (390, 844), (320, 740))
 
 
