@@ -7,6 +7,7 @@
 - Artefato novo: `site/`; todo HTML, JS, CSS e i18n copiado de origem sem reconstrução por IA; Todos os seis PNG/JPEG do site copiados preservando **o mesmo blob SHA Git**.
 - **Imagens originais transferidas e comprovadas**: `site/assets/aurora-titanium.png` (Git blob `e4574877f57a66574d001ebcfbfc8718782a2c23`, 2016680 bytes) e `site/assets/download-hero.png` (Git blob `7c23ed6070890d81a11474108f0a52a0965ce501`, 1629858 bytes). Um workflow temporário fez checkout do commit OS exato e verificou `git hash-object` antes de gravar ambas; [execução aprovada](https://github.com/ordaxsystems/ordax-site/actions/runs/40038857924). O workflow foi retirado depois da importação, sem legado permanente.
 - O snapshot `site/assets/surface-snapshot.json` + CSS, `playground-fixture.json` são artefatos **gerados** de demonstração, nunca imports dinâmicos. A procedência original deve permanecer identificável, e atualizações futuras devem consumir artefatos publicados pelo owner da Surface.
+- Os valores comerciais de referência foram projetados **apenas como HTML público** por gerador canônico do commit OS de origem, em `artifacts/offers/os-migration-70b0f7eb/` com contrato-fonte identificado por digest e bloqueios explícitos de compra. [Prova de geração](https://github.com/ordaxsystems/ordax-site/actions/runs/40039542832). Nada altera o sistema de assinatura.
 - Fontes, símbolo, tokens e wallpaper foram **preservados como artefato de migração separado do source** em `artifacts/brand/os-migration-70b0f7eb`, com manifesto, origem OS pinada e SHA-256 por arquivo ([prova de geração](https://github.com/ordaxsystems/ordax-site/actions/runs/40038988099)). Esse artefato permite build independente, mas **não** substitui o futuro artefato publicado e mantido pelo owner oficial de marca/Surface.
 
 ## Dependências e owner correto
@@ -17,7 +18,7 @@
 | Conta (visual) | `account-portal.js` + `account-dashboard.css` | site apenas; sem implementação de sessão/billing |
 | Traduções | `sites/public/i18n/` | `site/i18n/`, único dicionário de site |
 | Downloads | `platform/releases/publications.json` via gerador | somente catálogo autorizado produzido pelo owner; default vazio |
-| Planos/preços | `docs/contracts/entitlements.json` via `plan_catalog.py` | **não** copiar contrato; aguarda publicação de projeção verificável; aquisição e checkout desabilitados |
+| Planos/preços | `docs/contracts/entitlements.json` via `plan_catalog.py` | **não** copiar contrato; snapshot de projeção HTML read-only `artifacts/offers/os-migration-70b0f7eb` gerado no commit fonte e verificado; publicação oficial pelo owner ainda pendente; compra/cotas desabilitadas |
 | Marca | `system/surface/ui/` e `tools/brand` | artefato externo imutável por SHA + manifesto |
 | Demo visual | `surface_snapshot.mjs` e `playground_fixture.py` | snapshot aprovado/publicado pela Surface; JS runtime do site não importa Surface |
 | Build e deploy | `tools/public-site/deployment.py` importa `tools/surface-web/build.py` | nunca acoplar; build estático isolado com manifest e CI próprios; deploy não autorizado |
@@ -33,7 +34,7 @@
 ## Gates de cutover
 1. **PASS** — todas as imagens originais preservadas e blobs verificados.
 2. **PARTIAL** — snapshot imutável de migração da marca gerado; artefatos oficiais da Surface e demo ainda precisam de publicação pelo owner.
-3. Consumir um catálogo comercial público autorizado (se houver) sem copiar contrato de entitlements.
+3. **PARTIAL** — apresentação comercial de referência restaurada por artefato de migração verificado (sem contrato duplicado); CI das quatro opções na landing e Conta [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40039633625). Falta projeção oficial mantida pelo owner e autorização do conteúdo publicado.
 4. **PARTIAL** — build e verificação independentes aprovados no [CI de candidato](https://github.com/ordaxsystems/ordax-site/actions/runs/40039062149); 11 rotas, assets, metadados básicos, formulários fail-closed e catálogo default vazio aprovados na [prova estática ampliada](https://github.com/ordaxsystems/ordax-site/actions/runs/40039330301). Screenshots, WCAG, responsividade e SEO completo ainda exigem browser/staging.
 5. Exercitar autenticação, sessão, recovery e catálogo em staging **sem habilitar funcionalidades indevidas**.
 6. **PREPARED** — PR documental [ordax-os#2196](https://github.com/ordaxsystems/ordax-os/pull/2196) registra o handoff, sem alterar caminhos. O repoint de ownership, CI/deploy e remoção duplicada exige uma **outra PR** após reconciliação Surface.
