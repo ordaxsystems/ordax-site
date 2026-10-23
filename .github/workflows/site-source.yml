@@ -1,0 +1,33 @@
+name: Site Source — isolated
+on:
+  push:
+    branches: [main, feat/site-independent-extraction]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Python tools
+        run: python3 -m compileall -q scripts tests
+      - name: Check independent Site sources (not a release)
+        run: python3 scripts/build.py check
+      - name: Localization and accessible copy regression
+        run: node tests/test_localization.mjs
+      - name: Architecture, fail-closed and catalog unit tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Assert no production deployment
+        run: |
+          test ! -e .vercel/project.json
+          test ! -e .env.production
+          echo "SITE_PRODUCTION_DEPLOYMENT=DISABLED"
