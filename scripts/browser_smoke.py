@@ -179,7 +179,8 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         sessionStatus: session?.dataset?.status || null,
         accountHasVerifiedUser: !!document.querySelector('[data-verified-user]') ||
           [...document.querySelectorAll('.verified-email')].some(x => x.textContent.includes('@')),
-        landingFixturePresent: !!document.querySelector('#playground-fixture'),
+        landingFixturePresent: !!document.querySelector('.playground[data-fixture-ready="true"]') &&
+          !!document.querySelector('.playground .demo-native'),
         accountPortal: !!document.querySelector('#account-app'),
         interactiveCount: controls.length
       };
@@ -230,6 +231,12 @@ def run(root: Path, evidence: Path) -> dict:
                     if driver.run("return document.readyState === 'complete'"):
                         break
                     time.sleep(0.1)
+                if route == "/":
+                    for _ in range(40):
+                        done = driver.run("""return document.querySelector('.playground')?.dataset.fixtureReady || null;""")
+                        if done in ("true", "false"):
+                            break
+                        time.sleep(0.1)
                 if route in ("/login/", "/cadastro/", "/recuperar/", "/recuperar/nova-senha/", "/conta/", "/web/"):
                     for _ in range(30):
                         status = driver.run("""const el=document.querySelector('[data-identity-state],#account-session,[data-web-state]'); return el?.dataset?.status || null;""")
