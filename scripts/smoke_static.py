@@ -6,14 +6,9 @@ import json
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit
-
-ROUTES = (
-    "index.html", "download/index.html", "login/index.html",
-    "cadastro/index.html", "recuperar/index.html",
-    "recuperar/nova-senha/index.html", "conta/index.html",
-    "licencas/index.html", "privacidade/index.html", "termos/index.html",
-    "web/index.html",
-)
+from xml.etree import ElementTree
+from site_routes import ROUTE_RECORDS, ROUTES
+from site_seo import validate_origin
 
 class Page(HTMLParser):
     def __init__(self):
@@ -26,6 +21,9 @@ class Page(HTMLParser):
         self.description = ""
         self.viewport = ""
         self.robots = ""
+        self.canonical = None
+        self.social_url = None
+        self.social_title = None
         self.ids = set()
         self.skip_target = None
         self.assets = []
@@ -44,6 +42,9 @@ class Page(HTMLParser):
             if attr.get("name") == "description": self.description = attr.get("content", "")
             if attr.get("name") == "viewport": self.viewport = attr.get("content", "")
             if attr.get("name") == "robots": self.robots = attr.get("content", "")
+            if attr.get("property") == "og:url": self.social_url = attr.get("content")
+            if attr.get("property") == "og:title": self.social_title = attr.get("content")
+        if tag == "link" and attr.get("rel") == "canonical": self.canonical = attr.get("href")
         if tag == "link" and attr.get("rel") in {"stylesheet", "icon"}:
             self.assets.append(attr.get("href", ""))
         if tag in {"script", "img"} and attr.get("src"):
@@ -65,8 +66,11 @@ class Page(HTMLParser):
 def assert_candidate(out: Path) -> dict:
     if not (out / "public-site-manifest.json").is_file():
         raise AssertionError("candidate manifest is absent")
+    manifest = json.loads((out / "public-site-manifest.json").read_text(encoding="utf-8"))
+    origin = validate_origin(manifest["seo_origin"])
     inspected = []
-    for relative in ROUTES:
+    for route in ROUTE_RECORDS:
+        relative = route["source"]
         html = (out / relative).read_text(encoding="utf-8")
         page = Page()
         page.feed(html)
@@ -82,6 +86,13 @@ def assert_candidate(out: Path) -> dict:
         for key, good in checks.items():
             if not good:
                 raise AssertionError(relative + ": " + key + " failed")
+        if route["indexable"]:
+            if page.canonical != origin + route["path"] or page.social_url != page.canonical or page.social_title != page.title:
+                raise AssertionError(relative + ": canonical and OpenGraph metadata drift")
+            if "noindex" in page.robots:
+                raise AssertionError(relative + ": public information page incorrectly noindexed")
+        elif "noindex" not in page.robots.lower() or page.canonical is not None:
+            raise AssertionError(relative + ": gated route must have only noindex metadata")
         for value in page.assets:
             url = urlsplit(value)
             if url.scheme or url.netloc or not value.startswith("/"):
@@ -117,10 +128,18 @@ def assert_candidate(out: Path) -> dict:
             if "ORDAX_PUBLIC_PLAN_CATALOG" in html or "ORDAX_ACCOUNT_PLAN_CATALOG" in html:
                 raise AssertionError(relative + ": unresolved reference catalog marker")
         inspected.append({"route": "/" + relative.removesuffix("index.html"), "assets": len(page.assets), "headings": page.headings})
+    indexed = [origin + route["path"] for route in ROUTE_RECORDS if route["indexable"]]
+    sitemap = ElementTree.parse(out / "sitemap.xml").getroot()
+    locations = [elem.text for elem in sitemap.findall(".//{http://www.sitemaps.org/schemas/sitemap/0.9}loc")]
+    if locations != indexed or manifest["indexable_routes"] != [r["path"] for r in ROUTE_RECORDS if r["indexable"]]:
+        raise AssertionError("SEO sitemap does not match the canonical Site route inventory")
+    robots = (out / "robots.txt").read_text("utf-8")
+    if "Disallow: /conta/" not in robots or f"Sitemap: {origin}/sitemap.xml" not in robots:
+        raise AssertionError("robots.txt lacks account boundary or canonical sitemap")
     catalog = json.loads((out / "releases/catalog.json").read_text("utf-8"))
     if catalog != {"$schema": "prototype-ordax.public-release-catalog/1", "status": "empty", "releases": []}:
         raise AssertionError("CI candidate must fail closed on absent authorized publications")
-    return {"result": "PASS", "routes": inspected, "default_public_releases": 0}
+    return {"result": "PASS", "routes": inspected, "default_public_releases": 0, "sitemap_entries": len(indexed)}
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
