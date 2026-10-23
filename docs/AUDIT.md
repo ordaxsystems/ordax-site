@@ -34,7 +34,7 @@
 1. **PASS** — todas as imagens originais preservadas e blobs verificados.
 2. **PARTIAL** — snapshot imutável de migração da marca gerado; artefatos oficiais da Surface e demo ainda precisam de publicação pelo owner.
 3. Consumir um catálogo comercial público autorizado (se houver) sem copiar contrato de entitlements.
-4. **PARTIAL** — build e verificação independentes aprovados no [CI de candidato](https://github.com/ordaxsystems/ordax-site/actions/runs/40039062149); screenshots, WCAG, responsividade e SEO ainda requerem prova em staging.
+4. **PARTIAL** — build e verificação independentes aprovados no [CI de candidato](https://github.com/ordaxsystems/ordax-site/actions/runs/40039062149); 11 rotas, assets, metadados básicos, formulários fail-closed e catálogo default vazio aprovados na [prova estática ampliada](https://github.com/ordaxsystems/ordax-site/actions/runs/40039330301). Screenshots, WCAG, responsividade e SEO completo ainda exigem browser/staging.
 5. Exercitar autenticação, sessão, recovery e catálogo em staging **sem habilitar funcionalidades indevidas**.
-6. Atualizar ownership/caminhos, CI e deploy orquestrador do OS em PR separada, reconciliar com Surface e validar referências.
+6. **PREPARED** — PR documental [ordax-os#2196](https://github.com/ordaxsystems/ordax-os/pull/2196) registra o handoff, sem alterar caminhos. O repoint de ownership, CI/deploy e remoção duplicada exige uma **outra PR** após reconciliação Surface.
 7. Só então retirar fonte duplicada do OS mediante prova de equivalência; sem publicar produção automaticamente.
