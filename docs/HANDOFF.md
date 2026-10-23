@@ -13,6 +13,8 @@
 - Builder independente candidato implementado sem dependências de kernel/OS, com catálogo vazio por padrão e brand externo obrigatório.
 - Snapshot de marca pinado em `artifacts/brand/os-migration-70b0f7eb`, com SHA-256 e proveniência OS (workflow de migração [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40038988099)); nenhum runtime da Surface copiado.
 - CI de build estático autônomo/verify, testes e upload de candidato não-produção [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40039062149); sem domínio/credenciais/deploy.
+- Auditoria adicional das 11 rotas compiladas, arquivos locais, metadados básicos, formulários nativos desabilitados e release catalog vazio por padrão, [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40039330301). Isso **não** equivale a auditoria WCAG e screenshot de navegador.
+- PR documental [ordax-os#2196](https://github.com/ordaxsystems/ordax-os/pull/2196) criada em draft, sem repoint nem mudanças de runtime. O OS antigo continua vigente.
 - PR Site [#1](https://github.com/ordaxsystems/ordax-site/pull/1) aberta em draft.
 
 ## Bloqueios imediatos (ordem)
@@ -20,7 +22,7 @@
 2. Publicar snapshot Meridian/fixture como artefato read-only compatível pelo owner Surface; não manter gerador no Site.
 3. Projetar catálogo comercial de leitura da autoridade de entitlements, sem copiar contrato; restaurar conteúdo visual de planos sem habilitar cobrança.
 4. Rodar smoke real de browser, a11y, SEO/responsividade, login/recovery fail-closed e paridade visual em staging.
-5. Abrir PR independente de repoint no OS, revalidar sua `main`, reconciliar Surface #2195 e remover duplicação só após prova de igualdade e CI dos consumidores.
+5. PR **futura de repoint/cutover** no OS distinta da documental #2196; revalidar a `main`, reconciliar Surface #2195 e remover duplicação só após prova de igualdade e CI dos consumidores.
 
 ## Recomendações operacionais
 - Começar por `python3 scripts/build.py check` e `node tests/test_localization.mjs`.
