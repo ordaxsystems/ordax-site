@@ -9,6 +9,7 @@ Repositório de **apresentação pública** do OrdaX. Independente dos builds do
 - `site/` — HTML/CSS/JavaScript estático, landing, downloads, login/cadastro/recuperação, UI de Conta, páginas legais, playground read-only e locales `pt-BR`/`en-US`.
 - `scripts/` — build de candidato, integridade de bundle, catálogos públicos autorizados.
 - `tests/` — regressões de contratos do site e localização.
+- `scripts/smoke_static.py` — smoke estático do candidato para as 11 rotas (assets, metadata, formulários fail-closed e catálogo vazio).
 - `.github/workflows/site-source.yml` — CI isolado, **sem publicação**.
 - `docs/` — auditoria, decisões, proveniência e handoff.
 
@@ -34,6 +35,7 @@ python3 scripts/build.py build \
   --brand-dir artifacts/brand/os-migration-70b0f7eb \
   --out out/site
 python3 scripts/build.py verify --out out/site
+python3 scripts/smoke_static.py --out out/site
 ```
 
 O diretório `brand-dir` deve conter `manifest.json` com `artifact_class=ordax-brand`, `source_commit` e registros `path,size,sha256` para os recursos públicos oficiais. O site jamais cria esse artefato a partir de arquivos internos do OS.
