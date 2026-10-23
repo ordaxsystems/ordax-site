@@ -31,6 +31,7 @@ jobs:
           python3 scripts/build.py build \
             --source-commit "${{ github.sha }}" \
             --brand-dir artifacts/brand/os-migration-70b0f7eb \
+            --offers-dir artifacts/offers/os-migration-70b0f7eb \
             --out out/site
           python3 scripts/build.py verify --out out/site
       - name: Verify all built routes and fail-closed default states
