@@ -122,7 +122,40 @@ def stage_brand(stage: Path, brand_dir: Path) -> dict:
         target.write_bytes(payload)
     return {"source_commit": ledger["source_commit"], "manifest_sha256": digest((brand_dir / "manifest.json").read_bytes())}
 
-def build(out: Path, sha: str, brand: Path, publications: Path | None) -> dict:
+def load_reference_offers(directory: Path | None) -> tuple[str, dict | None]:
+    if directory is None:
+        # No official presentation projection supplied: reference offers stay unavailable.
+        return '<p class="commercial-notice">Catálogo de planos em preparação.</p>', None
+    manifest_path = directory / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if (manifest.get("artifact_class") != "ordax-public-reference-offers"
+            or manifest.get("status") != "reference-not-purchasable"
+            or not SHA40.fullmatch(str(manifest.get("source_commit", "")))
+            or manifest.get("paid_purchases_enabled") is not False
+            or manifest.get("commercial_capacity_allocation_enabled") is not False
+            or manifest.get("html_path") != "reference-offers.html"):
+        raise SiteError("reference offers are unapproved or incorrectly identified")
+    path = directory / "reference-offers.html"
+    if not path.is_file() or path.is_symlink():
+        raise SiteError("reference offers artifact missing or linked")
+    payload = path.read_bytes()
+    if (not SHA256.fullmatch(str(manifest.get("html_sha256", "")))
+            or digest(payload) != manifest["html_sha256"]
+            or len(payload) != manifest.get("html_size")):
+        raise SiteError("reference offers integrity mismatch")
+    html = payload.decode("utf-8")
+    if (not html.startswith('<div class="commercial-catalog">')
+            or "Planos em preparação" not in html
+            or "contratação indisponível" not in html
+            or re.search(r"<\s*(?:script|form|iframe|a)\b", html, re.I)
+            or re.search(r"\b(?:href|action|on[a-z]+)\s*=", html, re.I)):
+        raise SiteError("reference offers contain interactive, unavailable or untrusted content")
+    return html, {"source_commit": manifest["source_commit"],
+                  "manifest_sha256": digest(manifest_path.read_bytes())}
+
+
+def build(out: Path, sha: str, brand: Path, publications: Path | None,
+          offers_dir: Path | None = None) -> dict:
     if not SHA40.fullmatch(sha):
         raise SiteError("full Git SHA required")
     check_source(strict_assets=True)
@@ -133,8 +166,18 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None) -> dict:
     try:
         shutil.copytree(SOURCE, temp, dirs_exist_ok=True)
         brand_receipt = stage_brand(temp, brand)
+        offers_html, offers_receipt = load_reference_offers(offers_dir)
         for page in temp.rglob("*.html"):
-            page.write_text(render_public_html(page.read_text("utf-8")), encoding="utf-8")
+            markup = render_public_html(page.read_text("utf-8"))
+            for marker, expected in (
+                ("<!-- ORDAX_PUBLIC_PLAN_CATALOG -->", "index.html"),
+                ("<!-- ORDAX_ACCOUNT_PLAN_CATALOG -->", "conta/index.html"),
+            ):
+                if marker in markup:
+                    if page.relative_to(temp).as_posix() != expected or markup.count(marker) != 1:
+                        raise SiteError("offers catalog marker outside its official presentation page")
+                    markup = markup.replace(marker, offers_html)
+            page.write_text(markup, encoding="utf-8")
         # Site does not authorize releases: a missing official publication produces
         # an empty catalog. The release owner must supply an explicit approved file.
         if publications is None:
@@ -153,7 +196,7 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None) -> dict:
             for p in sorted(temp.rglob("*")) if p.is_file()
         ]
         manifest = {"$schema": SCHEMA, "source_commit": sha, "artifact_class": "public-site",
-                    "brand": brand_receipt, "publications_sha256": publications_digest,
+                    "brand": brand_receipt, "offers": offers_receipt, "publications_sha256": publications_digest,
                     "catalog_status": catalog["status"], "files": records}
         (temp / "public-site-manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         os.replace(temp, out)
@@ -186,6 +229,7 @@ def main() -> None:
     cli.add_argument("--source-commit")
     cli.add_argument("--brand-dir")
     cli.add_argument("--publications")
+    cli.add_argument("--offers-dir")
     cli.add_argument("--out", default="out/site")
     args = cli.parse_args()
     if args.command == "check":
@@ -195,7 +239,8 @@ def main() -> None:
         if not args.brand_dir:
             raise SystemExit("brand artifact required (pinned manifest + SHA-256); no OS source fallback")
         print(json.dumps(build(Path(args.out), args.source_commit or "", Path(args.brand_dir),
-                               Path(args.publications) if args.publications else None), sort_keys=True))
+                               Path(args.publications) if args.publications else None,
+                               Path(args.offers_dir) if args.offers_dir else None), sort_keys=True))
     else:
         verify(Path(args.out))
         print("SITE_BUNDLE_VERIFY=PASS")
