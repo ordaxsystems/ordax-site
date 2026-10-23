@@ -26,4 +26,4 @@ Este repositório é o **owner do código de apresentação do site público** a
 Branch -> auditoria de diffs e conflitos -> testes de rotas/i18n/segurança -> pacote com provenance SHA-256 -> CI -> PR review -> cutover OS só depois de prova de paridade -> publicação sob autorização separada. Registrar atualizações em `docs/HANDOFF.md`.
 
 ## Status
-Extração é **candidata em draft**; ainda faltam duas imagens originais e artefato publicado de marca. Nenhum build de produção aprovado.
+Extração é **candidata em draft**; todos os assets originais, incluindo dois PNGs grandes, foram preservados. Build CI independente, smoke estático e snapshot de ofertas/brand de migração aprovados. Falta a publicação **oficial** desses insumos pelo owner Surface/Platform, E2E de browser e cutover no OS. Nenhum build de produção autorizado.
