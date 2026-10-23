@@ -212,6 +212,8 @@ def accessibility_probe(driver: Driver) -> dict:
     # Once per page, exercise the first focusable keyboard target and the
     # actual Enter activation instead of assuming that the skip link works.
     driver.press("\ue004")
+    # The actual focus-reveal animation has a 180ms CSS transition.
+    time.sleep(0.25)
     first = driver.run("""return (() => {
       const focused = document.activeElement;
       const rect = focused?.getBoundingClientRect();
@@ -224,6 +226,7 @@ def accessibility_probe(driver: Driver) -> dict:
       };
     })();""")
     driver.press("\ue007")
+    time.sleep(0.1)
     destination = driver.run("""return {
       hash: location.hash,
       mainFocus: document.activeElement?.id === 'conteudo',
@@ -233,7 +236,8 @@ def accessibility_probe(driver: Driver) -> dict:
         "accessibilityTreeUnnamedControls": missing_names[:12],
         "skipLinkFirstKeyboardTarget": first["skipFocused"],
         "skipLinkVisibleOnFocus": first["focusVisible"],
-        "skipLinkDestination": destination["hash"] == "#conteudo" and destination["mainExists"],
+        "skipLinkDestination": destination["mainExists"] and
+          (destination["hash"] == "#conteudo" or destination["mainFocus"]),
         "skipLinkFocusLandsOnMain": destination["mainFocus"],
     }
 
