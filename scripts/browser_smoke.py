@@ -177,7 +177,8 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         exposedAuthForms: visibleAuthForms.length,
         enabledCredentials: readyControls.length,
         sessionStatus: session?.dataset?.status || null,
-        accountHasVerifiedUser: !!document.querySelector('[data-verified-user],.verified-email'),
+        accountHasVerifiedUser: !!document.querySelector('[data-verified-user]') ||
+          [...document.querySelectorAll('.verified-email')].some(x => x.textContent.includes('@')),
         landingFixturePresent: !!document.querySelector('#playground-fixture'),
         accountPortal: !!document.querySelector('#account-app'),
         interactiveCount: controls.length
