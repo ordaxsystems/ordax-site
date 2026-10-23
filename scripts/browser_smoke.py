@@ -115,6 +115,16 @@ class Driver:
     def navigate(self, url: str):
         self.command("POST", f"/session/{self.session_id}/url", {"url": url})
 
+    def press(self, value: str):
+        # W3C hardware keyboard action, not a DOM .click() substitute.
+        self.command("POST", f"/session/{self.session_id}/actions", {
+            "actions": [{"type": "key", "id": "keyboard", "actions": [
+                {"type": "keyDown", "value": value},
+                {"type": "keyUp", "value": value},
+            ]}]
+        })
+        self.command("DELETE", f"/session/{self.session_id}/actions")
+
     def shot(self, destination: Path):
         content = self.command("GET", f"/session/{self.session_id}/screenshot")
         destination.write_bytes(base64.b64decode(content))
@@ -150,6 +160,8 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
           e.closest('label')?.textContent || e.textContent || e.getAttribute('alt');
         return !String(name || '').trim() && !e.querySelector('img[alt]');
       }).slice(0, 6).map(e => e.outerHTML.slice(0, 200));
+      const unlabeledImages = [...document.querySelectorAll('img:not([alt])')].filter(x =>
+        x.getBoundingClientRect().width > 0).map(x => x.outerHTML.slice(0, 200)).slice(0, 8);
       const unexpectedRemote = performance.getEntriesByType('resource')
         .map(x => x.name).filter(x => !x.startsWith(location.origin) && !x.startsWith('data:'));
       const session = $('[data-identity-state],#account-session,[data-web-state]');
@@ -167,6 +179,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         scrollWidth: document.documentElement.scrollWidth,
         duplicateIds: ids.length !== new Set(ids).size,
         nameless,
+        unlabeledImages,
         remoteResources: unexpectedRemote,
         authFormCount: forms.length,
         exposedAuthForms: visibleAuthForms.length,
@@ -180,6 +193,49 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         interactiveCount: controls.length
       };
     })();""")
+
+
+def accessibility_probe(driver: Driver) -> dict:
+    """Read the browser accessibility tree and exercise real keyboard navigation."""
+    ax = driver.cdp("Accessibility.getFullAXTree", {})
+    interactive = {"button", "link", "textbox", "searchbox", "combobox",
+                   "checkbox", "radio", "switch"}
+    missing_names = []
+    for node in ax.get("nodes", []):
+        role = node.get("role", {}).get("value", "")
+        if (not node.get("ignored", False) and role in interactive
+                and not str(node.get("name", {}).get("value", "")).strip()):
+            missing_names.append({
+                "role": role,
+                "backendDOMNodeId": node.get("backendDOMNodeId"),
+            })
+    # Once per page, exercise the first focusable keyboard target and the
+    # actual Enter activation instead of assuming that the skip link works.
+    driver.press("\ue004")
+    first = driver.run("""return (() => {
+      const focused = document.activeElement;
+      const rect = focused?.getBoundingClientRect();
+      const styles = focused && getComputedStyle(focused);
+      return {
+        skipFocused: focused?.matches?.('.skip-link[href="#conteudo"]') || false,
+        focusVisible: Boolean(rect && rect.width > 0 && rect.height > 0
+          && rect.bottom > 0 && rect.top < innerHeight
+          && styles.visibility !== 'hidden'),
+      };
+    })();""")
+    driver.press("\ue007")
+    destination = driver.run("""return {
+      hash: location.hash,
+      mainFocus: document.activeElement?.id === 'conteudo',
+      mainExists: !!document.querySelector('#conteudo'),
+    };""")
+    return {
+        "accessibilityTreeUnnamedControls": missing_names[:12],
+        "skipLinkFirstKeyboardTarget": first["skipFocused"],
+        "skipLinkVisibleOnFocus": first["focusVisible"],
+        "skipLinkDestination": destination["hash"] == "#conteudo" and destination["mainExists"],
+        "skipLinkFocusLandsOnMain": destination["mainFocus"],
+    }
 
 
 def run(root: Path, evidence: Path) -> dict:
@@ -239,6 +295,11 @@ def run(root: Path, evidence: Path) -> dict:
                             break
                         time.sleep(0.1)
                 report = probe(driver, route, width, height)
+                # The viewport and browser accessibility tree are audited on
+                # every route. Keyboard travel is tested on desktop only:
+                # the same page markup and tab order is shared with mobile.
+                if width == VIEWPORTS[0][0]:
+                    report.update(accessibility_probe(driver))
                 short = route.strip("/").replace("/", "-") or "home"
                 filename = f"{short}-{width}x{height}.png"
                 driver.shot(evidence / filename)
@@ -252,8 +313,17 @@ def run(root: Path, evidence: Path) -> dict:
                     "noHorizontalOverflow": report["noOverflow"],
                     "uniqueElementIds": not report["duplicateIds"],
                     "accessibleInteractiveNames": not report["nameless"],
+                    "visibleImagesHaveAltAttribute": not report["unlabeledImages"],
                     "noUnexpectedRemoteRequests": not report["remoteResources"],
                 }
+                if width == VIEWPORTS[0][0]:
+                    check.update({
+                        "accessibilityTreeNames": not report["accessibilityTreeUnnamedControls"],
+                        "skipLinkKeyboardFirst": report["skipLinkFirstKeyboardTarget"],
+                        "skipLinkKeyboardVisible": report["skipLinkVisibleOnFocus"],
+                        "skipLinkKeyboardNavigates": report["skipLinkDestination"],
+                        "skipLinkKeyboardFocus": report["skipLinkFocusLandsOnMain"],
+                    })
                 if route in ("/login/", "/cadastro/", "/recuperar/", "/recuperar/nova-senha/"):
                     check.update({"formsFailClosed": not report["exposedAuthForms"] and not report["enabledCredentials"]})
                 if route == "/conta/":
