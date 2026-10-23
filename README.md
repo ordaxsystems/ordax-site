@@ -33,15 +33,16 @@ O bundle já inclui **todos os arquivos originais do portal**, com os seis biná
 python3 scripts/build.py build \
   --source-commit <SHA40_DO_SITE> \
   --brand-dir artifacts/brand/os-migration-70b0f7eb \
+  --offers-dir artifacts/offers/os-migration-70b0f7eb \
   --out out/site
 python3 scripts/build.py verify --out out/site
 python3 scripts/smoke_static.py --out out/site
 ```
 
-O diretório `brand-dir` deve conter `manifest.json` com `artifact_class=ordax-brand`, `source_commit` e registros `path,size,sha256` para os recursos públicos oficiais. O site jamais cria esse artefato a partir de arquivos internos do OS.
+O diretório `brand-dir` deve conter `manifest.json` com `artifact_class=ordax-brand`, `source_commit` e registros `path,size,sha256` para os recursos públicos oficiais. O site jamais recompila a Surface. O `offers-dir` contém **apenas HTML derivado para apresentação**, com manifesto SHA-256, fonte pinada, contratação e alocação de cotas desativadas. Nenhum contrato de entitlements foi copiado; ambos snapshots de migração exigem futura substituição por publicação oficial.
 
 O catálogo de downloads é **vazio** se o publicador não fornecer uma projeção explicitamente autorizada. Um `--publications` aprovado pelo owner real pode ser lido pelo builder, validado e filtrado; a escolha de tornar esse catálogo público pertence ao pipeline autorizado, não ao site. Formulários e Conta dependem de gateway `same-origin` com gates servidor; recuperação/billing não são habilitados por UI.
 
 ## Próximos passos e estado preciso
 
-Consultar [Auditoria](docs/AUDIT.md), [Decisões](docs/DECISIONS.md) e [Handoff](docs/HANDOFF.md). As transferências PNG e o build independente com integridade foram comprovados no [CI](https://github.com/ordaxsystems/ordax-site/actions/runs/40039062149). Permanecem pendentes a publicação oficial de marca/demonstração pela Surface, projeção do catálogo de planos, comparação visual/acessibilidade/SEO em staging e a integração/cutover atômicos no `ordax-os`. Nada disso é autorização para deploy.
+Consultar [Auditoria](docs/AUDIT.md), [Decisões](docs/DECISIONS.md) e [Handoff](docs/HANDOFF.md). As transferências PNG e o build independente com integridade foram comprovados no [CI](https://github.com/ordaxsystems/ordax-site/actions/runs/40039062149). Permanecem pendentes a publicação **oficial** de marca/demonstração e ofertas pelos owners, comparação visual/acessibilidade/SEO em staging e a integração/cutover atômicos no `ordax-os`. O [CI mais recente](https://github.com/ordaxsystems/ordax-site/actions/runs/40039633625) confirma a apresentação de referência em quatro planos, sem habilitar billing. Nada disso é autorização para deploy.
