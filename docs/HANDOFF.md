@@ -40,3 +40,11 @@
 - O Site deixou aviso de compatibilidade na [ordax-os#2198](https://github.com/ordaxsystems/ordax-os/pull/2198) sobre snapshots antigos após remoção da fonte visual.
 - As verificações de nomes/overflow no Chrome são boas provas iniciais, mas **não** há auditoria WCAG com contraste, navegação por leitor de tela ou E2E do gateway autenticado em staging. Não declarar esses gates PASS por inferência.
 - Continua sem permissão de deploy em produção. `ordax-site#1` permanece draft e `ordax-os#2196` é documentação, não repoint.
+
+
+## Acessibilidade e seleção de idioma — prova em navegador (2026-10-23)
+- O Chrome CDP agora audita a árvore de acessibilidade nativa, exige nomes para controles interativos expostos e `alt` nas imagens renderizadas. O fluxo com teclado usa **Tab e Enter reais**, verifica o foco inicial, a exposição visual do skip link após a transição CSS e a chegada ao conteúdo principal.
+- A primeira revisão [identificou cinco páginas](https://github.com/ordaxsystems/ordax-site/actions/runs/40041891745) que não recebiam foco corretamente no `main`; receberam `tabindex="-1"` sem tornar `main` mais um destino Tab ordinário. O teste foi ajustado para reconhecer o handler intencional da Conta, que dá foco direto sem alterar `location.hash`. [CI de teclado/AX PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042024846).
+- A segunda prova aciona o **seletor real PT-BR/en-US**, verifica `html[lang]`, conteúdo traduzido de “Ir para o conteúdo” e a preferência `ordax.public.locale` no storage; restaura português para não contaminar a navegação subsequente. [CI locale E2E PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042154013).
+- **Ainda pendentes:** inspeção manual com leitor de tela, levantamento de contraste por estados interativos, testes a 200%/400% de zoom e teclado com modais reais conectados à Conta, além do end-to-end com gateway autorizado. Esses gates não são cobertos pelas provas acima.
+- `ordax-os/main` foi rechecado em `7677226def5fd027d37a84a8c7981c3c90d49b10` neste ciclo; a PR `#2198` da Surface continuava draft. Nenhum repoint/deploy foi feito.

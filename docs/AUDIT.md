@@ -47,3 +47,9 @@
 - SEO: `contracts/site-routes.json` substitui inventários hardcoded redundantes em scripts e testes. A origem canônica é fornecida pelo deployment; conteúdo do Site não controla domínio. 5 URLs informativas no sitemap; Conta, login, cadastro, recuperação e entrada Web noindex. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365).
 - [ordax-os#2198](https://github.com/ordaxsystems/ordax-os/pull/2198) em draft mexe no workflow e na apresentação pública derivada ao remover fontes visuais. Compatibilidade e fase de repoint do Site **devem ser reconciliadas antes do merge**, sem restabelecer source espelhado.
 - **Pendente:** publicação oficial dos pacotes de brand/preview/offers; diff visual e WCAG completos, autenticação real end-to-end em staging, CI de repoint e cutover no OS, aprovação separada de produção.
+
+
+## Navegação acessível real — resolução de causa raiz (2026-10-23)
+O teste estático só confirmava a existência de `href="#conteudo"`. A primeira prova W3C com teclado revelou ausência de foco em cinco `main` informativos, corrigida no próprio HTML por `tabindex="-1"`. A Conta possui roteamento de hash próprio e intencionalmente faz `preventDefault()` e `focus()`, por isso a asserção reconhece o foco real como sucesso, não exige mudança desnecessária de URL. O CSS `.skip-link` tem transição de 180 ms; a prova mede a visibilidade após o tempo de animação para evitar falso negativo. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042024846).
+
+Foi adicionada prova de nomenclatura na árvore Chrome Accessibility e `alt` das imagens visíveis. O seletor local de idioma passou a ser exercitado na UI real com ida/volta PT-BR/en-US e persistência. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042154013). Ainda sem alegação de conformidade WCAG completa.
