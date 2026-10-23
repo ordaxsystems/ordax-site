@@ -242,6 +242,41 @@ def accessibility_probe(driver: Driver) -> dict:
     }
 
 
+def localization_probe(driver: Driver) -> dict:
+    """Exercise the actual language selector, including DOM and locale persistence."""
+    return driver.run(r"""return (() => {
+      const selector = document.querySelector('[data-public-locale-select]');
+      const runtime = window.OrdaXPublicI18n;
+      if (!selector || !runtime) return {
+        selector: false, english: false, portuguese: false, persistence: false
+      };
+      const apply = value => {
+        selector.value = value;
+        selector.dispatchEvent(new Event('change', {bubbles:true}));
+        return {
+          language: document.documentElement.lang,
+          stored: localStorage.getItem('ordax.public.locale'),
+          selector: selector.value,
+          skip: document.querySelector('.skip-link')?.textContent?.trim(),
+        };
+      };
+      const english = apply('en-US');
+      const portuguese = apply('pt-BR');
+      return {
+        selector: true,
+        english: english.language === 'en-US' &&
+          english.stored === 'en-US' &&
+          english.selector === 'en-US' &&
+          english.skip === 'Skip to content',
+        portuguese: portuguese.language === 'pt-BR' &&
+          portuguese.stored === 'pt-BR' &&
+          portuguese.selector === 'pt-BR' &&
+          portuguese.skip === 'Ir para o conteúdo',
+        persistence: localStorage.getItem('ordax.public.locale') === 'pt-BR'
+      };
+    })();""")
+
+
 def run(root: Path, evidence: Path) -> dict:
     if not (root / "public-site-manifest.json").is_file():
         raise BrowserProofError("build candidate missing; never browse unpackaged source")
@@ -304,6 +339,7 @@ def run(root: Path, evidence: Path) -> dict:
                 # the same page markup and tab order is shared with mobile.
                 if width == VIEWPORTS[0][0]:
                     report.update(accessibility_probe(driver))
+                    report["localeSwitch"] = localization_probe(driver)
                 short = route.strip("/").replace("/", "-") or "home"
                 filename = f"{short}-{width}x{height}.png"
                 driver.shot(evidence / filename)
@@ -327,6 +363,7 @@ def run(root: Path, evidence: Path) -> dict:
                         "skipLinkKeyboardVisible": report["skipLinkVisibleOnFocus"],
                         "skipLinkKeyboardNavigates": report["skipLinkDestination"],
                         "skipLinkKeyboardFocus": report["skipLinkFocusLandsOnMain"],
+                        "localeSwitcherLocalizedAndPersistent": all(report["localeSwitch"].values()),
                     })
                 if route in ("/login/", "/cadastro/", "/recuperar/", "/recuperar/nova-senha/"):
                     check.update({"formsFailClosed": not report["exposedAuthForms"] and not report["enabledCredentials"]})
