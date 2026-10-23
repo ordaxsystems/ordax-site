@@ -96,6 +96,17 @@
     screen.classList.add('demo-native');
     // Trusted, source-hashed build artifact. No user text enters this markup.
     screen.innerHTML=surface.chrome;
+    // A read-only Surface preview must not create a second <main> landmark
+    // inside the public landing <main>. Preserve visual classes and source
+    // markup while neutralizing the embedded application's landmark.
+    for (const nestedMain of screen.querySelectorAll('main')) {
+      const presentation = document.createElement('div');
+      for (const { name, value } of nestedMain.attributes) {
+        if (name !== 'role') presentation.setAttribute(name, value);
+      }
+      presentation.replaceChildren(...nestedMain.childNodes);
+      nestedMain.replaceWith(presentation);
+    }
     const host=screen.querySelector('[data-public-demo-content]');
     if (surface.views[view.app]) host.innerHTML=surface.views[view.app];
     else host.replaceChildren(previousContent);
