@@ -1,4 +1,4 @@
-name: Site Source — isolated
+name: Site Candidate — isolated
 on:
   push:
     branches: [main, feat/site-independent-extraction]
@@ -9,23 +9,37 @@ permissions:
   contents: read
 
 concurrency:
-  group: site-source-${{ github.ref }}
+  group: site-candidate-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  source:
+  candidate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Compile Python tools
         run: python3 -m compileall -q scripts tests
-      - name: Check independent Site sources (not a release)
+      - name: Audit independent presentation and assets
         run: python3 scripts/build.py check
-      - name: Localization and accessible copy regression
+      - name: Localization parity and accessible copy
         run: node tests/test_localization.mjs
-      - name: Architecture, fail-closed and catalog unit tests
+      - name: Fail-closed architecture and catalog tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Build standalone static candidate
+        run: |
+          python3 scripts/build.py build \
+            --source-commit "${{ github.sha }}" \
+            --brand-dir artifacts/brand/os-migration-70b0f7eb \
+            --out out/site
+          python3 scripts/build.py verify --out out/site
+      - name: Upload non-production candidate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ordax-site-candidate
+          path: out/site/
+          if-no-files-found: error
+          retention-days: 7
       - name: Assert no production deployment
         run: |
           test ! -e .vercel/project.json
