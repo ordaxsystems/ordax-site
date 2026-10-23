@@ -34,9 +34,11 @@ python3 scripts/build.py build \
   --source-commit <SHA40_DO_SITE> \
   --brand-dir artifacts/brand/os-migration-70b0f7eb \
   --offers-dir artifacts/offers/os-migration-70b0f7eb \
+  --public-origin https://ordax.com.br \
   --out out/site
 python3 scripts/build.py verify --out out/site
 python3 scripts/smoke_static.py --out out/site
+python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence
 ```
 
 O diretório `brand-dir` deve conter `manifest.json` com `artifact_class=ordax-brand`, `source_commit` e registros `path,size,sha256` para os recursos públicos oficiais. O site jamais recompila a Surface. O `offers-dir` contém **apenas HTML derivado para apresentação**, com manifesto SHA-256, fonte pinada, contratação e alocação de cotas desativadas. Nenhum contrato de entitlements foi copiado; ambos snapshots de migração exigem futura substituição por publicação oficial.
@@ -55,19 +57,5 @@ Consultar [Auditoria](docs/AUDIT.md), [Decisões](docs/DECISIONS.md) e [Handoff]
 A landing lê **um** `/assets/playground-fixture.json` de mesma origem, com falha indisponível explícita. Foi removida a segunda fixture embutida na landing (~159 KB), sem copiar fonte executável da Surface. O controlador mantém um único landmark `main` para acessibilidade.
 
 CI de candidato: `python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence` usa ChromeDriver pré-instalado, exercita 11 rotas em 1440, 390 e 320 px, guarda capturas e relatório e mantém APIs de autenticação indisponíveis em loopback. A execução [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365) não substitui uma auditoria WCAG completa ou auth E2E em staging.
-
-**Comando de build independente atualizado:**
-
-```sh
-python3 scripts/build.py build \
-  --source-commit <SHA40_DO_SITE> \
-  --brand-dir artifacts/brand/os-migration-70b0f7eb \
-  --offers-dir artifacts/offers/os-migration-70b0f7eb \
-  --public-origin https://ordax.com.br \
-  --out out/site
-python3 scripts/build.py verify --out out/site
-python3 scripts/smoke_static.py --out out/site
-python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence
-```
 
 Os snapshots de marca/ofertas continuam sendo **apenas materiais de migração verificados**, não autorizações de publicação ou SSOT substitutos.
