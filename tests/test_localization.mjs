@@ -190,19 +190,10 @@ for (const key of ptKeys) {
 }
 
 const sourceMessages = new Set(Object.keys(catalog.sourceIndex).map(normalize));
-const routes = [
-  "site/index.html",
-  "site/download/index.html",
-  "site/login/index.html",
-  "site/cadastro/index.html",
-  "site/conta/index.html",
-  "site/web/index.html",
-  "site/recuperar/index.html",
-  "site/recuperar/nova-senha/index.html",
-  "site/licencas/index.html",
-  "site/privacidade/index.html",
-  "site/termos/index.html",
-];
+const canonicalRoutes = JSON.parse(read("contracts/site-routes.json"));
+assert(canonicalRoutes.$schema === "ordax.site-routes/1", "public Site route contract mismatch");
+const routes = canonicalRoutes.routes.map(route => "site/" + route.source);
+assert(routes.length === 11, "public Site route inventory changed without localization review");
 
 for (const route of routes) {
   const html = read(route);
