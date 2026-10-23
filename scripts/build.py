@@ -13,18 +13,13 @@ from pathlib import Path
 
 from public_html_render import render_public_html
 from public_release_catalog import load_publications, render_catalog, validate_catalog
+from site_routes import ROUTES, ROUTE_RECORDS
+from site_seo import validate_origin, render_html, write_robots_sitemap
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "site"
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
-ROUTES = (
-    "index.html", "download/index.html", "login/index.html",
-    "cadastro/index.html", "recuperar/index.html",
-    "recuperar/nova-senha/index.html", "conta/index.html",
-    "licencas/index.html", "privacidade/index.html", "termos/index.html",
-    "web/index.html",
-)
 BINARY_PROVENANCE = {
     "assets/account-landscape.jpg": "260e215794a3a38b03d0df6ce9395632aa7b78be",
     "assets/aurora-titanium.png": "e4574877f57a66574d001ebcfbfc8718782a2c23",
@@ -155,9 +150,10 @@ def load_reference_offers(directory: Path | None) -> tuple[str, dict | None]:
 
 
 def build(out: Path, sha: str, brand: Path, publications: Path | None,
-          offers_dir: Path | None = None) -> dict:
+          offers_dir: Path | None = None, public_origin: str | None = None) -> dict:
     if not SHA40.fullmatch(sha):
         raise SiteError("full Git SHA required")
+    origin = validate_origin(public_origin)
     check_source(strict_assets=True)
     if out.exists():
         raise SiteError("refusing to replace existing build output")
@@ -167,7 +163,11 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
         shutil.copytree(SOURCE, temp, dirs_exist_ok=True)
         brand_receipt = stage_brand(temp, brand)
         offers_html, offers_receipt = load_reference_offers(offers_dir)
+        route_by_source = {item["source"]: item for item in ROUTE_RECORDS}
         for page in temp.rglob("*.html"):
+            relative = page.relative_to(temp).as_posix()
+            if relative not in route_by_source:
+                raise SiteError("HTML page has no declared route: " + relative)
             markup = render_public_html(page.read_text("utf-8"))
             for marker, expected in (
                 ("<!-- ORDAX_PUBLIC_PLAN_CATALOG -->", "index.html"),
@@ -177,7 +177,8 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
                     if page.relative_to(temp).as_posix() != expected or markup.count(marker) != 1:
                         raise SiteError("offers catalog marker outside its official presentation page")
                     markup = markup.replace(marker, offers_html)
-            page.write_text(markup, encoding="utf-8")
+            page.write_text(render_html(markup, route_by_source[relative], origin), encoding="utf-8")
+        write_robots_sitemap(temp, origin)
         # Site does not authorize releases: a missing official publication produces
         # an empty catalog. The release owner must supply an explicit approved file.
         if publications is None:
@@ -197,6 +198,7 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
         ]
         manifest = {"$schema": SCHEMA, "source_commit": sha, "artifact_class": "public-site",
                     "brand": brand_receipt, "offers": offers_receipt, "publications_sha256": publications_digest,
+                    "seo_origin": origin, "indexable_routes": [row["path"] for row in ROUTE_RECORDS if row["indexable"]],
                     "catalog_status": catalog["status"], "files": records}
         (temp / "public-site-manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         os.replace(temp, out)
@@ -230,6 +232,7 @@ def main() -> None:
     cli.add_argument("--brand-dir")
     cli.add_argument("--publications")
     cli.add_argument("--offers-dir")
+    cli.add_argument("--public-origin")
     cli.add_argument("--out", default="out/site")
     args = cli.parse_args()
     if args.command == "check":
@@ -240,7 +243,8 @@ def main() -> None:
             raise SystemExit("brand artifact required (pinned manifest + SHA-256); no OS source fallback")
         print(json.dumps(build(Path(args.out), args.source_commit or "", Path(args.brand_dir),
                                Path(args.publications) if args.publications else None,
-                               Path(args.offers_dir) if args.offers_dir else None), sort_keys=True))
+                               Path(args.offers_dir) if args.offers_dir else None,
+                               args.public_origin), sort_keys=True))
     else:
         verify(Path(args.out))
         print("SITE_BUNDLE_VERIFY=PASS")
