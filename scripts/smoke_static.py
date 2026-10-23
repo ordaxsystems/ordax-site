@@ -101,6 +101,13 @@ def assert_candidate(out: Path) -> dict:
                 raise AssertionError(relative + ": credential submission active without server readiness")
         if relative == "conta/index.html" and "noindex" not in page.robots:
             raise AssertionError(relative + ": account portal must not be indexed")
+        if relative in {"index.html", "conta/index.html"}:
+            if html.count('class="commercial-plan"') != 4:
+                raise AssertionError(relative + ": reference offers parity with canonical catalog failed")
+            if "Planos em preparação" not in html or "contratação indisponível" not in html:
+                raise AssertionError(relative + ": inactive commercial availability not explicit")
+            if "ORDAX_PUBLIC_PLAN_CATALOG" in html or "ORDAX_ACCOUNT_PLAN_CATALOG" in html:
+                raise AssertionError(relative + ": unresolved reference catalog marker")
         inspected.append({"route": "/" + relative.removesuffix("index.html"), "assets": len(page.assets), "headings": page.headings})
     catalog = json.loads((out / "releases/catalog.json").read_text("utf-8"))
     if catalog != {"$schema": "prototype-ordax.public-release-catalog/1", "status": "empty", "releases": []}:
