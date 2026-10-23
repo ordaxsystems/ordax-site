@@ -1,0 +1,81 @@
+name: Site — pin audited brand output (one-time)
+on:
+  push:
+    branches: [feat/site-independent-extraction]
+    paths: [.github/workflows/site-pin-brand.yml]
+permissions:
+  contents: write
+jobs:
+  pin:
+    if: github.repository == 'ordaxsystems/ordax-site' && github.ref == 'refs/heads/feat/site-independent-extraction'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: ordaxsystems/ordax-os
+          ref: 70b0f7eb5d5085be0d4f176f5232def37c7a2a24
+          path: _ordax_source_once
+          persist-credentials: false
+      - name: Render and bind canonical brand bytes once
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import importlib.util
+          import json
+          import shutil
+          from pathlib import Path
+          source=Path('_ordax_source_once')
+          dest=Path('artifacts/brand/os-migration-70b0f7eb')
+          dest.mkdir(parents=True,exist_ok=True)
+          spec=importlib.util.spec_from_file_location('_pinned_site_brand',source/'tools/brand/build.py')
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          generated={
+            'assets/ordax-design-tokens.css':module.render_site_identity_css(),
+            'assets/ordax-font.css':module.render_site_font_css(),
+          }
+          for name,content in generated.items():
+            p=dest/name
+            p.parent.mkdir(parents=True,exist_ok=True)
+            p.write_text(content,encoding='utf-8')
+          copies={
+            'assets/ordax-symbol.png':'system/surface/ui/brand/ordax-symbol.png',
+            'assets/ordax-landscape.png':'system/surface/ui/brand/midnight-landscape.png',
+            'assets/fonts/inter-latin-wght-normal.woff2':'system/surface/ui/fonts/inter-latin-wght-normal.woff2',
+            'assets/fonts/Inter-OFL-1.1.txt':'third_party/licenses/Inter-OFL-1.1.txt',
+          }
+          originals={}
+          for name,path in copies.items():
+            src=source/path
+            dst=dest/name
+            dst.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(src,dst)
+            originals[name]={'path':path,'git_sha':hashlib.sha1(b'blob '+str(src.stat().st_size).encode()+b'\0'+src.read_bytes()).hexdigest()}
+          files=[]
+          for p in sorted(dest.rglob('*')):
+            if p.is_file():
+              data=p.read_bytes()
+              files.append({'path':p.relative_to(dest).as_posix(),'size':len(data),'sha256':hashlib.sha256(data).hexdigest()})
+          manifest={'artifact_class':'ordax-brand','status':'audited-migration-snapshot-not-official-surface-publication',
+                    'source_repository':'ordaxsystems/ordax-os','source_commit':'70b0f7eb5d5085be0d4f176f5232def37c7a2a24',
+                    'immutable':True,'originals':originals,'files':files}
+          (dest/'manifest.json').write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print('PINNED_SITE_BRAND_FILES='+str(len(files)))
+          PY
+      - name: Commit only generated brand artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -- artifacts/brand/os-migration-70b0f7eb
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(site): pin read-only brand migration artifact by digest'
+          git push origin HEAD:refs/heads/feat/site-independent-extraction
