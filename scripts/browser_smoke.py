@@ -536,6 +536,7 @@ def run(root: Path, evidence: Path) -> dict:
                         "skipLinkKeyboardFocus": report["skipLinkFocusLandsOnMain"],
                         "localeSwitcherLocalizedAndPersistent": all(report["localeSwitch"].values()),
                         "measuredFlatSurfaceTextContrast": report["solidSurfaceContrast"]["failedCount"] == 0,
+                        "flatSurfaceCoverage": route == "/" or report["solidSurfaceContrast"]["measured"] > 0,
                     })
                 if route in ("/login/", "/cadastro/", "/recuperar/", "/recuperar/nova-senha/"):
                     check.update({"formsFailClosed": not report["exposedAuthForms"] and not report["enabledCredentials"]})
