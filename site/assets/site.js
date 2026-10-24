@@ -38,14 +38,20 @@
   }
 
   async function loadJson(path, signal) {
+    // API contracts belong to their exact same-origin endpoint. A redirected
+    // 200 (even to another same-origin route) cannot establish Identity or
+    // legal-policy readiness; never follow redirects or accept alias responses.
+    if (!sameOriginPath(path)) throw new Error("api-path-invalid");
     const response = await fetch(path, {
       method: "GET",
       credentials: "same-origin",
       cache: "no-store",
+      redirect: "error",
       headers: { Accept: "application/json" },
       ...(signal ? { signal } : {}),
     });
-    if (!response.ok) {
+    if (!response.ok || response.redirected ||
+        response.url !== new URL(path, window.location.origin).href) {
       throw new Error("resource-unavailable");
     }
     return response.json();
