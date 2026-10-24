@@ -101,6 +101,24 @@ class Driver:
         self.command("POST", f"/session/{self.session_id}/timeouts", {
             "pageLoad": 30000, "script": 15000, "implicit": 0
         })
+        # Install before any Site script runs. A syntactically broken module
+        # must not pass merely because its static HTML still looks correct.
+        self.cdp("Page.addScriptToEvaluateOnNewDocument", {"source": r"""
+          window.__ordaxPageErrors = [];
+          addEventListener('error', event => {
+            if (event.target && event.target !== window) {
+              const resource = event.target.src || event.target.href || event.target.tagName;
+              window.__ordaxPageErrors.push('resource: ' + String(resource).slice(0, 180));
+            } else {
+              window.__ordaxPageErrors.push('script: ' +
+                String(event.message || 'unknown').slice(0, 180));
+            }
+          }, true);
+          addEventListener('unhandledrejection', event => {
+            window.__ordaxPageErrors.push('promise: ' +
+              String(event.reason?.message || event.reason || 'unknown').slice(0, 180));
+          });
+        """})
 
     def run(self, script: str):
         return self.command("POST", f"/session/{self.session_id}/execute/sync", {
@@ -162,8 +180,16 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       }).slice(0, 6).map(e => e.outerHTML.slice(0, 200));
       const unlabeledImages = [...document.querySelectorAll('img:not([alt])')].filter(x =>
         x.getBoundingClientRect().width > 0).map(x => x.outerHTML.slice(0, 200)).slice(0, 8);
-      const unexpectedRemote = performance.getEntriesByType('resource')
+      const resources = performance.getEntriesByType('resource');
+      const unexpectedRemote = resources
         .map(x => x.name).filter(x => !x.startsWith(location.origin) && !x.startsWith('data:'));
+      const failedStaticAssets = resources.filter(x => {
+        if (x.responseStatus < 400) return false;
+        const path = new URL(x.name, location.href).pathname;
+        // Identity endpoints deliberately respond 503 in this offline proof.
+        return !['/auth/', '/account/', '/api/', '/sync/'].some(prefix =>
+          path.startsWith(prefix));
+      }).map(x => ({url: x.name.slice(0, 180), status: x.responseStatus})).slice(0, 8);
       const session = $('[data-identity-state],#account-session,[data-web-state]');
       return {
         pathname: route,
@@ -181,6 +207,8 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         nameless,
         unlabeledImages,
         remoteResources: unexpectedRemote,
+        failedStaticAssets,
+        runtimeErrors: (window.__ordaxPageErrors || ['browser-error-monitor-missing']).slice(0, 10),
         authFormCount: forms.length,
         exposedAuthForms: visibleAuthForms.length,
         enabledCredentials: readyControls.length,
@@ -355,6 +383,8 @@ def run(root: Path, evidence: Path) -> dict:
                     "accessibleInteractiveNames": not report["nameless"],
                     "visibleImagesHaveAltAttribute": not report["unlabeledImages"],
                     "noUnexpectedRemoteRequests": not report["remoteResources"],
+                    "noBrokenStaticNetworkAssets": not report["failedStaticAssets"],
+                    "noUncaughtBrowserErrors": not report["runtimeErrors"],
                 }
                 if width == VIEWPORTS[0][0]:
                     check.update({
