@@ -226,9 +226,119 @@ def stage_brand(stage: Path, brand_dir: Path, expected_sha256: str | None) -> di
             "source_commit": ledger["source_commit"], "status": ledger["status"],
             "manifest_sha256": pinned_sha256}
 
+def stage_surface_dev_preview(stage: Path, directory: Path, manifest: dict,
+                              manifest_sha256: str) -> dict:
+    """Consume the Surface-owned read-only Dev bundle, not source code.
+
+    This is a dev-only integration and MUST follow an authenticated GitHub
+    producer-run check by the build workflow. A self-asserted manifest status
+    or locally computed hash does not grant production authority.
+    """
+    if (manifest.get("$schema") != "ordax.meridian-readonly-preview-artifact/2"
+            or manifest.get("artifact_class") != "ordax-meridian-preview"
+            or manifest.get("status") != "candidate-not-published"
+            or manifest.get("runtime_authority") is not False
+            or manifest.get("source_repository") != "ordaxsystems/ordax-surface"
+            or manifest.get("os_host_repository") != "ordaxsystems/ordax-os"
+            or not SHA40.fullmatch(str(manifest.get("source_commit", "")))
+            or not SHA40.fullmatch(str(manifest.get("os_host_commit", "")))
+            or manifest.get("catalog_schema") != "ordax.os-public-catalog-projection/1"
+            or not SHA256.fullmatch(str(manifest.get("catalog_sha256", "")))):
+        raise SiteError("untrusted or wrong-authority Surface dev preview")
+    records = manifest.get("files")
+    if not isinstance(records, list) or not 2 <= len(records) <= 48:
+        raise SiteError("Surface dev preview file inventory invalid")
+    files = {}
+    total = 0
+    for item in records:
+        if (not isinstance(item, dict) or set(item) != {"path", "size", "sha256"}
+                or not isinstance(item.get("path"), str)
+                or not re.fullmatch(r"assets/[A-Za-z0-9._/-]+", item["path"])
+                or any(s in ("", ".", "..") for s in item["path"].split("/"))
+                or item["path"].split(".")[-1] not in {"json", "css", "png", "jpg", "jpeg", "webp", "svg", "woff2"}
+                or item["path"] in files
+                or not isinstance(item.get("size"), int)
+                or isinstance(item["size"], bool)
+                or item["size"] < 0
+                or not SHA256.fullmatch(str(item.get("sha256", "")))):
+            raise SiteError("invalid Surface dev preview artifact entry")
+        total += item["size"]
+        if total > 12 * 1024 * 1024:
+            raise SiteError("Surface dev preview exceeds Dev-only size bound")
+        files[item["path"]] = item
+    if not {"assets/surface-snapshot.css", "assets/playground-fixture.json"} <= set(files):
+        raise SiteError("Surface dev preview missing canonical Site files")
+    sources = manifest.get("sources")
+    if not isinstance(sources, list) or not sources:
+        raise SiteError("Surface preview is missing provenance source graph")
+    owners = set()
+    for row in sources:
+        if not isinstance(row, dict):
+            raise SiteError("invalid Surface dev source graph")
+        repo = row.get("repository")
+        commit = row.get("commit")
+        if (repo not in ("ordaxsystems/ordax-os", "ordaxsystems/ordax-surface")
+                or commit != manifest["source_commit" if repo.endswith("surface") else "os_host_commit"]
+                or not SHA40.fullmatch(str(row.get("git_blob", "")))
+                or not SHA256.fullmatch(str(row.get("sha256", "")))):
+            raise SiteError("untrusted Surface preview source provenance")
+        owners.add(repo)
+    if owners != {"ordaxsystems/ordax-os", "ordaxsystems/ordax-surface"}:
+        raise SiteError("Surface preview missing one of its real source owners")
+    present = {
+        p.relative_to(directory).as_posix()
+        for p in directory.rglob("*") if p.is_file() or p.is_symlink()
+    }
+    if present != set(files) | {"manifest.json"}:
+        raise SiteError("unexpected or missing Surface dev preview source files")
+    payloads = {}
+    for name, row in files.items():
+        src = directory / name
+        if src.is_symlink() or not src.is_file():
+            raise SiteError("missing/linked Surface preview asset: " + name)
+        data = src.read_bytes()
+        if len(data) != row["size"] or digest(data) != row["sha256"]:
+            raise SiteError("Surface preview asset digest mismatch: " + name)
+        payloads[name] = data
+    try:
+        fixture = json.loads(payloads["assets/playground-fixture.json"])
+    except (UnicodeError, ValueError) as error:
+        raise SiteError("invalid Surface dev fixture JSON") from error
+    surface = fixture.get("surface", {})
+    if (fixture.get("$schema") != PREVIEW_SCHEMA
+            or not isinstance(fixture.get("apps"), list) or not fixture["apps"]
+            or not isinstance(fixture.get("home", {}).get("rail_apps"), list)
+            or not isinstance(surface, dict)
+            or not isinstance(surface.get("chrome"), str)
+            or not isinstance(surface.get("views", {}).get("home"), str)
+            or len(surface.get("views", {})) != 11
+            or surface.get("sources") != sources
+            or surface.get("cssSha256") != digest(payloads["assets/surface-snapshot.css"])
+            or surface.get("presentation") != "example-only-not-an-authorized-session"):
+        raise SiteError("Surface preview fixture/source/CSS mismatch")
+    for name, raw in payloads.items():
+        dst = stage / name
+        if dst.exists():
+            if dst.is_symlink() or dst.read_bytes() != raw:
+                raise SiteError("conflicting Surface-owned Site asset: " + name)
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(raw)
+    return {"source_repository": manifest["source_repository"],
+            "source_commit": manifest["source_commit"],
+            "os_host_commit": manifest["os_host_commit"],
+            "status": manifest["status"],
+            "manifest_sha256": manifest_sha256,
+            "file_count": len(files),
+            "rendered_css_sha256": digest(payloads["assets/surface-snapshot.css"]),
+            "font_url_rebased": False}
+
+
 def stage_surface_preview(stage: Path, directory: Path, expected_manifest_sha256: str) -> dict:
     """Stage the pinned presentation-only migration package, never source code."""
-    manifest, _ = load_pinned_manifest(directory, expected_manifest_sha256, "Surface preview")
+    manifest, pinned_sha256 = load_pinned_manifest(directory, expected_manifest_sha256, "Surface preview")
+    if manifest.get("artifact_class") == "ordax-meridian-preview":
+        return stage_surface_dev_preview(stage, directory, manifest, pinned_sha256)
     if (manifest.get("artifact_class") != "ordax-public-surface-preview"
             or manifest.get("status") != "audited-migration-snapshot-not-official-surface-publication"
             or manifest.get("source_repository") != "ordaxsystems/ordax-os"
