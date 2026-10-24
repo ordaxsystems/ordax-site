@@ -162,6 +162,22 @@ def stage_surface_preview(stage: Path, directory: Path, expected_manifest_sha256
             or not isinstance(fixture.get("surface", {}).get("views", {}).get("home"), str)
             or fixture["surface"].get("cssSha256") != digest(payloads["assets/surface-snapshot.css"])):
         raise SiteError("Surface preview fixture/CSS composition mismatch")
+    # Source CSS is immutable. Its historical Vite font URL is not exported
+    # by the public Site. Repoint the staged view to the same Inter font from
+    # the separately verified brand artifact, and hash the delivered CSS.
+    source_font = b"url(/assets/inter-latin-wght-normal-Dx4kXJAl.woff2)"
+    delivered_font = b"url(/assets/fonts/inter-latin-wght-normal.woff2)"
+    css = payloads["assets/surface-snapshot.css"]
+    font_rebased = source_font in css
+    if font_rebased:
+        if not (stage / "assets/fonts/inter-latin-wght-normal.woff2").is_file():
+            raise SiteError("preview font depends on missing verified brand")
+        css = css.replace(source_font, delivered_font)
+    for target in re.findall(rb"url\((/assets/[A-Za-z0-9./_-]+)\)", css):
+        referenced = stage / target.decode("ascii").lstrip("/")
+        if target != b"/assets/surface-snapshot.css" and not referenced.is_file():
+            raise SiteError("preview CSS references a missing same-origin asset: " + target.decode("ascii"))
+    payloads["assets/surface-snapshot.css"] = css
     for name, value in payloads.items():
         dest = stage / name
         if dest.exists():
@@ -172,7 +188,8 @@ def stage_surface_preview(stage: Path, directory: Path, expected_manifest_sha256
             "source_commit": manifest["source_commit"],
             "manifest_sha256": expected_manifest_sha256,
             "status": manifest["status"],
-            "file_count": len(PREVIEW_FILES)}
+            "file_count": len(PREVIEW_FILES),
+            "rendered_css_sha256": digest(css), "font_url_rebased": font_rebased}
 
 
 def load_reference_offers(directory: Path | None) -> tuple[str, dict | None]:
@@ -242,6 +259,10 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
                     if page.relative_to(temp).as_posix() != expected or markup.count(marker) != 1:
                         raise SiteError("offers catalog marker outside its official presentation page")
                     markup = markup.replace(marker, offers_html)
+            # CSS source receipts stay immutable; the query tracks the bytes
+            # actually distributed after verified font URL rebasing.
+            markup = re.sub(r"(/assets/surface-snapshot\\.css\\?v=)[0-9a-f]{12}",
+                            lambda match: match.group(1) + preview_receipt["rendered_css_sha256"][:12], markup)
             page.write_text(render_html(markup, route_by_source[relative], origin), encoding="utf-8")
         write_robots_sitemap(temp, origin)
         # Site does not authorize releases: a missing official publication produces
