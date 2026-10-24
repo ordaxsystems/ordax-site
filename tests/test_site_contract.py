@@ -26,6 +26,18 @@ class SiteContractTests(unittest.TestCase):
         self.assertEqual(len(build.ROUTES), 11)
         self.assertEqual(len(set(build.ROUTES)), len(build.ROUTES))
 
+    def test_identity_and_mcp_account_data_share_bounded_json_transport(self):
+        shell = (ROOT / "site/assets/site.js").read_text(encoding="utf-8")
+        portal = (ROOT / "site/assets/account-portal.js").read_text(encoding="utf-8")
+        self.assertIn("const MAX_PUBLIC_JSON_BYTES = 256 * 1024", shell)
+        self.assertIn("async function readJsonBytes(response", shell)
+        self.assertIn('return parseJsonBytes(await readJsonBytes(response))', shell)
+        self.assertIn('return loadJson("/account/usage/mcp", signal)', shell)
+        self.assertIn('const bytes = await readJsonBytes(response, record.size)', shell)
+        self.assertIn("account.readMcpUsage(signal)", portal)
+        self.assertNotIn('fetch("/account/usage/mcp"', portal)
+        self.assertNotIn("response.json()", portal)
+
     def test_live_auth_is_not_activated_by_static_source(self):
         data = json.loads((ROOT / "site/config/public-site.json").read_text(encoding="utf-8"))
         self.assertFalse(data["legal"]["account_activation_ready"])
