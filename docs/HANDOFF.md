@@ -1,3 +1,11 @@
+## Cutover da demonstração Dev — 24/10/2026
+
+**Estado atual:** o código Site foi extraído, e a apresentação duplicada do OS foi removida na [OS #2229](https://github.com/ordaxsystems/ordax-os/pull/2229). A projeção canônica de apps/atalhos do OS pertence à [OS #2234](https://github.com/ordaxsystems/ordax-os/pull/2234), sem ressuscitar os geradores de páginas. A [Surface #13](https://github.com/ordaxsystems/ordax-surface/pull/13) publicou a prerelease Dev durável e atestada com 11 telas e 4 apps. O Site consome o archive e manifesto fixados por SHA-256 no único `contracts/migration-artifact-lock.json`, verificando assinatura no CI, procedência Surface/OS, integridade e segurança de extração no build.
+
+O snapshot histórico `artifacts/surface-preview/os-migration-70b0f7eb` foi removido do Git do Site; não há cópia do renderer Surface no Site ou no OS. **Não concede autorização de produção**: marca e ofertas continuam com snapshots históricos OS, Identity e gateway reais dependem de staging, e downloads/Stable permanecem desativados. Os registros abaixo são cronológicos e não anulam esta atualização.
+
+---
+
 # Handoff operacional — SITE-001
 
 **Branch Site:** `feat/site-independent-extraction`  

@@ -359,37 +359,23 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn('fetch("/assets/playground-fixture.json"', controller)
         self.assertIn("for (const nestedMain of screen.querySelectorAll('main'))", controller)
 
-    def test_surface_preview_is_single_pinned_artifact(self):
-        source = ROOT / "artifacts/surface-preview/os-migration-70b0f7eb"
-        self.assertTrue((source / "manifest.json").is_file())
+    def test_surface_preview_is_one_pinned_external_release_without_legacy_copy(self):
+        pin = MIGRATION_LOCK["surface_preview"]["release"]
+        self.assertEqual(pin["source_repository"], "ordaxsystems/ordax-surface")
+        self.assertEqual(pin["release_tag"], "meridian-dev-" + pin["source_commit"])
+        self.assertEqual(pin["manifest_sha256"], PREVIEW_PIN)
+        self.assertRegex(pin["archive_sha256"], r"^[0-9a-f]{64}$")
+        self.assertFalse((ROOT / "artifacts/surface-preview/os-migration-70b0f7eb").exists())
         self.assertFalse((ROOT / "site/assets/playground-fixture.json").exists())
         self.assertFalse((ROOT / "site/assets/surface-snapshot.css").exists())
         self.assertFalse((ROOT / "site/assets/surface-snapshot.json").exists())
-        self.assertEqual(
-            build.digest((source / "manifest.json").read_bytes()),
-            PREVIEW_PIN
-        )
         with tempfile.TemporaryDirectory() as tmp:
-            stage = Path(tmp) / "stage"
-            stage.mkdir()
-            build.stage_brand(stage, ROOT / "artifacts/brand/os-migration-70b0f7eb", BRAND_PIN)
-            receipt = build.stage_surface_preview(stage, source, build.digest((source / "manifest.json").read_bytes()))
-            self.assertEqual(receipt["file_count"], 2)
-            self.assertEqual(receipt["source_repository"], "ordaxsystems/ordax-os")
-            self.assertTrue(receipt["font_url_rebased"])
-            css = (stage / "assets/surface-snapshot.css").read_text("utf-8")
-            self.assertIn("/assets/fonts/inter-latin-wght-normal.woff2", css)
-            self.assertNotIn("/assets/inter-latin-wght-normal-Dx4kXJAl.woff2", css)
-            self.assertFalse((stage / "assets/surface-snapshot.json").exists())
-            with self.assertRaises(build.SiteError):
-                build.stage_surface_preview(Path(tmp) / "unused", source, "0" * 64)
-
-            altered = Path(tmp) / "altered"
-            shutil.copytree(source, altered)
-            fixture = altered / "assets/playground-fixture.json"
-            fixture.write_bytes(fixture.read_bytes() + b" ")
-            with self.assertRaises(build.SiteError):
-                build.stage_surface_preview(Path(tmp) / "unused", altered, build.digest((altered / "manifest.json").read_bytes()))
+            fake = Path(tmp) / "forged-lock.json"
+            lock = json.loads((ROOT / "contracts/migration-artifact-lock.json").read_text("utf-8"))
+            lock["artifacts"]["surface_preview"]["release"]["release_tag"] = "meridian-dev-main"
+            fake.write_text(json.dumps(lock), encoding="utf-8")
+            with self.assertRaisesRegex(build.SiteError, "Surface Dev release lock"):
+                build.load_migration_lock(fake)
 
     def test_delivered_css_dependencies_must_be_local_and_exist(self):
         with tempfile.TemporaryDirectory() as tmp:

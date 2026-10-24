@@ -44,12 +44,12 @@ O **código e o build independentes já estão integrados à `main`**, com consu
 
 - Fixture e CSS gerados **não** pertencem a `site/assets`; sua única entrada é `--surface-preview-dir`, acompanhada de `--surface-preview-manifest-sha256` pinado. O bundle materializa os arquivos após verificar proveniência e integridade.
 - Sem arquivo `surface-snapshot.json` distribuído duplicando `fixture.surface`. O preview source é imutável e a eventual correção de URL de fonte ocorre **apenas na saída de build** com fingerprint recalculado.
-- `artifacts/surface-preview/os-migration-70b0f7eb` é um pacote de migração **não oficial**, vindo do OS, e não uma release/assinatura da Surface. Não alterar o status para `official` sem verificação real do publisher.
-- A obrigação de publicação oficial de brand/demo pertence à [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). Até essa entrega, a **publicação em produção** continua bloqueada; o cutover de código e build no ambiente Dev é independente desse gate.
+- O preview Dev usa a prerelease Surface `meridian-dev-1ab73da4…`, com digests e commits Surface/OS fixados no lock. O snapshot de migração antigo foi excluído; não recriar cópia no Site/OS. Não alterar o status para `official` sem verificação real do publisher.
+- Os gates públicos de marca e demais distribuições permanecem em [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). Até essa entrega, a **publicação em produção** continua bloqueada; o cutover de código e build no ambiente Dev é independente desse gate.
 
 ## Lock SSOT de insumos externos e segurança de releases
 
-- `contracts/migration-artifact-lock.json` é a única lista de caminhos e pins SHA-256 dos três insumos de migração. O CI usa `--migration-lock` e proíbe overrides individuais; não mantenha digests copiados em workflow, código ou docs.
+- `contracts/migration-artifact-lock.json` é a fonte única de pins dos snapshots históricos de marca/ofertas e da prerelease Dev Surface, com dois digests e as revisões Surface/OS. O CI usa `--migration-lock` e proíbe overrides individuais; não mantenha digests copiados em workflow, código ou docs.
 - Os manifestos de brand, preview e offers são validados **contra o digest pinado no lock antes de ler suas alegações internas**. Revisão OS de origem deve coincidir entre todos. Lock é estritamente **dev-only**; não autoriza produção.
 - O builder **rejeita** `--publications` mesmo que o JSON local afirme `public_authorized=true`. Downloads permanecem vazios até integração explícita de evidência oficial do publisher (mais que flags autorreferentes).
 
@@ -69,7 +69,7 @@ O **código e o build independentes já estão integrados à `main`**, com consu
 
 - O Chrome deve manter a prova `solid_surface_contrast_probe()` em páginas desktop: >=4,5:1 para texto comum, >=3:1 para texto grande quando existe **fundo sólido mensurável**; exigir amostras nas rotas não-landing.
 - Não marcar gradientes, imagens e composição com opacity/filter como aprovados. Relatório inclui itens ignorados e falhas por cor/razão. Não substituir por captura visual sem cálculo.
-- Preserve `artifacts/brand/` e `artifacts/surface-preview/` imutáveis: ajustes de contraste específicos de Conta/Identity pertencem à apresentação `site/assets/account.css`. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40053856203).
+- Preserve `artifacts/brand/` e o lock do preview Surface imutáveis: ajustes de contraste específicos de Conta/Identity pertencem à apresentação `site/assets/account.css`. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40053856203).
 
 ## Heading de fallback e movimento reduzido (2026-10-23)
 

@@ -15,6 +15,7 @@ from public_html_render import render_public_html
 from public_release_catalog import render_catalog, validate_catalog
 from site_routes import ROUTES, ROUTE_RECORDS
 from site_seo import validate_origin, render_html, write_robots_sitemap
+from surface_release import validate_pin as validate_surface_release_pin, materialize as download_surface_release, SurfaceReleaseError
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "site"
@@ -147,7 +148,11 @@ def check_source(strict_assets: bool = False) -> dict:
     return {"source_files": len(files), "missing_source_assets": missing_binary}
 
 def load_migration_lock(path: Path) -> dict:
-    """Only the authored lock supplies hashes for the three dev-only artifacts."""
+    """Dev-only trust lock for two historical OS inputs and one Surface release.
+
+    The Surface artifact is an externally pinned, signed, durable Dev prerelease,
+    never the old OS-derived playground snapshot or a substitute Site renderer.
+    """
     if path.is_symlink() or not path.is_file():
         raise SiteError("migration artifact lock missing or symlinked")
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -160,18 +165,15 @@ def load_migration_lock(path: Path) -> dict:
             or set(data["artifacts"]) != {"brand", "surface_preview", "offers"}):
         raise SiteError("invalid Site migration artifact trust lock")
     result = {}
-    for key in ("brand", "surface_preview", "offers"):
+    # Brand and non-purchasable offers are separate, externally hash-locked OS
+    # historical inputs. They may not assert ownership of the Surface demo.
+    for key in ("brand", "offers"):
         item = data["artifacts"][key]
         if not isinstance(item, dict) or set(item) != {"directory", "manifest_sha256"}:
             raise SiteError("invalid migration artifact lock item: " + key)
         relative = item["directory"]
-        expected_prefix = {
-            "brand": "artifacts/brand/",
-            "surface_preview": "artifacts/surface-preview/",
-            "offers": "artifacts/offers/",
-        }[key]
         if (not isinstance(relative, str)
-                or not relative.startswith(expected_prefix)
+                or not relative.startswith("artifacts/" + key + "/")
                 or not re.fullmatch(r"[a-zA-Z0-9/_-]+", relative)
                 or ".." in relative.split("/")
                 or not SHA256.fullmatch(str(item["manifest_sha256"]))):
@@ -183,6 +185,15 @@ def load_migration_lock(path: Path) -> dict:
         if manifest.get("source_repository") != MIGRATION_OWNER or manifest.get("source_commit") != data["source_commit"]:
             raise SiteError("migration artifact diverges from common OS source revision: " + key)
         result[key] = {"directory": directory, "manifest_sha256": item["manifest_sha256"]}
+    preview = data["artifacts"]["surface_preview"]
+    if not isinstance(preview, dict) or set(preview) != {"release"}:
+        raise SiteError("Surface source must be a pinned external Dev release, never a legacy fixture directory")
+    try:
+        release = validate_surface_release_pin(preview["release"])
+    except SurfaceReleaseError as error:
+        raise SiteError("untrusted Surface Dev release lock") from error
+    result["surface_preview"] = {"release": release,
+                                 "manifest_sha256": release["manifest_sha256"]}
     return result
 
 
@@ -583,26 +594,34 @@ def main() -> None:
         preview_hash = args.surface_preview_manifest_sha256
         offers = Path(args.offers_dir) if args.offers_dir else None
         offers_hash = args.offers_manifest_sha256
+        external_release = None
         if args.migration_lock:
             if any(x is not None for x in (brand, brand_hash, preview, preview_hash, offers, offers_hash)):
                 raise SiteError("migration lock and individual artifact overrides are mutually exclusive")
             pinned = load_migration_lock(Path(args.migration_lock))
             brand = pinned["brand"]["directory"]
             brand_hash = pinned["brand"]["manifest_sha256"]
-            preview = pinned["surface_preview"]["directory"]
+            external_release = pinned["surface_preview"]["release"]
             preview_hash = pinned["surface_preview"]["manifest_sha256"]
             offers = pinned["offers"]["directory"]
             offers_hash = pinned["offers"]["manifest_sha256"]
         if brand is None:
             raise SiteError("brand artifact required (pinned manifest + SHA-256); no OS source fallback")
-        print(json.dumps(build(Path(args.out), args.source_commit or "", brand,
-                               Path(args.publications) if args.publications else None,
-                               offers,
-                               args.public_origin,
-                               preview,
-                               preview_hash,
-                               brand_hash,
-                               offers_hash), sort_keys=True))
+        if external_release is not None:
+            # The release archive is verified before its files can enter the
+            # bundle; the temporary copy is destroyed after staging.
+            with tempfile.TemporaryDirectory(prefix="ordax-surface-dev-") as temporary:
+                preview = download_surface_release(external_release, Path(temporary) / "preview")
+                receipt = build(Path(args.out), args.source_commit or "", brand,
+                                Path(args.publications) if args.publications else None,
+                                offers, args.public_origin, preview, preview_hash,
+                                brand_hash, offers_hash)
+        else:
+            receipt = build(Path(args.out), args.source_commit or "", brand,
+                            Path(args.publications) if args.publications else None,
+                            offers, args.public_origin, preview, preview_hash,
+                            brand_hash, offers_hash)
+        print(json.dumps(receipt, sort_keys=True))
     else:
         verify(Path(args.out))
         print("SITE_BUNDLE_VERIFY=PASS")
