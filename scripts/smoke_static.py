@@ -4,12 +4,41 @@ from __future__ import annotations
 import argparse
 import json
 import hashlib
+import re
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit
 from xml.etree import ElementTree
 from site_routes import ROUTE_RECORDS, ROUTES
 from site_seo import validate_origin
+
+def check_css_dependencies(out: Path) -> int:
+    """Reject broken or off-origin CSS assets in the actual build output.
+
+    This is intentionally output-based: staging may rebase the upstream
+    Surface font URL without changing the immutable source artifact.
+    """
+    checked = 0
+    for path in sorted(out.rglob("*.css")):
+        # Comments cannot declare dependencies. All other url() calls in CSS
+        # must point to a shipped local resource or a self-contained data URI.
+        css = re.sub(r"/\*.*?\*/", "", path.read_text("utf-8"), flags=re.S)
+        if re.search(r"@import\b", css, flags=re.I):
+            raise AssertionError(path.relative_to(out).as_posix() + ": CSS @import not allowed")
+        for match in re.finditer(r"url\(\s*(?:['\"]([^'\"]+)['\"]|([^\s)]+))\s*\)", css, flags=re.I):
+            url = (match.group(1) or match.group(2)).strip()
+            if url.startswith(("data:image/", "data:font/", "#")):
+                continue
+            asset = urlsplit(url)
+            if (not url or asset.scheme or asset.netloc or asset.query or asset.fragment
+                    or "\\" in url or ".." in asset.path.split("/")):
+                raise AssertionError(path.relative_to(out).as_posix() + ": unsafe CSS URL " + url[:100])
+            target = (out / asset.path.lstrip("/")) if asset.path.startswith("/") else path.parent / asset.path
+            if not target.is_file() or target.is_symlink():
+                raise AssertionError(path.relative_to(out).as_posix() + ": missing CSS asset " + url[:100])
+            checked += 1
+    return checked
+
 
 class Page(HTMLParser):
     def __init__(self):
@@ -69,6 +98,7 @@ def assert_candidate(out: Path) -> dict:
         raise AssertionError("candidate manifest is absent")
     manifest = json.loads((out / "public-site-manifest.json").read_text(encoding="utf-8"))
     origin = validate_origin(manifest["seo_origin"])
+    css_dependencies_checked = check_css_dependencies(out)
     inspected = []
     for route in ROUTE_RECORDS:
         relative = route["source"]
