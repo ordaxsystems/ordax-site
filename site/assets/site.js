@@ -1007,11 +1007,57 @@
   }
 
   async function loadPublicCatalog(config) {
+    // The Site's independent build publishes exactly one catalog file and its
+    // byte digest in the existing immutable bundle inventory. A well-formed
+    // same-origin API response alone is not publication authorization.
     const catalogPath = config?.downloads?.catalog_url;
-    if (!sameOriginPath(catalogPath)) {
+    if (catalogPath !== "/releases/catalog.json") {
       throw new Error("catalog-not-configured");
     }
-    return loadJson(catalogPath);
+    const [manifest, response] = await Promise.all([
+      loadJson("/public-site-manifest.json"),
+      fetch(catalogPath, {
+        method: "GET", credentials: "same-origin", cache: "no-store",
+        headers: { Accept: "application/json" },
+      }),
+    ]);
+    if (!response.ok || !manifest ||
+        manifest.$schema !== "prototype-ordax.independent-public-site-bundle/1" ||
+        manifest.artifact_class !== "public-site" ||
+        !/^[0-9a-f]{40}$/.test(manifest.source_commit) ||
+        !Array.isArray(manifest.files)) {
+      throw new Error("catalog-bundle-not-verified");
+    }
+    const records = manifest.files.filter(row => row?.path === "releases/catalog.json");
+    if (records.length !== 1) throw new Error("catalog-inventory-invalid");
+    const record = records[0];
+    if (!validSha256(record.sha256) ||
+        !Number.isSafeInteger(record.size) || record.size < 0 || record.size > 262144) {
+      throw new Error("catalog-inventory-invalid");
+    }
+    const body = await response.arrayBuffer();
+    if (body.byteLength !== record.size || !window.crypto?.subtle) {
+      throw new Error("catalog-bundle-mismatch");
+    }
+    const actualHash = await crypto.subtle.digest("SHA-256", body);
+    const actualSha256 = [...new Uint8Array(actualHash)]
+      .map(byte => byte.toString(16).padStart(2, "0")).join("");
+    if (actualSha256 !== record.sha256) throw new Error("catalog-bundle-mismatch");
+
+    const catalog = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
+    if (!validCatalog(catalog) || manifest.catalog_status !== catalog.status) {
+      throw new Error("catalog-publication-state-mismatch");
+    }
+    if (catalog.status === "empty") {
+      // The current builder's only authorized output. Any nonempty candidate
+      // must first pass a future publisher-attested build gate.
+      if (manifest.publications_sha256 !== null) {
+        throw new Error("catalog-publication-state-mismatch");
+      }
+    } else if (!validSha256(manifest.publications_sha256)) {
+      throw new Error("catalog-publisher-receipt-missing");
+    }
+    return catalog;
   }
 
   async function initDownload(config) {
