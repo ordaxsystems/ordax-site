@@ -38,10 +38,14 @@ def validate_staging_origin(value: str) -> str:
     """Only explicitly selected HTTPS staging/preview hosts may be probed."""
     if not isinstance(value, str) or value != value.strip():
         raise StagingPreflightError("staging-origin-invalid")
-    parsed = urlsplit(value)
-    hostname = (parsed.hostname or "").lower().rstrip(".")
+    try:
+        parsed = urlsplit(value)
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        requested_port = parsed.port
+    except ValueError as error:
+        raise StagingPreflightError("staging-origin-invalid") from error
     if (parsed.scheme != "https" or not hostname or parsed.username or parsed.password
-            or parsed.port not in (None, 443) or parsed.path not in ("", "/")
+            or requested_port not in (None, 443) or parsed.path not in ("", "/")
             or parsed.query or parsed.fragment or parsed.netloc.endswith(".")):
         raise StagingPreflightError("staging-origin-invalid")
     try:
