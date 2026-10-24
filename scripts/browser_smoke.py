@@ -48,6 +48,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b'{"error":"service-unavailable"}')
 
     def do_GET(self):
+        # Hold the config fetch after login has loaded to prove legacy bearer
+        # fragments are removed BEFORE the first asynchronous network reply.
+        if self.path == "/config/public-site.json" and getattr(
+                self.server, "hold_config_for_fragment_test", False):
+            self.server.fragment_config_started.set()
+            self.server.fragment_config_release.wait(timeout=4)
+            return super().do_GET()
         # Three synthetic sessions share an email but differ in identity.
         # Usage A (91) is shown, B (44) is delayed, and C (7) must replace
         # both. Only the loopback proof serves these read-only fixtures.
@@ -798,6 +805,9 @@ def run(root: Path, evidence: Path) -> dict:
     server.same_email_session_requests = 0
     server.same_email_usage_requests = 0
     server.same_email_lock = threading.Lock()
+    server.hold_config_for_fragment_test = False
+    server.fragment_config_started = threading.Event()
+    server.fragment_config_release = threading.Event()
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     webdriver_port = free_port()
@@ -814,6 +824,7 @@ def run(root: Path, evidence: Path) -> dict:
     json_contract_results = []
     identity_race_results = []
     same_email_usage_results = []
+    legacy_fragment_results = []
     failures = []
     try:
         for _ in range(100):
@@ -1250,6 +1261,37 @@ def run(root: Path, evidence: Path) -> dict:
                                      "rule": "session-usage-cache-crossed-boundary", "summary": report})
         finally:
             server.same_email_usage_test = False
+        # A historical hosted-identity fragment must disappear before the
+        # Site receives even its normal public runtime config. No parsing,
+        # storing or token exchange is allowed; the token is synthetic.
+        server.fragment_config_started.clear()
+        server.fragment_config_release.clear()
+        server.hold_config_for_fragment_test = True
+        try:
+            driver.navigate(f"http://127.0.0.1:{server.server_port}/login/"
+                            "#access_token=synthetic-local-proof&token_type=bearer")
+            config_started = server.fragment_config_started.wait(timeout=1.5)
+            report = driver.run("""return (() => {
+              const form = document.querySelector('[data-identity-form]');
+              return {
+                hashGone: window.location.hash === '',
+                tokenNotInAddress: !window.location.href.includes('synthetic-local-proof'),
+                formInactive: !form || form.hidden || !form.hasAttribute('action'),
+                errors: window.__ordaxPageErrors || []
+              };
+            })();""")
+            report["scenario"] = "legacy-fragment-before-config"
+            report["configFetchStarted"] = config_started
+            report["configStillHeld"] = not server.fragment_config_release.is_set()
+            legacy_fragment_results.append(report)
+            if (not all((report["hashGone"], report["tokenNotInAddress"],
+                         report["formInactive"], report["configFetchStarted"],
+                         report["configStillHeld"])) or report["errors"]):
+                failures.append({"route": "/login/", "viewport": "legacy-bearer-fragment",
+                                 "rule": "fragment-not-cleared-before-config", "summary": report})
+        finally:
+            server.fragment_config_release.set()
+            server.hold_config_for_fragment_test = False
         # Restore the default language to keep the no-JavaScript checks independent.
         driver.run("""localStorage.setItem('ordax.public.locale', 'pt-BR'); return true;""")
         # Verify that disabling JavaScript at document parse time cannot
@@ -1294,6 +1336,7 @@ def run(root: Path, evidence: Path) -> dict:
                   "jsonContractChecks": len(json_contract_results),
                   "identityRaceChecks": len(identity_race_results),
                   "sameEmailUsageChecks": len(same_email_usage_results),
+                  "legacyFragmentChecks": len(legacy_fragment_results),
                   "failures": failures, "results": results,
                   "reflowResults": reflow_results, "textEnlargementResults": text_enlargement_results,
                   "textSpacingResults": text_spacing_results,
@@ -1302,7 +1345,8 @@ def run(root: Path, evidence: Path) -> dict:
                   "redirectIdentityResults": redirect_identity_results,
                   "jsonContractResults": json_contract_results,
                   "identityRaceResults": identity_race_results,
-                  "sameEmailUsageResults": same_email_usage_results}
+                  "sameEmailUsageResults": same_email_usage_results,
+                  "legacyFragmentResults": legacy_fragment_results}
         (evidence / "report.json").write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if failures:
             raise BrowserProofError(f"{len(failures)} browser checks failed; see report.json; "
@@ -1347,7 +1391,7 @@ def main():
     parser.add_argument("--evidence", default="out/browser-evidence")
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
 
 
 if __name__ == "__main__":
