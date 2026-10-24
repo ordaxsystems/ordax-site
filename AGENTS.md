@@ -106,3 +106,9 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 
 - O Site **não** implementa Identity, backend de conta ou publicador de releases. `scripts/staging_preflight.py` é uma verificação opcional de staging read-only com origem HTTPS fornecida por operador, que reutiliza os validadores canônicos de sessão e catálogo. Não existe URL de staging hardcoded, login falso nem chamada remota no CI; os testes offline cobrem os bloqueios. `PASS` afirma somente contrato anônimo, sem equivaler a gate de staging autenticado.
 - Paths de downloads e compliance precisam permanecer literais, seguros, de mesma origem e livres de traversal/encodings ambíguos. Não afrouxar `public_release_catalog._same_origin_path` quando um owner publicar oficialmente artefatos. Catálogo permanece vazio até prova de autoridade independente.
+
+
+## Origem de staging deve corresponder ao Site independente (2026-10-24)
+
+- Não classificar um preview do `ordax-os` ou `ordax-web` como prova do novo Site, mesmo que `/auth/session` e `/releases/catalog.json` tenham schemas compatíveis. O staging preflight exige **SHA-256 do manifesto de build recebido do CI confiável** e `source_commit` exato; confere digest/size dos documentos públicos contra o inventário do bundle, antes de declarar PASS anônimo.
+- A conta Vercel consultada tinha apenas `ordax-os-public` e `ordax-web`, ambos sem deployment recente de produção com READY e previews históricos do OS com SSO. Não criar/desproteger projetos, habilitar prod/DNS ou contornar SSO a partir do preflight. O preview `ordax-site` próprio permanece uma dependência de owner de deployment, não evidência já obtida.
