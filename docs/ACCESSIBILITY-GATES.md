@@ -6,7 +6,7 @@
 
 - Rotas: iterar o `contracts/site-routes.json` da **mesma revisão** usada para gerar o build candidato; não manter lista duplicada de rotas neste documento.
 - Build: usar somente o bundle estático verificado pelo `scripts/build.py` com `contracts/migration-artifact-lock.json` restrito a desenvolvimento. Não publicar esse bundle.
-- Prova automática existente: `scripts/browser_smoke.py` cobre teclado/AX, contraste medível de superfícies planas, reflow, sem JS, `forced-colors` e ampliação **simulada** de texto a 200%. O resultado `text200` **não é** zoom nativo do navegador.
+- Prova automática existente: `scripts/browser_smoke.py` cobre teclado/AX, contraste medível de superfícies planas, reflow, sem JS, `forced-colors`, ampliação **simulada** de texto a 200% e espaçamento WCAG 1.4.12 em PT-BR/EN-US (22 cenários). Os testes `text200` e `spacing` são **regressões parciais de DOM**, não zoom nativo nem aprovação visual/manual.
 - Fonte visual de demonstração `.playground`: avalie-a como conteúdo exibido ao usuário, mas encaminhe ajustes de seus artefatos canônicos ao owner Surface. Não introduza CSS espelho no Site.
 
 ## Evidência obrigatória por rota
@@ -29,7 +29,7 @@ Registre: revisão completa do commit, digest do build candidato, rota do contra
 
 ## 3. Espaçamento de texto — WCAG 1.4.12
 
-Aplicar, numa inspeção local, os parâmetros: altura de linha de pelo menos 1,5 × tamanho da fonte; espaço após parágrafos de pelo menos 2 × tamanho da fonte; espaçamento entre letras de pelo menos 0,12 × tamanho da fonte; espaçamento entre palavras de pelo menos 0,16 × tamanho da fonte. Verificar perda de conteúdo/funcionalidade, tanto em PT-BR quanto em EN-US. Registrar qualquer incompatibilidade antes de emitir PASS.
+A suíte Chrome aplica esses parâmetros ao texto visível do Site na viewport 390 CSS px e exige métricas computadas, ausência de clipping direto em contêineres de texto e ausência de overflow horizontal ([CI](https://github.com/ordaxsystems/ordax-site/actions/runs/40057544890)). **Esse resultado é parcial**. Na inspeção humana, aplicar os mesmos parâmetros e verificar visualmente todas as rotas, estados e idiomas. Parâmetros: altura de linha de pelo menos 1,5 × tamanho da fonte; espaço após parágrafos de pelo menos 2 × tamanho da fonte; espaçamento entre letras de pelo menos 0,12 × tamanho da fonte; espaçamento entre palavras de pelo menos 0,16 × tamanho da fonte. Verificar perda de conteúdo/funcionalidade, tanto em PT-BR quanto em EN-US. Registrar qualquer incompatibilidade antes de emitir PASS.
 
 ## 4. Leitor de tela e teclado
 
