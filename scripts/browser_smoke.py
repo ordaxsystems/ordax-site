@@ -465,6 +465,57 @@ def forced_colors_probe(driver: Driver) -> dict:
     })();""")
 
 
+def text_enlargement_probe(driver: Driver) -> dict:
+    """200% computed-font-size stress test; not native browser text zoom."""
+    return driver.run(r"""return (() => {
+      const excluded = '.playground, .sr-only, [hidden], [aria-hidden="true"], script, style';
+      const els = [...document.querySelectorAll('body *')].filter(el => {
+        if (el.closest(excluded) || el.matches('svg, svg *, img, canvas')) return false;
+        const css = getComputedStyle(el);
+        if (css.display === 'none' || css.visibility !== 'visible') return false;
+        const ownsText = [...el.childNodes].some(n =>
+          n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+        return ownsText || el.matches('input:not([type="hidden"]), textarea, select');
+      });
+      const samples = els.map(el => ({el, size: parseFloat(getComputedStyle(el).fontSize)}))
+        .filter(x => Number.isFinite(x.size) && x.size > 0);
+      for (const {el, size} of samples)
+        el.style.setProperty('font-size', (size * 2) + 'px', 'important');
+      const wrongSizes = samples.filter(({el, size}) =>
+        Math.abs(parseFloat(getComputedStyle(el).fontSize) - size * 2) > 0.25);
+      const clippedText = samples.filter(({el}) => {
+        const css = getComputedStyle(el), rect = el.getBoundingClientRect();
+        if (!rect.width || !rect.height) return false;
+        return (/^(hidden|clip)$/.test(css.overflowY) && el.scrollHeight > el.clientHeight + 2) ||
+          (/^(hidden|clip)$/.test(css.overflowX) && el.scrollWidth > el.clientWidth + 2);
+      }).slice(0, 12).map(({el}) => ({
+        tag: el.tagName.toLowerCase(), selector: String(el.className || '').slice(0, 70),
+        text: String(el.textContent || el.value || '').trim().slice(0, 70),
+        width: el.clientWidth, scrollWidth: el.scrollWidth,
+        height: el.clientHeight, scrollHeight: el.scrollHeight
+      }));
+      const overflowElements = [...document.querySelectorAll('body *')].filter(el => {
+        if (el.closest('.playground')) return false;
+        const rect = el.getBoundingClientRect(), css = getComputedStyle(el);
+        return rect.width > 0 && rect.right > innerWidth + 2 &&
+          rect.left < innerWidth && css.display !== 'none' &&
+          css.visibility !== 'hidden' && css.position !== 'fixed';
+      }).slice(0, 12).map(el => ({
+        tag: el.tagName.toLowerCase(), selector: String(el.className || '').slice(0, 85),
+        right: Math.round(el.getBoundingClientRect().right)
+      }));
+      return {
+        method: 'computed-font-size-doubling-not-native-browser-zoom',
+        scalePercent: 200, scaledTextNodes: samples.length,
+        wrongSizes: wrongSizes.length, clippedText,
+        width: innerWidth, documentScrollWidth: document.documentElement.scrollWidth,
+        noPageHorizontalOverflow: document.documentElement.scrollWidth <= innerWidth + 2,
+        overflowElements,
+        noUnexpectedRuntimeErrors: !(window.__ordaxPageErrors || []).length
+      };
+    })();""")
+
+
 def no_script_probe(driver: Driver) -> dict:
     """Inspect the offline presentation after loading with script execution blocked."""
     return driver.run(r"""return (() => {
@@ -537,6 +588,7 @@ def run(root: Path, evidence: Path) -> dict:
     driver = Driver(webdriver_port)
     results = []
     reflow_results = []
+    text_enlargement_results = []
     no_script_results = []
     failures = []
     try:
@@ -685,6 +737,31 @@ def run(root: Path, evidence: Path) -> dict:
                     if not good:
                         failures.append({"route": route, "viewport": f"reflow-{scale}",
                                          "rule": rule, "summary": report})
+        # Stress test computed font-size 200% on the Site-owned presentation.
+        # This is not Chrome's native text-only zoom and does not alter source.
+        for route in ROUTES:
+            driver.cdp("Emulation.setDeviceMetricsOverride", {
+                "width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True
+            })
+            driver.navigate(f"http://127.0.0.1:{server.server_port}{route}")
+            wait_for_route(driver, route)
+            report = text_enlargement_probe(driver)
+            report["route"] = route
+            short = route.strip("/").replace("/", "-") or "home"
+            shot = f"text-200pct-{short}.png"
+            driver.shot(evidence / shot)
+            report["screenshot"] = shot
+            text_enlargement_results.append(report)
+            checks = {
+                "textActuallyDoubled": report["scaledTextNodes"] > 0 and report["wrongSizes"] == 0,
+                "textDoesNotClip": not report["clippedText"],
+                "textDoesNotCausePageOverflow": report["noPageHorizontalOverflow"],
+                "noUncaughtScripts": report["noUnexpectedRuntimeErrors"],
+            }
+            for rule, passed in checks.items():
+                if not passed:
+                    failures.append({"route": route, "viewport": "text-200pct",
+                                     "rule": rule, "summary": report})
         # Verify that disabling JavaScript at document parse time cannot
         # expose identity forms, verified identity or the Web launch. Re-enable
         # only after loading to inspect the inert DOM; deferred scripts must
@@ -719,9 +796,11 @@ def run(root: Path, evidence: Path) -> dict:
                                      "rule": rule, "summary": report})
         output = {"schema": "ordax.site-browser-proof/2", "routeCount": len(ROUTES),
                   "viewportCount": len(VIEWPORTS), "checks": len(results),
-                  "reflowChecks": len(reflow_results), "noScriptChecks": len(no_script_results),
+                  "reflowChecks": len(reflow_results), "textEnlargementChecks": len(text_enlargement_results),
+                  "noScriptChecks": len(no_script_results),
                   "failures": failures, "results": results,
-                  "reflowResults": reflow_results, "noScriptResults": no_script_results}
+                  "reflowResults": reflow_results, "textEnlargementResults": text_enlargement_results,
+                  "noScriptResults": no_script_results}
         (evidence / "report.json").write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if failures:
             raise BrowserProofError(f"{len(failures)} browser checks failed; see report.json; "
@@ -734,6 +813,12 @@ def run(root: Path, evidence: Path) -> dict:
                                          if r["rule"] == "reducedMotionBrowserPreferenceHonored" else "")
                                       + (":" + json.dumps(r["summary"].get("forcedColors", {}), ensure_ascii=False)
                                          if r["rule"] == "nativeForcedColorsAndSkipFocus" else "")
+                                      + (":" + json.dumps({
+                                           "clippedText":r["summary"].get("clippedText", []),
+                                           "overflowElements":r["summary"].get("overflowElements", []),
+                                           "documentScrollWidth":r["summary"].get("documentScrollWidth", 0)
+                                         }, ensure_ascii=False)
+                                         if r["viewport"] == "text-200pct" else "")
                                       for r in failures[:15]))
         return output
     finally:
@@ -753,7 +838,7 @@ def main():
     parser.add_argument("--evidence", default="out/browser-evidence")
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} noscript={output['noScriptChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} noscript={output['noScriptChecks']}")
 
 
 if __name__ == "__main__":
