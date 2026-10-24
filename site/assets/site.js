@@ -615,6 +615,14 @@
     getSnapshot: () => sessionView,
     readSession: readPublicSession,
     refreshSession: refreshPublicSession,
+    // Read-only account data uses the same bounded same-origin transport.
+    // Authorization remains entirely server-side; no client-side quota claim.
+    readMcpUsage(signal) {
+      if (sessionView.status !== "authenticated") {
+        return Promise.reject(new Error("public-account-session-required"));
+      }
+      return loadJson("/account/usage/mcp", signal);
+    },
     subscribe(observer) {
       if (typeof observer !== "function") throw new TypeError("account-observer-required");
       sessionObservers.add(observer);
