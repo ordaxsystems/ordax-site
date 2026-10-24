@@ -2,7 +2,7 @@
 
 Repositório de **apresentação pública** do OrdaX. Independente dos builds do kernel, USB, Surface Web, Creator e Identity.
 
-> **Migração em andamento — draft.** A implementação atual no `ordax-os` continua vigente até a prova de cutover. Este repositório **não** publica em produção e não modifica domínios ou segredos.
+> **Cutover de desenvolvimento integrado (2026-10-24).** O `ordax-site/main` é o owner do código e build independentes. O repoint dos builds Vercel do OS foi integrado em [ordax-os#2225](https://github.com/ordaxsystems/ordax-os/pull/2225); a remoção da apresentação histórica duplicada está sendo concluída em [ordax-os#2229](https://github.com/ordaxsystems/ordax-os/pull/2229). Este estado **não** autoriza deploy de produção, alteração de DNS, ativação de Identity nem uso público dos artefatos temporários.
 
 ## O que pertence ao Site
 
