@@ -422,12 +422,12 @@ def verify(out: Path) -> None:
     # record. Reject a valid but swapped catalog or a forged "ready" marker.
     if ledger.get("catalog_status") != catalog["status"]:
         raise SiteError("bundle publication state mismatch")
-    publication_digest = ledger.get("publications_sha256")
-    if catalog["status"] == "empty":
-        if publication_digest is not None:
-            raise SiteError("empty catalog cannot have a publisher receipt")
-    elif not isinstance(publication_digest, str) or not SHA256.fullmatch(publication_digest):
-        raise SiteError("ready catalog requires an attested publisher receipt")
+    # The standalone Site has no official publisher trust anchor yet.
+    # A SHA in this same manifest is NOT an external attestation.
+    if catalog["status"] != "empty":
+        raise SiteError("ready catalog requires an independently attested publisher")
+    if ledger.get("publications_sha256") is not None:
+        raise SiteError("empty catalog cannot have a publisher receipt")
 
 def main() -> None:
     cli = argparse.ArgumentParser()
