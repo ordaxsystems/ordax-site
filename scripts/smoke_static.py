@@ -25,8 +25,8 @@ def check_css_dependencies(out: Path) -> int:
         css = re.sub(r"/\*.*?\*/", "", path.read_text("utf-8"), flags=re.S)
         if re.search(r"@import\b", css, flags=re.I):
             raise AssertionError(path.relative_to(out).as_posix() + ": CSS @import not allowed")
-        for match in re.finditer(r"url\(\s*(?:['\"]([^'\"]+)['\"]|([^\s)]+))\s*\)", css, flags=re.I):
-            url = (match.group(1) or match.group(2)).strip()
+        for match in re.finditer(r"""url\(\s*(?:(["'])(.*?)\1|([^\s)]+))\s*\)""", css, flags=re.I | re.S):
+            url = (match.group(2) or match.group(3)).strip()
             if url.startswith(("data:image/", "data:font/", "#")):
                 continue
             asset = urlsplit(url)
