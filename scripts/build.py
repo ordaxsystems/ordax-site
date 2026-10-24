@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 from public_html_render import render_public_html
-from public_release_catalog import load_publications, render_catalog, validate_catalog
+from public_release_catalog import render_catalog, validate_catalog
 from site_routes import ROUTES, ROUTE_RECORDS
 from site_seo import validate_origin, render_html, write_robots_sitemap
 
@@ -100,10 +100,27 @@ def check_source(strict_assets: bool = False) -> dict:
         raise SiteError("missing original source assets: " + ", ".join(missing_binary))
     return {"source_files": len(files), "missing_source_assets": missing_binary}
 
-def stage_brand(stage: Path, brand_dir: Path) -> dict:
-    ledger = json.loads((brand_dir / "manifest.json").read_text("utf-8"))
-    if ledger.get("artifact_class") != "ordax-brand" or not SHA40.fullmatch(str(ledger.get("source_commit", ""))):
-        raise SiteError("unversioned/untrusted brand artifact")
+def load_pinned_manifest(directory: Path, expected_sha256: str | None, label: str) -> tuple[dict, str]:
+    """Verify trust anchor outside the manifest before interpreting any manifest claims."""
+    if not SHA256.fullmatch(str(expected_sha256)):
+        raise SiteError(label + " manifest SHA-256 pin is mandatory")
+    path = directory / "manifest.json"
+    if path.is_symlink() or not path.is_file():
+        raise SiteError(label + " manifest missing or symlinked")
+    payload = path.read_bytes()
+    if digest(payload) != expected_sha256:
+        raise SiteError(label + " manifest pin mismatch")
+    return json.loads(payload), expected_sha256
+
+
+def stage_brand(stage: Path, brand_dir: Path, expected_sha256: str | None) -> dict:
+    ledger, pinned_sha256 = load_pinned_manifest(brand_dir, expected_sha256, "brand")
+    if (ledger.get("artifact_class") != "ordax-brand"
+            or ledger.get("source_repository") != "ordaxsystems/ordax-os"
+            or ledger.get("status") != "audited-migration-snapshot-not-official-surface-publication"
+            or ledger.get("immutable") is not True
+            or not SHA40.fullmatch(str(ledger.get("source_commit", "")))):
+        raise SiteError("unversioned/misidentified or falsely official brand artifact")
     if {r.get("path") for r in ledger.get("files", [])} != BRAND_FILES:
         raise SiteError("brand artifact file set mismatch")
     for row in ledger["files"]:
@@ -119,19 +136,13 @@ def stage_brand(stage: Path, brand_dir: Path) -> dict:
             raise SiteError("brand file conflicts with site-owned source: " + name)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(payload)
-    return {"source_commit": ledger["source_commit"], "manifest_sha256": digest((brand_dir / "manifest.json").read_bytes())}
+    return {"source_repository": ledger["source_repository"],
+            "source_commit": ledger["source_commit"], "status": ledger["status"],
+            "manifest_sha256": pinned_sha256}
 
 def stage_surface_preview(stage: Path, directory: Path, expected_manifest_sha256: str) -> dict:
     """Stage the pinned presentation-only migration package, never source code."""
-    if not SHA256.fullmatch(str(expected_manifest_sha256)):
-        raise SiteError("Surface preview manifest SHA-256 pin is mandatory")
-    manifest_path = directory / "manifest.json"
-    if manifest_path.is_symlink() or not manifest_path.is_file():
-        raise SiteError("Surface preview manifest missing or symlinked")
-    manifest_bytes = manifest_path.read_bytes()
-    if digest(manifest_bytes) != expected_manifest_sha256:
-        raise SiteError("Surface preview manifest pin mismatch")
-    manifest = json.loads(manifest_bytes)
+    manifest, _ = load_pinned_manifest(directory, expected_manifest_sha256, "Surface preview")
     if (manifest.get("artifact_class") != "ordax-public-surface-preview"
             or manifest.get("status") != "audited-migration-snapshot-not-official-surface-publication"
             or manifest.get("source_repository") != "ordaxsystems/ordax-os"
@@ -192,13 +203,15 @@ def stage_surface_preview(stage: Path, directory: Path, expected_manifest_sha256
             "rendered_css_sha256": digest(css), "font_url_rebased": font_rebased}
 
 
-def load_reference_offers(directory: Path | None) -> tuple[str, dict | None]:
+def load_reference_offers(directory: Path | None, expected_sha256: str | None) -> tuple[str, dict | None]:
     if directory is None:
+        if expected_sha256 is not None:
+            raise SiteError("offers manifest pin without an artifact")
         # No official presentation projection supplied: reference offers stay unavailable.
         return '<p class="commercial-notice">Catálogo de planos em preparação.</p>', None
-    manifest_path = directory / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest, pinned_sha256 = load_pinned_manifest(directory, expected_sha256, "offers")
     if (manifest.get("artifact_class") != "ordax-public-reference-offers"
+            or manifest.get("source_repository") != "ordaxsystems/ordax-os"
             or manifest.get("status") != "reference-not-purchasable"
             or not SHA40.fullmatch(str(manifest.get("source_commit", "")))
             or manifest.get("paid_purchases_enabled") is not False
@@ -220,17 +233,27 @@ def load_reference_offers(directory: Path | None) -> tuple[str, dict | None]:
             or re.search(r"<\s*(?:script|form|iframe|a)\b", html, re.I)
             or re.search(r"\b(?:href|action|on[a-z]+)\s*=", html, re.I)):
         raise SiteError("reference offers contain interactive, unavailable or untrusted content")
-    return html, {"source_commit": manifest["source_commit"],
-                  "manifest_sha256": digest(manifest_path.read_bytes())}
+    return html, {"source_repository": manifest["source_repository"],
+                  "source_commit": manifest["source_commit"],
+                  "status": manifest["status"],
+                  "manifest_sha256": pinned_sha256}
 
 
 def build(out: Path, sha: str, brand: Path, publications: Path | None,
           offers_dir: Path | None = None, public_origin: str | None = None,
           surface_preview_dir: Path | None = None,
-          surface_preview_manifest_sha256: str | None = None) -> dict:
+          surface_preview_manifest_sha256: str | None = None,
+          brand_manifest_sha256: str | None = None,
+          offers_manifest_sha256: str | None = None) -> dict:
     if not SHA40.fullmatch(sha):
         raise SiteError("full Git SHA required")
     origin = validate_origin(public_origin)
+    # A boolean "public_authorized" in an arbitrary local JSON file is not
+    # publisher attestation. No official release artifact trust policy exists.
+    # Keep the download catalog empty until an explicitly authenticated
+    # publishing handoff can be implemented; preserve only the offline renderer.
+    if publications is not None:
+        raise SiteError("public downloads require an attested publisher artifact; local --publications is forbidden")
     check_source(strict_assets=True)
     if out.exists():
         raise SiteError("refusing to replace existing build output")
@@ -238,13 +261,13 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
     temp = Path(tempfile.mkdtemp(prefix=".ordax-site-", dir=out.parent))
     try:
         shutil.copytree(SOURCE, temp, dirs_exist_ok=True)
-        brand_receipt = stage_brand(temp, brand)
+        brand_receipt = stage_brand(temp, brand, brand_manifest_sha256)
         if surface_preview_dir is None:
             raise SiteError("Surface preview artifact required; no embedded Surface copy")
         preview_receipt = stage_surface_preview(
             temp, surface_preview_dir, surface_preview_manifest_sha256 or ""
         )
-        offers_html, offers_receipt = load_reference_offers(offers_dir)
+        offers_html, offers_receipt = load_reference_offers(offers_dir, offers_manifest_sha256)
         route_by_source = {item["source"]: item for item in ROUTE_RECORDS}
         for page in temp.rglob("*.html"):
             relative = page.relative_to(temp).as_posix()
@@ -265,15 +288,10 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
                             lambda match: match.group(1) + preview_receipt["rendered_css_sha256"][:12], markup)
             page.write_text(render_html(markup, route_by_source[relative], origin), encoding="utf-8")
         write_robots_sitemap(temp, origin)
-        # Site does not authorize releases: a missing official publication produces
-        # an empty catalog. The release owner must supply an explicit approved file.
-        if publications is None:
-            catalog = render_catalog({"releases": []})
-            publications_digest = None
-        else:
-            canonical = load_publications(publications)
-            catalog = render_catalog(canonical)
-            publications_digest = digest(publications.read_bytes())
+        # The Site cannot authorize releases. Without independently attested
+        # public-publisher input, the only safe downloadable catalog is empty.
+        catalog = render_catalog({"releases": []})
+        publications_digest = None
         dest = temp / "releases/catalog.json"
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(json.dumps(catalog, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -317,8 +335,10 @@ def main() -> None:
     cli.add_argument("command", choices=("check", "build", "verify"))
     cli.add_argument("--source-commit")
     cli.add_argument("--brand-dir")
+    cli.add_argument("--brand-manifest-sha256")
     cli.add_argument("--publications")
     cli.add_argument("--offers-dir")
+    cli.add_argument("--offers-manifest-sha256")
     cli.add_argument("--public-origin")
     cli.add_argument("--surface-preview-dir")
     cli.add_argument("--surface-preview-manifest-sha256")
@@ -335,7 +355,9 @@ def main() -> None:
                                Path(args.offers_dir) if args.offers_dir else None,
                                args.public_origin,
                                Path(args.surface_preview_dir) if args.surface_preview_dir else None,
-                               args.surface_preview_manifest_sha256), sort_keys=True))
+                               args.surface_preview_manifest_sha256,
+                               args.brand_manifest_sha256,
+                               args.offers_manifest_sha256), sort_keys=True))
     else:
         verify(Path(args.out))
         print("SITE_BUNDLE_VERIFY=PASS")
