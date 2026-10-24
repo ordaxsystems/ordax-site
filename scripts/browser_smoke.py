@@ -48,6 +48,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b'{"error":"service-unavailable"}')
 
     def do_GET(self):
+        # Delayed old anonymous response vs. immediate new unavailability:
+        # page revalidation must not resurrect a stale Identity form.
+        if self.path == "/auth/session" and getattr(self.server, "auth_session_race_for_test", False):
+            with self.server.auth_race_lock:
+                self.server.auth_race_requests += 1
+                attempt = self.server.auth_race_requests
+            if attempt == 1:
+                time.sleep(0.8)
+                code = 200
+                payload = {"$schema": "prototype-ordax.public-identity-session/1",
+                           "provider": "supabase", "authenticated": False, "status": "anonymous"}
+            else:
+                code = 503
+                payload = {"error": "service-unavailable"}
+            content = json.dumps(payload).encode("utf-8")
+            try:
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # A superseded fetch is allowed to abort on the client.
+            return
         # Redirect-based session forgery exists only in this loopback proof.
         # Even a 200 JSON served at a different same-origin route is not the
         # canonical /auth/session response; the browser must reject it.
@@ -693,6 +718,9 @@ def run(root: Path, evidence: Path) -> dict:
     server.catalog_override = None
     server.manifest_override = None
     server.auth_session_redirect_for_test = False
+    server.auth_session_race_for_test = False
+    server.auth_race_requests = 0
+    server.auth_race_lock = threading.Lock()
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     webdriver_port = free_port()
@@ -706,6 +734,7 @@ def run(root: Path, evidence: Path) -> dict:
     no_script_results = []
     catalog_failure_results = []
     redirect_identity_results = []
+    identity_race_results = []
     failures = []
     try:
         for _ in range(100):
@@ -1026,6 +1055,55 @@ def run(root: Path, evidence: Path) -> dict:
                                  "rule": "session-cannot-follow-redirect", "summary": report})
         finally:
             server.auth_session_redirect_for_test = False
+        # The old /auth/session GET deliberately returns after a newer refresh
+        # has failed. The older 200 must not reactivate a login form even for
+        # a moment after the 503 was accepted by the current generation.
+        server.auth_session_race_for_test = True
+        with server.auth_race_lock:
+            server.auth_race_requests = 0
+        try:
+            driver.navigate(f"http://127.0.0.1:{server.server_port}/login/")
+            for _ in range(40):
+                with server.auth_race_lock:
+                    count = server.auth_race_requests
+                if count >= 1:
+                    break
+                time.sleep(0.05)
+            if count < 1:
+                failures.append({"route": "/login/", "viewport": "session-race",
+                                 "rule": "first-session-request-not-seen"})
+            else:
+                driver.run("""void window.OrdaXPublicAccount.refreshSession(); return true;""")
+                for _ in range(40):
+                    with server.auth_race_lock:
+                        count = server.auth_race_requests
+                    if count >= 2:
+                        break
+                    time.sleep(0.05)
+                # Let both concurrent requests resolve and inspect the final
+                # state. No credentials or Turnstile provider are invoked.
+                time.sleep(1.05)
+                report = driver.run("""return (() => {
+                  const form = document.querySelector('[data-identity-form]');
+                  const state = document.querySelector('[data-identity-state]');
+                  return {
+                    status: state?.dataset?.status || null,
+                    hidden: form?.hidden === true,
+                    activeAction: form?.hasAttribute('action') || false,
+                    enabledControls: [...(form?.querySelectorAll('input, button') || [])]
+                      .filter(control => !control.disabled).length,
+                    ready: document.body.dataset.identityReady,
+                    errors: window.__ordaxPageErrors || []
+                  };
+                })();""")
+                report["scenario"] = "stale-anonymous-reply-after-session-refresh"
+                report["sessionRequests"] = count
+                identity_race_results.append(report)
+                if count < 2 or report["status"] != "unavailable" or not report["hidden"] or report["activeAction"] or report["enabledControls"] or report["ready"] != "false" or report["errors"]:
+                    failures.append({"route": "/login/", "viewport": "session-race",
+                                     "rule": "old-session-result-reactivated-form", "summary": report})
+        finally:
+            server.auth_session_race_for_test = False
         # Restore the default language to keep the no-JavaScript checks independent.
         driver.run("""localStorage.setItem('ordax.public.locale', 'pt-BR'); return true;""")
         # Verify that disabling JavaScript at document parse time cannot
@@ -1067,12 +1145,14 @@ def run(root: Path, evidence: Path) -> dict:
                   "noScriptChecks": len(no_script_results),
                   "catalogFailureChecks": len(catalog_failure_results),
                   "redirectIdentityChecks": len(redirect_identity_results),
+                  "identityRaceChecks": len(identity_race_results),
                   "failures": failures, "results": results,
                   "reflowResults": reflow_results, "textEnlargementResults": text_enlargement_results,
                   "textSpacingResults": text_spacing_results,
                   "noScriptResults": no_script_results,
                   "catalogFailureResults": catalog_failure_results,
-                  "redirectIdentityResults": redirect_identity_results}
+                  "redirectIdentityResults": redirect_identity_results,
+                  "identityRaceResults": identity_race_results}
         (evidence / "report.json").write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if failures:
             raise BrowserProofError(f"{len(failures)} browser checks failed; see report.json; "
@@ -1117,7 +1197,7 @@ def main():
     parser.add_argument("--evidence", default="out/browser-evidence")
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} identityRace={output['identityRaceChecks']}")
 
 
 if __name__ == "__main__":
