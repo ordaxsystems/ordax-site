@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import build
-from public_release_catalog import render_catalog, PublicReleaseCatalogError, _same_origin_path
+from public_release_catalog import render_catalog, validate_catalog, PublicReleaseCatalogError, _same_origin_path
 from site_routes import load_routes
 from site_seo import validate_origin, render_html
 from smoke_static import check_css_dependencies
@@ -115,6 +115,57 @@ class SiteContractTests(unittest.TestCase):
         self.assertEqual(result["releases"], [])
         with self.assertRaises(PublicReleaseCatalogError):
             render_catalog({"releases": [{"release_id": "0" * 40, "public_authorized": False}]})
+
+    def test_distributed_ready_catalog_rejects_partial_or_duplicate_downloads(self):
+        # Synthetic, never distributed publisher data; the real builder keeps
+        # releases empty without an independently attested publisher handoff.
+        asset = lambda href: {"href": href, "sha256": "a" * 64, "size": 123}
+        target = {"id": "usb-amd64", "label": "Test target",
+                  **asset("/downloads/test-only.img")}
+        release_id = "1" * 40
+        authorized_test_projection = render_catalog({"releases": [{
+            "release_id": release_id,
+            "source_commit": release_id,
+            "version": "test-only",
+            "channel": "test",
+            "published_at": "2026-10-24",
+            "public_authorized": True,
+            "targets": [{**target, "public_download_authorized": True}],
+            "compliance": {
+                "public_compliance_authorized": True,
+                "sbom": asset("/compliance/test-sbom.json"),
+                "third_party_notices": asset("/compliance/test-notices.txt"),
+                "source_bundle": asset("/compliance/test-sources.tar.gz"),
+            },
+        }]})
+        import copy
+        original = authorized_test_projection["releases"][0]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "catalog.json"
+            def check(value):
+                path.write_text(json.dumps(value), encoding="utf-8")
+                return validate_catalog(path)
+            self.assertEqual(check(authorized_test_projection), authorized_test_projection)
+
+            for field in ("version", "channel", "published_at"):
+                invalid = copy.deepcopy(authorized_test_projection)
+                invalid["releases"][0][field] = "  "
+                with self.subTest(field=field), self.assertRaisesRegex(
+                    PublicReleaseCatalogError, field
+                ):
+                    check(invalid)
+
+            invalid = copy.deepcopy(authorized_test_projection)
+            invalid["releases"][0]["targets"].append(copy.deepcopy(
+                invalid["releases"][0]["targets"][0]
+            ))
+            with self.assertRaisesRegex(PublicReleaseCatalogError, "duplicate target id"):
+                check(invalid)
+
+            invalid = copy.deepcopy(authorized_test_projection)
+            invalid["releases"][0]["targets"][0]["href"] = "/downloads/%2e%2e/auth/login"
+            with self.assertRaisesRegex(PublicReleaseCatalogError, "same-origin"):
+                check(invalid)
 
     def test_published_release_links_have_unambiguous_root_paths(self):
         for value in ("/releases/ordax-1.0.img", "/downloads/x86_64/stable.iso",
