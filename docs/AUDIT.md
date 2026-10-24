@@ -85,3 +85,11 @@ A suite passou de 33 para 33+22 cenários: os 22 complementares usam `Emulation.
 A suite ganhou ainda 6 provas adicionais sem JavaScript: o carregamento é feito com `Emulation.setScriptExecutionDisabled=true` antes da navegação, e a página estática é inspecionada em seguida. Os avisos `noscript` ficam visíveis; nenhum botão de auth/form credencial, identidade verificada ou lançamento Web pode ser habilitado. [Evidência PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051439195). Nenhum servidor de identidade foi iniciado; APIs continuam 503 no runner.
 
 Escopo **parcial** da WCAG: valida reflow em CSS viewports estreitos e estados no-JS, mas **não** prova zoom real do navegador, ampliação isolada do tamanho do texto, contraste visual integral ou uso por leitor de tela.
+
+## Contraste calculável em Chrome — gate parcial (2026-10-23/24)
+
+A prova E2E usa `solid_surface_contrast_probe()` sobre elementos de texto e navegação visíveis. Compara **luminância linear sRGB** entre texto e fundo plano composto, exigindo **4,5:1** em texto comum e **3:1** em texto grande conforme os limiares WCAG 2.x. Não contabiliza como aprovação fundos em imagem/gradiente, transparência por camadas ou estilos impossíveis de identificar; o relatório JSON preserva `unchecked`, `measured` e cada falha com cores e proporção. Fora da landing em gradiente, as rotas devem ter amostras de fundo plano efetivamente medidas.
+
+O primeiro CI encontrou **cinco telas de identidade** com problemas de contraste: o link de pulo herdava cor escura sobre fundo escuro, e textos secundários em painéis claros tinham proporções de aproximadamente **4,31–4,37:1**, abaixo de 4,5. Ajustado apenas em `site/assets/account.css`, sem alterar as cores canônicas da Surface: `.account-ui .skip-link` recupera contraste e `--account-muted` faz mescla contextual com a tinta Meridian. O portal de Conta passou a incluir a topbar/breadcrumb na amostra. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40053856203).
+
+**Não atesta WCAG global.** Contraste de gradientes/fotos, pseudoelementos, estados hover/focus específicos, leitores de tela, ampliação somente de texto/zoom real e fluxos autenticados de staging continuam por validar.

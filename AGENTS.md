@@ -64,3 +64,9 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 - A suite `scripts/browser_smoke.py` inclui 33 provas regulares, **22 reflows de CSS em modo desktop** (640/320 px) e **6 estados sem execução de JavaScript**, capturados em `out/browser-evidence`. O controle auth permanece desativado também sem scripts. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051704031).
 - **Não esconder horizontal overflow com `overflow-x:hidden` global.** O problema identificado era o seletor de idioma anexado ao `.site-nav` excedendo a largura em quatro rotas. A correção é `flex-wrap` e linha própria para `.public-locale-switcher` em largura estreita, no único `site/assets/site.css`.
 - Não declarar testado o zoom real ou WCAG completo: o reflow usa viewports CSS equivalentes a 200/400% de uma janela de 1280 px. Text-only zoom, contraste, leitores de tela e gateway real continuam pendentes.
+
+## Contraste técnico — gate parcial, sem prometer WCAG total
+
+- O Chrome deve manter a prova `solid_surface_contrast_probe()` em páginas desktop: >=4,5:1 para texto comum, >=3:1 para texto grande quando existe **fundo sólido mensurável**; exigir amostras nas rotas não-landing.
+- Não marcar gradientes, imagens e composição com opacity/filter como aprovados. Relatório inclui itens ignorados e falhas por cor/razão. Não substituir por captura visual sem cálculo.
+- Preserve `artifacts/brand/` e `artifacts/surface-preview/` imutáveis: ajustes de contraste específicos de Conta/Identity pertencem à apresentação `site/assets/account.css`. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40053856203).
