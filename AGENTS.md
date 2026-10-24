@@ -112,3 +112,9 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 
 - Não classificar um preview do `ordax-os` ou `ordax-web` como prova do novo Site, mesmo que `/auth/session` e `/releases/catalog.json` tenham schemas compatíveis. O staging preflight exige **SHA-256 do manifesto de build recebido do CI confiável** e `source_commit` exato; confere digest/size dos documentos públicos contra o inventário do bundle, antes de declarar PASS anônimo.
 - A conta Vercel consultada tinha apenas `ordax-os-public` e `ordax-web`, ambos sem deployment recente de produção com READY e previews históricos do OS com SSO. Não criar/desproteger projetos, habilitar prod/DNS ou contornar SSO a partir do preflight. O preview `ordax-site` próprio permanece uma dependência de owner de deployment, não evidência já obtida.
+
+
+## Integridade do conteúdo completo no staging (2026-10-24)
+
+- Para qualquer prova externa do Site, o manifesto de build verificado no CI confiável é a âncora obrigatória. O pré-flight **não** pode limitar a conferência a `config/public-site.json` e `releases/catalog.json`: deve comprovar hash SHA-256 e tamanho dos **demais arquivos inventariados**, incluindo HTML das rotas, JS, CSS e fixture pública, antes de consultar `/auth/session`. Rotas `*/index.html` são solicitadas como `*/`; rejeitar redirects, diferenças de bytes e inventário ambíguo. Não converter teste de unidade em prova de staging executado.
+- Não criar novos espelhos nem publicar o pacote de migração em produção para obter um URL de teste. O preview independente e a autoridade Identity continuam pertencendo ao owner de deployment, com a aprovação e os controles de acesso necessários.
