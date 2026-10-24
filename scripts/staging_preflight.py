@@ -113,9 +113,12 @@ def evaluate_gateway_contracts(fetch_json) -> dict:
     config_status, config = fetch_json("/config/public-site.json", MAX_CONFIG)
     if config_status != 200 or config.get("$schema") != "prototype-ordax.public-site-runtime/1":
         raise StagingPreflightError("site-runtime-contract-invalid")
-    if config.get("downloads", {}).get("catalog_url") != "/releases/catalog.json":
+    downloads = config.get("downloads")
+    product = config.get("product")
+    web = product.get("web") if isinstance(product, dict) else None
+    if not isinstance(downloads, dict) or downloads.get("catalog_url") != "/releases/catalog.json":
         raise StagingPreflightError("catalog-not-canonical-same-origin")
-    if config.get("product", {}).get("web", {}).get("enabled") is not False:
+    if not isinstance(web, dict) or web.get("enabled") is not False:
         raise StagingPreflightError("web-product-not-gated")
     session_status, session = fetch_json("/auth/session", MAX_SESSION)
     try:
