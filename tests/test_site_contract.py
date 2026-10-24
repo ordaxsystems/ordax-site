@@ -154,6 +154,16 @@ class SiteContractTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 validate_origin(invalid)
 
+    def test_verified_brand_favicon_is_added_once(self):
+        routes = {record["path"]: record for record in load_routes()}
+        html = '<html><head><title>Site</title><meta name="description" content="Portal"></head><body></body></html>'
+        public = render_html(html, routes["/"], "https://ordax.com.br")
+        self.assertEqual(public.count('rel="icon"'), 1)
+        self.assertIn('href="/assets/ordax-symbol.png"', public)
+        existing = html.replace('</head>', '<link rel="icon" href="/assets/ordax-symbol.png" type="image/png"></head>')
+        gated = render_html(existing, routes["/conta/"], "https://ordax.com.br")
+        self.assertEqual(gated.count('rel="icon"'), 1)
+
     def test_seo_gated_route_cannot_become_indexable(self):
         routes = {record["path"]: record for record in load_routes()}
         html = '<html><head><title>Site</title><meta name="description" content="Portal"></head><body></body></html>'
