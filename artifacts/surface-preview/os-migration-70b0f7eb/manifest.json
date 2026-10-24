@@ -1,0 +1,26 @@
+{
+  "artifact_class": "ordax-public-surface-preview",
+  "status": "audited-migration-snapshot-not-official-surface-publication",
+  "source_repository": "ordaxsystems/ordax-os",
+  "source_commit": "70b0f7eb5d5085be0d4f176f5232def37c7a2a24",
+  "immutable": true,
+  "upstream_snapshot": {
+    "original_path": "sites/public/assets/surface-snapshot.json",
+    "git_sha": "628292dc5f27afab9312bbe94cb5e1c114ac5eec",
+    "relationship": "same parsed JSON value as playground fixture.surface; not re-shipped"
+  },
+  "files": [
+    {
+      "path": "assets/playground-fixture.json",
+      "sha256": "c4c020e0cc4858a4fd011ff2c006bdfb330f1d0478fd7c74bbcb851692fead0c",
+      "size": 159840,
+      "git_sha": "ff0875ea52dd6834d8bd830db7786be6211eb968"
+    },
+    {
+      "path": "assets/surface-snapshot.css",
+      "sha256": "0465205d606ebe3b33eba2aaa689c52f1d2d9b99ee79620f72eb06d9113448da",
+      "size": 246748,
+      "git_sha": "6d09c754ea53dd2700e78fc4a4c86637e8a44df0"
+    }
+  ]
+}
