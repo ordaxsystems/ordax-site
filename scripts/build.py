@@ -261,7 +261,7 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
                     markup = markup.replace(marker, offers_html)
             # CSS source receipts stay immutable; the query tracks the bytes
             # actually distributed after verified font URL rebasing.
-            markup = re.sub(r"(/assets/surface-snapshot\\.css\\?v=)[0-9a-f]{12}",
+            markup = re.sub(r"(/assets/surface-snapshot\.css\?v=)[0-9a-f]{12}",
                             lambda match: match.group(1) + preview_receipt["rendered_css_sha256"][:12], markup)
             page.write_text(render_html(markup, route_by_source[relative], origin), encoding="utf-8")
         write_robots_sitemap(temp, origin)
