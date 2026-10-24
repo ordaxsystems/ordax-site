@@ -31,6 +31,8 @@ jobs:
         run: python3 scripts/build.py check
       - name: Localization parity and accessible copy
         run: node tests/test_localization.mjs
+      - name: Verify live legal-document integrity contracts
+        run: node tests/test_legal_documents.mjs
       - name: Fail-closed architecture and catalog tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Build standalone static candidate
