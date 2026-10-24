@@ -173,8 +173,8 @@ def assert_candidate(out: Path) -> dict:
         if relative == "conta/index.html" and "noindex" not in page.robots:
             raise AssertionError(relative + ": account portal must not be indexed")
         if relative in {"index.html", "conta/index.html"}:
-            if html.count('class="commercial-plan"') != 4:
-                raise AssertionError(relative + ": reference offers parity with canonical catalog failed")
+            if 'class="commercial-plan"' in html:
+                raise AssertionError(relative + ": no authorized commercial offers available")
             if "Planos em preparação" not in html or "contratação indisponível" not in html:
                 raise AssertionError(relative + ": inactive commercial availability not explicit")
             if "ORDAX_PUBLIC_PLAN_CATALOG" in html or "ORDAX_ACCOUNT_PLAN_CATALOG" in html:
