@@ -1035,16 +1035,31 @@
         !Number.isSafeInteger(record.size) || record.size < 0 || record.size > 262144) {
       throw new Error("catalog-inventory-invalid");
     }
-    const body = await response.arrayBuffer();
-    if (body.byteLength !== record.size || !window.crypto?.subtle) {
+    // Stream into a bounded buffer: response.arrayBuffer() could allocate an
+    // attacker-chosen body before the advertised digest is checked.
+    if (!window.crypto?.subtle || !response.body?.getReader) {
       throw new Error("catalog-bundle-mismatch");
     }
-    const actualHash = await crypto.subtle.digest("SHA-256", body);
+    const bytes = new Uint8Array(record.size);
+    const reader = response.body.getReader();
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array) || received + value.length > bytes.length) {
+        await reader.cancel();
+        throw new Error("catalog-bundle-mismatch");
+      }
+      bytes.set(value, received);
+      received += value.length;
+    }
+    if (received !== bytes.length) throw new Error("catalog-bundle-mismatch");
+    const actualHash = await crypto.subtle.digest("SHA-256", bytes);
     const actualSha256 = [...new Uint8Array(actualHash)]
       .map(byte => byte.toString(16).padStart(2, "0")).join("");
     if (actualSha256 !== record.sha256) throw new Error("catalog-bundle-mismatch");
 
-    const catalog = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
+    const catalog = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     if (!validCatalog(catalog) || manifest.catalog_status !== catalog.status) {
       throw new Error("catalog-publication-state-mismatch");
     }
