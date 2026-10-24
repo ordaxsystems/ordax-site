@@ -104,3 +104,15 @@ O Chrome agora exige um **único `h1` principal da página**, excluindo apenas o
 A prova de navegador também ativa de verdade `prefers-reduced-motion: reduce` via Chrome DevTools, mede o `scroll-behavior` e os tempos de animação/transição computados para os componentes pertinentes em cada rota e retorna ao modo normal após o teste. O CSS básico do Site elimina rolagem suave e transições do link de pulo e botões quando solicitado, preservando as políticas de movimento especializadas da landing, Identity, Download e Conta. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40054611865).
 
 Essa prova não substitui inspeção com leitor de tela nem certificação WCAG integral.
+
+## Pré-flight de integração externa (staging, somente leitura)
+
+O Site não cria nem ativa serviços de Identity, cobrança ou publicação de releases. Quando o owner de deployment fornecer um ambiente **autorizado de staging ou preview**, execute:
+
+```bash
+python3 scripts/staging_preflight.py --staging-origin https://staging.example.org
+```
+
+Substitua o domínio do exemplo pelo host autorizado. O comando executa **somente GET sem credenciais**, sem seguir redirecionamentos, e verifica a configuração de runtime, a sessão anônima via contrato canônico e o catálogo vazio enquanto não há atestação oficial. Domínios de produção, localhost e IPs diretos são rejeitados. Sem host fornecido, não há prova de rede nem alegação de staging concluído.
+
+Os testes `tests/test_staging_preflight.py` são executados no CI **sem rede**; um resultado `SITE_STAGING_PREFLIGHT=PASS` comprova exclusivamente que contratos anônimos foram servidos adequadamente, **não** que login, recuperação de senha, faturamento, publicação de releases ou cutover estejam prontos. Os gates completos continuam em `docs/HANDOFF.md`, `docs/ACCESSIBILITY-GATES.md` e nas PRs dos owners externos.
