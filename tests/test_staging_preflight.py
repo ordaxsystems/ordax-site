@@ -140,6 +140,66 @@ class StagingPreflightTests(unittest.TestCase):
             "/config/public-site.json", "/auth/session", "/releases/catalog.json"
         ])
 
+    def test_static_scope_checks_complete_bundle_without_identity_backend(self):
+        unavailable = {
+            "$schema": "prototype-ordax.public-site-proxy-error/1",
+            "error": "account-gateway-unconfigured",
+        }
+        fetch, calls, pin = make_fetch({"/auth/session": (503, unavailable)})
+        result = evaluate_gateway_contracts(
+            fetch, fetch.asset, expected_site_commit=SITE_COMMIT,
+            expected_manifest_sha256=pin, scope="static",
+        )
+        self.assertEqual(result["result"], "PASS")
+        self.assertEqual(result["scope"], "static-bundle-integrity-only")
+        self.assertEqual(result["identity_mode"], "NOT_TESTED")
+        self.assertEqual(result["verified_bundle_files"], 5)
+        self.assertEqual(result["catalog_status"], "empty")
+        self.assertEqual(result["authenticated_e2e"], "NOT_TESTED")
+        self.assertEqual(result["publisher_attestation"], "NOT_TESTED")
+        self.assertFalse(result["production_approval"])
+        self.assertEqual([path for path, _ in calls], [
+            "/public-site-manifest.json",
+            "asset:assets/site.js", "asset:index.html", "asset:login/index.html",
+            "/config/public-site.json", "/releases/catalog.json",
+        ])
+        # The original anonymous gate must NOT be weakened by static PASS.
+        with self.assertRaisesRegex(StagingPreflightError, "active-account-session-unavailable"):
+            prove(fetch, pin)
+
+    def test_static_scope_still_rejects_manifest_assets_and_catalog(self):
+        fetch, _, pin = make_fetch()
+        with self.assertRaisesRegex(StagingPreflightError, "staging-preflight-scope-invalid"):
+            evaluate_gateway_contracts(
+                fetch, fetch.asset, expected_site_commit=SITE_COMMIT,
+                expected_manifest_sha256=pin, scope="production",
+            )
+        with self.assertRaisesRegex(StagingPreflightError, "site-bundle-manifest-digest-mismatch"):
+            evaluate_gateway_contracts(
+                fetch, fetch.asset, expected_site_commit=SITE_COMMIT,
+                expected_manifest_sha256="0" * 64, scope="static",
+            )
+
+        def altered_script(name, size):
+            digest_value, actual_size = fetch.asset(name, size)
+            return (("f" * 64) if name == "assets/site.js" else digest_value), actual_size
+
+        with self.assertRaisesRegex(StagingPreflightError, "site-bundle-file-mismatch:assets/site.js"):
+            evaluate_gateway_contracts(
+                fetch, altered_script, expected_site_commit=SITE_COMMIT,
+                expected_manifest_sha256=pin, scope="static",
+            )
+
+        invalid_catalog = {**CATALOG, "status": "ready", "releases": []}
+        fetch_bad, _, bad_pin = make_fetch({
+            "/releases/catalog.json": (200, invalid_catalog),
+        })
+        with self.assertRaisesRegex(StagingPreflightError, "catalog"):
+            evaluate_gateway_contracts(
+                fetch_bad, fetch_bad.asset, expected_site_commit=SITE_COMMIT,
+                expected_manifest_sha256=bad_pin, scope="static",
+            )
+
     def test_stale_os_bundle_or_mismatched_manifest_never_passes(self):
         fetch, calls, pin = make_fetch()
         with self.assertRaisesRegex(StagingPreflightError, "site-bundle-manifest-digest-mismatch"):
