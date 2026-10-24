@@ -26,7 +26,7 @@ Este repositório é o **owner do código de apresentação do site público** a
 Branch -> auditoria de diffs e conflitos -> testes de rotas/i18n/segurança -> pacote com provenance SHA-256 -> CI -> PR review -> cutover OS só depois de prova de paridade -> publicação sob autorização separada. Registrar atualizações em `docs/HANDOFF.md`.
 
 ## Status
-O **código e o build independentes já estão integrados à `main`**, com consumo Dev da demonstração Meridian (`ordax-site#2`) e configuração de projeto Dev isolado. O repoint dos builds do OS foi integrado em `ordax-os#2225` e a remoção da apresentação histórica foi integrada em `ordax-os#2229`. Faltam publicação oficial de Surface/Platform, testes completos de acessibilidade e Identity em staging e autorização própria para produção. Os gates Dev não substituem essas provas.
+O **cutover de código e artefatos Dev está integrado à `main`**. A Surface publicou marca e Meridian Dev assinados (Surface #13/#14); o Site consome ambos pelo lock canônico (`ordax-site#10`), sem snapshots históricos; o OS repontou o portal e login Web (`ordax-os#2238`). Acessibilidade completa, Identity em staging, releases comerciais e produção mantêm gates próprios. Veja [handoff](docs/HANDOFF.md).
 
 
 ## Gates de implementação atualmente verificados
@@ -34,7 +34,7 @@ O **código e o build independentes já estão integrados à `main`**, com consu
 - Landing: somente `site/assets/playground-fixture.json`; proibido recolocar fixture inline como segundo estado.
 - `contracts/site-routes.json`: único catálogo de rotas do Site; robots, sitemap e testes o consomem.
 - `--public-origin` deve ser fornecido pelo owner de deployment (OS/Platform); nunca mover DNS ou aceitar origem definida pelo browser.
-- A PR concorrente [ordax-os#2198](https://github.com/ordaxsystems/ordax-os/pull/2198) envolve remoção de fonte visual. O Site ainda requer material oficial versionado e não autoriza o cutover por essa PR.
+- Não reabrir migração de código já integrada ou introduzir compatibilidade com diretórios e contratos removidos: `ordax-os/sites/public`, `artifacts/` do Site e o antigo lock de migração.
 
 
 - A prova Chrome deve manter `main#conteudo` programaticamente focável, skip link acionável por teclado, nomes na árvore AX, `img[alt]` e troca real PT/EN. [Teclado+AX PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042024846), [locale E2E PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042154013).
@@ -42,15 +42,15 @@ O **código e o build independentes já estão integrados à `main`**, com consu
 
 ## Publicação Surface — contrato de consumo
 
-- Fixture e CSS gerados **não** pertencem a `site/assets`; sua única entrada é `--surface-preview-dir`, acompanhada de `--surface-preview-manifest-sha256` pinado. O bundle materializa os arquivos após verificar proveniência e integridade.
+- Fixture/CSS Meridian e recursos de marca **não** pertencem ao source editável `site/assets`. O fluxo padrão é `--dev-lock contracts/dev-artifact-lock.json`; o Site baixa dois archives de releases assinadas do owner e os materializa apenas após validação de digests e proveniência.
 - Sem arquivo `surface-snapshot.json` distribuído duplicando `fixture.surface`. O preview source é imutável e a eventual correção de URL de fonte ocorre **apenas na saída de build** com fingerprint recalculado.
-- O preview Dev usa a prerelease Surface `meridian-dev-1ab73da4…`, com digests e commits Surface/OS fixados no lock. O snapshot de migração antigo foi excluído; não recriar cópia no Site/OS. Não alterar o status para `official` sem verificação real do publisher.
-- Os gates públicos de marca e demais distribuições permanecem em [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). Até essa entrega, a **publicação em produção** continua bloqueada; o cutover de código e build no ambiente Dev é independente desse gate.
+- As duas prereleases Dev (marca e Meridian) têm revisões próprias; o lock permite versões Surface diferentes e a demo registra o commit da projeção OS. Não forçar igualdade de revisão nem reclassificar `candidate-not-published` como distribuição pública.
+- A publicação Dev de marca e demo já foi entregue em Surface #13/#14. Identity, DNS, release pública, billing, segurança e WCAG mantêm autorizações independentes; a migração Dev não os substitui.
 
 ## Lock SSOT de insumos externos e segurança de releases
 
 - `contracts/dev-artifact-lock.json` fixa exclusivamente as duas prereleases Dev assinadas da Surface (marca + Meridian), com digests de archive/manifesto e proveniência Surface/OS. O CI verifica ambas as atestações. Use `--dev-lock`; não reintroduzir snapshots OS, geradores visuais nem arquivos duplicados.
-- Os manifestos de brand, preview e offers são validados **contra o digest pinado no lock antes de ler suas alegações internas**. Revisão OS de origem deve coincidir entre todos. Lock é estritamente **dev-only**; não autoriza produção.
+- Os manifestos de **brand** e **preview** são validados contra o SHA-256 externo de cada release. A revisão Surface de cada pacote deve coincidir com seu próprio pin; somente o preview referencia o OS para o catálogo. **Não existe** entrada `offers` ou dependência de revisão OS comum. O lock é estritamente Dev-only.
 - O builder **rejeita** `--publications` mesmo que o JSON local afirme `public_authorized=true`. Downloads permanecem vazios até integração explícita de evidência oficial do publisher (mais que flags autorreferentes).
 
 ## Prova de integridade visual entregue (2026-10-23)
