@@ -3,7 +3,11 @@
 **Branch Site:** `feat/site-independent-extraction`  
 **Repo:** `ordaxsystems/ordax-site`  
 **Origem observada:** `ordax-os/main@70b0f7eb5d5085be0d4f176f5232def37c7a2a24`  
-**Status:** BUILD INDEPENDENTE CANDIDATO APROVADO / DRAFT; **sem autorização de produção e sem cutover OS**.
+**Status atual (2026-10-24):** SOURCE/BUILD INDEPENDENTES INTEGRADOS À MAIN, CUTOVER DE BUILD DEV NO OS INTEGRADO; limpeza da apresentação histórica em `ordax-os#2229`. **Sem autorização de produção, Identity pública ou promoção Stable.**
+
+## Estado corrente (2026-10-24)
+
+O histórico abaixo descreve etapas anteriores, inclusive referências a PRs draft que já foram integradas. A autoridade atual do Site em Dev é `ordax-site/main`; [Site #1](https://github.com/ordaxsystems/ordax-site/pull/1) integrou a extração, [Site #2](https://github.com/ordaxsystems/ordax-site/pull/2) integrou o consumo Dev da demo e [OS #2225](https://github.com/ordaxsystems/ordax-os/pull/2225) repontou os builds Vercel. A remoção da cópia histórica está concentrada em [OS #2229](https://github.com/ordaxsystems/ordax-os/pull/2229); isso não é autorização para deploy público. O lock de snapshots de migração permanece exclusivamente Dev, e a publicação oficial Surface/Platform, o gateway Identity e a homologação de staging são gates separados.
 
 ## Concluído
 - Repositório `ordax-site` iniciado com `main` sem publicação.
