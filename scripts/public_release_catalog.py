@@ -280,16 +280,28 @@ def validate_catalog(path: Path) -> dict:
         release_ids.add(release_id)
         if release.get("source_commit") != release_id:
             raise PublicReleaseCatalogError(f"{context}.source_commit mismatch")
+        # A distributed catalog must meet the same metadata contract as the
+        # publisher projection. Never render a partially valid release.
+        for name in ("version", "channel", "published_at"):
+            field = release.get(name)
+            if not isinstance(field, str) or not field.strip():
+                raise PublicReleaseCatalogError(f"{context}.{name} is required")
 
         targets = release.get("targets")
         if not isinstance(targets, list) or not targets:
             raise PublicReleaseCatalogError(f"{context}.targets must be non-empty")
+        target_ids: set[str] = set()
         for target_index, target in enumerate(targets):
             target_context = f"{context}.targets[{target_index}]"
             if not isinstance(target, dict) or set(target) != CATALOG_TARGET_KEYS:
                 raise PublicReleaseCatalogError(f"{target_context} fields are invalid")
             if not isinstance(target.get("id"), str) or not target["id"].strip():
                 raise PublicReleaseCatalogError(f"{target_context}.id is invalid")
+            if target["id"] in target_ids:
+                raise PublicReleaseCatalogError(
+                    f"duplicate target id {target['id']!r} in {release_id}"
+                )
+            target_ids.add(target["id"])
             if not isinstance(target.get("label"), str) or not target["label"].strip():
                 raise PublicReleaseCatalogError(f"{target_context}.label is invalid")
             _render_integrity_artifact(
