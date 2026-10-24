@@ -1012,7 +1012,7 @@ def run(root: Path, evidence: Path) -> dict:
                   return {
                     status: panel?.dataset?.status || null,
                     hasAttackerEmail: document.body.textContent.includes('redirect-attacker@example.test'),
-                    hasVerifiedEmail: Boolean(document.querySelector('.verified-email')),
+                    hasVerifiedEmail: [...document.querySelectorAll('.verified-email')].some(node => node.textContent.includes('redirect-attacker@example.test')),
                     errors: window.__ordaxPageErrors || []
                   };
                 })();""")
