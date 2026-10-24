@@ -31,6 +31,8 @@ jobs:
           python3 scripts/build.py build \
             --source-commit "${{ github.sha }}" \
             --brand-dir artifacts/brand/os-migration-70b0f7eb \
+            --surface-preview-dir artifacts/surface-preview/os-migration-70b0f7eb \
+            --surface-preview-manifest-sha256 d7142242a5a4ff38b71cfcc952123b48a34e8bd643052b8143de9b5d36fc0cc3 \
             --offers-dir artifacts/offers/os-migration-70b0f7eb \
             --public-origin https://ordax.com.br \
             --out out/site
