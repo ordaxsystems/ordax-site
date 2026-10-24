@@ -362,6 +362,8 @@ class SiteContractTests(unittest.TestCase):
         source = (ROOT / "scripts/build.py").read_text(encoding="utf-8")
         self.assertNotIn("ordax-public-surface-preview", source)
         self.assertNotIn("audited-migration-snapshot-not-official-surface-publication", source)
+        smoke_source = (ROOT / "scripts/smoke_static.py").read_text(encoding="utf-8")
+        self.assertNotIn("audited-migration-snapshot-not-official-surface-publication", smoke_source)
         with tempfile.TemporaryDirectory() as tmp:
             source_dir = Path(tmp) / "retired-os-preview"
             source_dir.mkdir()
