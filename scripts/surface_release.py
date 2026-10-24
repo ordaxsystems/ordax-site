@@ -86,7 +86,7 @@ def materialize(pin: dict, destination: Path, *, open_url=None) -> Path:
             for member in tar:
                 path = member.name.removeprefix("./")
                 if member.isdir():
-                    if path.rstrip("/") not in ("", "assets"):
+                    if path.rstrip("/") not in ("", ".", "assets"):
                         raise SurfaceReleaseError("unexpected archive directory")
                     continue
                 if not member.isfile() or (path != "manifest.json" and (
