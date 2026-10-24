@@ -110,9 +110,14 @@ Essa prova não substitui inspeção com leitor de tela nem certificação WCAG 
 O Site não cria nem ativa serviços de Identity, cobrança ou publicação de releases. Quando o owner de deployment fornecer um ambiente **autorizado de staging ou preview**, execute:
 
 ```bash
-python3 scripts/staging_preflight.py --staging-origin https://staging.example.org
+python3 scripts/staging_preflight.py \
+  --staging-origin https://staging.example.org \
+  --expected-site-commit <full-build-source-commit> \
+  --expected-manifest-sha256 <trusted-ci-bundle-manifest-sha256>
 ```
 
-Substitua o domínio do exemplo pelo host autorizado. O comando executa **somente GET sem credenciais**, sem seguir redirecionamentos, e verifica a configuração de runtime, a sessão anônima via contrato canônico e o catálogo vazio enquanto não há atestação oficial. Domínios de produção, localhost e IPs diretos são rejeitados. Sem host fornecido, não há prova de rede nem alegação de staging concluído.
+Substitua o domínio do exemplo pelo host de staging autorizado. Extraia o commit de `source_commit` e calcule o SHA-256 **do arquivo `public-site-manifest.json` do artefato CI confiável**, por exemplo com `sha256sum out/site/public-site-manifest.json`. Nunca obtenha esses valores apenas do próprio endpoint a ser testado, pois ele poderia falsificar a identidade. A prova lê primeiro esse manifesto publicado e exige coincidência dos bytes e do commit; confere ainda os digests/tamanhos da configuração e do catálogo com o inventário do mesmo bundle. O comando executa **somente GET sem credenciais**, sem seguir redirecionamentos. O catálogo deve continuar vazio enquanto não houver atestação oficial. Domínios de produção, localhost e IPs diretos são rejeitados. Sem host, digest e commit confiáveis, não há prova de staging concluída.
+
+**Situação inspecionada em 2026-10-24:** a conta Vercel OrdaX tinha `ordax-os-public` e `ordax-web`, mas nenhum projeto `ordax-site`; os previews existentes eram do legado `ordax-os` e protegidos por SSO, não evidência de deploy desta PR. Os últimos deployments de produção que o Vercel retornou para esses dois projetos estavam em `ERROR`. Não configurar ou reutilizar esses endereços como staging do Site sem preparar e autorizar um preview próprio. Nenhum deployment foi criado nesta etapa.
 
 Os testes `tests/test_staging_preflight.py` são executados no CI **sem rede**; um resultado `SITE_STAGING_PREFLIGHT=PASS` comprova exclusivamente que contratos anônimos foram servidos adequadamente, **não** que login, recuperação de senha, faturamento, publicação de releases ou cutover estejam prontos. Os gates completos continuam em `docs/HANDOFF.md`, `docs/ACCESSIBILITY-GATES.md` e nas PRs dos owners externos.
