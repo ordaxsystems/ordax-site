@@ -16,7 +16,6 @@ from smoke_static import check_css_dependencies
 
 MIGRATION_LOCK = build.load_migration_lock(ROOT / "contracts/migration-artifact-lock.json")
 BRAND_PIN = MIGRATION_LOCK["brand"]["manifest_sha256"]
-OFFERS_PIN = MIGRATION_LOCK["offers"]["manifest_sha256"]
 PREVIEW_PIN = MIGRATION_LOCK["surface_preview"]["manifest_sha256"]
 
 class SiteContractTests(unittest.TestCase):
@@ -56,11 +55,9 @@ class SiteContractTests(unittest.TestCase):
         self.assertNotIn("system/surface/", (ROOT / "scripts/build.py").read_text().split("def stage_brand(")[1].split("def build(")[0])
 
     def test_migration_lock_is_single_source_and_rejects_override(self):
-        self.assertEqual(set(MIGRATION_LOCK), {"brand", "surface_preview", "offers"})
+        self.assertEqual(set(MIGRATION_LOCK), {"brand", "surface_preview"})
         self.assertEqual(MIGRATION_LOCK["brand"]["directory"],
                          ROOT / "artifacts/brand/os-migration-70b0f7eb")
-        self.assertEqual(MIGRATION_LOCK["offers"]["directory"],
-                         ROOT / "artifacts/offers/os-migration-70b0f7eb")
         with tempfile.TemporaryDirectory() as tmp:
             forged_path = Path(tmp) / "migration.json"
             original = json.loads((ROOT / "contracts/migration-artifact-lock.json").read_text("utf-8"))
@@ -76,9 +73,7 @@ class SiteContractTests(unittest.TestCase):
 
     def test_all_migration_inputs_need_independent_hash_pins(self):
         brand = ROOT / "artifacts/brand/os-migration-70b0f7eb"
-        offers = ROOT / "artifacts/offers/os-migration-70b0f7eb"
         self.assertEqual(build.digest((brand / "manifest.json").read_bytes()), BRAND_PIN)
-        self.assertEqual(build.digest((offers / "manifest.json").read_bytes()), OFFERS_PIN)
         with tempfile.TemporaryDirectory() as tmp:
             stage = Path(tmp) / "stage"
             stage.mkdir()
@@ -88,16 +83,6 @@ class SiteContractTests(unittest.TestCase):
                 build.stage_brand(stage, brand, None)
             with self.assertRaisesRegex(build.SiteError, "pin"):
                 build.stage_brand(stage, brand, "0" * 64)
-
-            html, offer_receipt = build.load_reference_offers(offers, OFFERS_PIN)
-            self.assertIn("Planos em preparação", html)
-            self.assertEqual(offer_receipt["manifest_sha256"], OFFERS_PIN)
-            with self.assertRaisesRegex(build.SiteError, "pin"):
-                build.load_reference_offers(offers, None)
-            with self.assertRaisesRegex(build.SiteError, "pin"):
-                build.load_reference_offers(offers, "0" * 64)
-            with self.assertRaises(build.SiteError):
-                build.load_reference_offers(None, OFFERS_PIN)
 
             # Tamper with payload and rewrite *self-declared* hash in manifest:
             # the independent pin still rejects the malicious new manifest.
@@ -109,13 +94,12 @@ class SiteContractTests(unittest.TestCase):
             with self.assertRaisesRegex(build.SiteError, "pin"):
                 build.stage_brand(stage, modified, BRAND_PIN)
 
-            modified_offers = Path(tmp) / "offers-forged"
-            shutil.copytree(offers, modified_offers)
-            forged_offer = json.loads((modified_offers / "manifest.json").read_text("utf-8"))
-            forged_offer["paid_purchases_enabled"] = True
-            (modified_offers / "manifest.json").write_text(json.dumps(forged_offer), encoding="utf-8")
-            with self.assertRaisesRegex(build.SiteError, "pin"):
-                build.load_reference_offers(modified_offers, OFFERS_PIN)
+    def test_site_inactive_plans_do_not_duplicate_os_entitlements(self):
+        self.assertFalse((ROOT / "artifacts/offers/os-migration-70b0f7eb").exists())
+        self.assertNotIn("offers", MIGRATION_LOCK)
+        self.assertIn("Planos em preparação", build.INACTIVE_PLANS_HTML)
+        self.assertIn("contratação indisponível", build.INACTIVE_PLANS_HTML)
+        self.assertNotIn("commercial-plan", build.INACTIVE_PLANS_HTML)
 
     def test_unattested_releases_cannot_enter_public_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
