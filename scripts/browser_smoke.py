@@ -1016,7 +1016,7 @@ def run(root: Path, evidence: Path) -> dict:
                     errors: window.__ordaxPageErrors || []
                   };
                 })();""")
-                if report["status"] === "unavailable":
+                if report["status"] == "unavailable":
                     break
                 time.sleep(0.1)
             report["scenario"] = "redirected-authenticated-session"
