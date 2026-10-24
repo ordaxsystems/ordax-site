@@ -195,6 +195,17 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         return !['/auth/', '/account/', '/api/', '/sync/'].some(prefix =>
           path.startsWith(prefix));
       }).map(x => ({url: x.name.slice(0, 180), status: x.responseStatus})).slice(0, 8);
+      const overflowElements = [...document.querySelectorAll('body *')].filter(el => {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return rect.width > 0 && rect.right > innerWidth + 2 &&
+          rect.left < innerWidth && style.display !== 'none' &&
+          style.visibility !== 'hidden' && style.position !== 'fixed';
+      }).slice(0, 18).map(el => {
+        const r = el.getBoundingClientRect();
+        return {tag:el.tagName.toLowerCase(), className:String(el.className?.baseVal || el.className || '').slice(0, 100),
+          width:Math.round(r.width), left:Math.round(r.left), right:Math.round(r.right)};
+      });
       const session = $('[data-identity-state],#account-session,[data-web-state]');
       return {
         pathname: route,
@@ -208,6 +219,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         skip: !!$('.skip-link[href^="#"]'),
         noOverflow: document.documentElement.scrollWidth <= innerWidth + 2,
         scrollWidth: document.documentElement.scrollWidth,
+        overflowElements,
         duplicateIds: ids.length !== new Set(ids).size,
         nameless,
         unlabeledImages,
@@ -528,7 +540,10 @@ def run(root: Path, evidence: Path) -> dict:
         (evidence / "report.json").write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if failures:
             raise BrowserProofError(f"{len(failures)} browser checks failed; see report.json; "
-                                    + "; ".join(f"{r['route']}@{r['viewport']}:{r['rule']}" for r in failures[:15]))
+                                    + "; ".join(f"{r['route']}@{r['viewport']}:{r['rule']}"
+                                      + (":" + json.dumps(r["summary"].get("overflowElements", [])[:6], ensure_ascii=False)
+                                         if r["rule"] == "reflowsWithoutPageHorizontalScroll" else "")
+                                      for r in failures[:15]))
         return output
     finally:
         driver.close()
