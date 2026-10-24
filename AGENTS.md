@@ -135,3 +135,8 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 
 - O consumidor `site/assets/site.js::loadJson` protege sessão, política legal, configuração e manifesto recusando `fetch` redirecionado e URL-resposta diferente da rota requisitada. Preservar `redirect: "error"` e a igualdade de `response.url` (mais schema), sem exceções para proxies ou links externos do Identity.
 - A prova Chrome local injeta um **302** de `/auth/session` para uma resposta sintética autenticada 200, verifica que a Conta continua indisponível e não renderiza dados fictícios. Não usar essa fixture para ativar formulários, Conta, auth real ou preview Vercel.
+
+## Identity: nenhuma resposta assíncrona obsoleta pode ativar controles (2026-10-24)
+
+- `site/assets/site.js` já possui `startRevision` e `sessionRevision`, os contadores **únicos** da verificação de formulário e sessão. Qualquer resposta tardia de sessão/política legal/Turnstile deve ser descartada antes de manipular formulários. `start()` desativa o formulário sincronamente ao revalidar; callbacks de Turnstile só liberam submissão quando pertencem à revisão atual.
+- Preservar no mesmo `scripts/browser_smoke.py` a regressão `identityRace=1`: GET inicial de sessão 200 atrasado e refresh posterior com 503 não podem ressuscitar o form de login. Não criar testes de autenticação falsos em staging/produto nem um provider local; o teste usa exclusivamente um servidor loopback sem credenciais.
