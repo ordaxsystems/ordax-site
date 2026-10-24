@@ -88,6 +88,20 @@ class StagingPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(StagingPreflightError, "active-account-session-unavailable"):
             evaluate_gateway_contracts(fetch)
 
+    def test_unconfigured_gated_identity_cannot_claim_integration_ready(self):
+        config = {**CONFIG, "legal": {
+            "account_activation_ready": False, "auth_only_source_enabled": False
+        }}
+        gated = {
+            **SESSION, "provider": "gated", "status": "unavailable"
+        }
+        fetch, _ = make_fetch({
+            "/config/public-site.json": (200, config),
+            "/auth/session": (200, gated),
+        })
+        with self.assertRaisesRegex(StagingPreflightError, "identity-gateway-still-gated"):
+            evaluate_gateway_contracts(fetch)
+
     def test_wrong_session_provider_or_authenticated_session_fails(self):
         for session in (
             {**SESSION, "provider": "gated"},
