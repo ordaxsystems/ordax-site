@@ -129,6 +129,8 @@ def evaluate_gateway_contracts(fetch_json) -> dict:
         raise StagingPreflightError("identity-contract:" + str(error)) from error
     if identity_mode == "disabled-unconfigured":
         raise StagingPreflightError("identity-gateway-not-configured")
+    if identity_mode == "gated":
+        raise StagingPreflightError("identity-gateway-still-gated")
     catalog_status, catalog = fetch_json("/releases/catalog.json", MAX_CATALOG)
     if catalog_status != 200:
         raise StagingPreflightError("catalog-http-status-invalid")
