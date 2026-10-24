@@ -7,7 +7,9 @@
   --account-surface: var(--md-surface, var(--ordax-panel));
   --account-subtle: var(--md-subtle, var(--ordax-subtle-bg));
   --account-ink: var(--md-ink, var(--ordax-text));
-  --account-muted: var(--md-muted, var(--ordax-muted));
+  /* Site-owned readable secondary text over the Identity card's soft color
+     surfaces. The upstream Meridian palette remains immutable. */
+  --account-muted: color-mix(in srgb, var(--md-muted, var(--ordax-muted)) 65%, var(--md-ink, var(--ordax-text)));
   --account-line: var(--md-border, var(--ordax-border-soft));
   --account-accent: var(--md-accent, var(--ordax-accent));
   --account-accent-hover: var(--md-accent-hover, var(--ordax-accent-strong));
@@ -37,6 +39,9 @@
 }
 .account-ui *, .account-ui *::before, .account-ui *::after { box-sizing: border-box; }
 .account-ui a { color: inherit; text-decoration: none; }
+/* The account-wide link inheritance must not override the skip link's
+   light-on-dark treatment. Its first-focus affordance needs real contrast. */
+.account-ui .skip-link { color: var(--account-surface); background: var(--account-ink); }
 .account-ui a:hover { color: var(--account-accent); }
 .account-ui :focus-visible { outline: 2px solid var(--account-focus); outline-offset: 4px; }
 .account-ui svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
