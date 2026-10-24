@@ -61,3 +61,11 @@ A auditoria de `site/assets/surface-snapshot.json` (154.860 bytes), `playground-
 O builder valida manifesto externo, Git blob, SHA-256, tamanhos, esquema e compatibilidade de CSS/fixture antes de produzir o site. Verificação negativa rejeita manifesto alterado, fixture adulterada ou status de publicação falsamente oficial. A referência herdada à fonte `/assets/inter-latin-wght-normal-Dx4kXJAl.woff2` foi identificada como dependência órfã; no **bundle final**, a referência aponta à fonte Inter do artifact `brand` verificado, e o query hash do CSS passa a refletir o conteúdo servido. O CSS bruto de migração permanece intacto.
 
 **Gate ainda bloqueado:** `ordax-surface/main` não possui release pública do brand/demo. Pedido de publicação oficial, proveniência e redução de snapshots espelhados em [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). O pacote de migração não é prova de publicação pelo owner.
+
+## Trust gap fechado: pins de todos os insumos e download fail-closed (2026-10-23/24)
+
+Auditoria identificou inconsistência: o Surface preview exigia hash externo do manifesto, enquanto `stage_brand` e `load_reference_offers` confiavam em seus próprios hashes internos sem um pin independente. Isso permitiria substituir o manifesto inteiro e recalcular hashes internos sem bloquear o consumo. O builder agora exige pins SHA-256 **externos ao respectivo manifesto** para os três tipos de artefato, testa adulteração de conteúdo, mudança de status/compra e entradas inválidas, e compara a revisão OS entre eles. Os pins estão em **um** arquivo: `contracts/migration-artifact-lock.json` (`development-only-not-authorized-for-production`), sem espelhos no workflow.
+
+Outra lacuna: o parâmetro `--publications` aceitava flags como `public_authorized=true` em um JSON escolhido localmente, insuficientes para estabelecer autorização do publicador. Entrada **desabilitada em build** até contrato oficial com origem autenticada, release imutável e integridade verificável. O gerador puro permanece para testes offline de formato, mas nenhuma entrada arbitrária pode ativar downloads no artefato distribuído.
+
+Esses controles asseguram consistência contra alteração acidental ou adulteração sem atualizar o lock; **não** constituem atestação criptográfica de publisher nem validação de um ambiente externo de produção.

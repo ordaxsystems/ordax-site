@@ -27,7 +27,7 @@
 
 ## Recomendações operacionais
 - Começar por `python3 scripts/build.py check` e `node tests/test_localization.mjs`.
-- `python3 scripts/build.py build --source-commit <sha40> --brand-dir artifacts/brand/os-migration-70b0f7eb --surface-preview-dir artifacts/surface-preview/os-migration-70b0f7eb --surface-preview-manifest-sha256 d7142242a5a4ff38b71cfcc952123b48a34e8bd643052b8143de9b5d36fc0cc3 --offers-dir artifacts/offers/os-migration-70b0f7eb --public-origin https://ordax.com.br` **gera pacote candidato**, recusando imagens ausentes e artifacts com hashes inválidos.
+- `python3 scripts/build.py build --source-commit <sha40> --migration-lock contracts/migration-artifact-lock.json --public-origin https://ordax.com.br` **gera pacote candidato**, recusando imagens ausentes e artifacts com hashes inválidos.
 - Jamais transformar candidato CI em autorização de produção: ainda exige os artefatos oficiais de marca/planos/demonstração e E2E de staging.
 - Revalidar `ordax-os/main` e PRs concorrentes antes de qualquer alteração compartilhada.
 - Atualizar este arquivo após cada PR/CI/gate concluído; SSOT do projeto são seus códigos/contratos externos, não este handoff.
@@ -56,3 +56,10 @@
 - A fonte Inter herdada no CSS Surface possuía caminho de bundler não presente. No output, a referência passou a usar **a mesma fonte do brand** já validado, com cache fingerprint recalculado. O artefato de migração não é modificado.
 - Issue ao owner Surface para publicação real de marca/demo: [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). **Ainda não há release oficial detectada**; Site continua proibindo status de publicação autoafirmado, sem autorização para produção.
 - Envolve apenas `ordax-site#1` em draft; OS atual continua owner até cutover validado. Se outra equipe gerar sua release, primeiro verificar origem e adaptar explicitamente o gate, nunca modificar os hashes no silêncio nem restaurar source espelhado.
+
+## Trust pin único e bloqueio de release não atestada (2026-10-23/24)
+
+- O CI/builder lê `contracts/migration-artifact-lock.json` como **SSOT de hashes e caminhos** dos três insumos externos temporários. O lock é dev-only e não admite overlays de parâmetros individuais; valida os três manifestos contra pins **antes** de confiar no conteúdo, e exige origem/revisão OS coerentes.
+- `stage_brand`, `stage_surface_preview` e `load_reference_offers` rejeitam digests ausentes, adulterados e status não permitidos; regressões no `tests/test_site_contract.py` verificam falsificação de manifesto e entradas inválidas.
+- Sem publicação oficial e atestada pelo owner de releases, `--publications` **não pode ativar downloads**; catálogo gerado é somente `empty`. `public_authorized=true` declarado por JSON local isolado não é autorização confiável.
+- CI desta etapa confirma build independente, smoke estático, prova de 33 cenários em Chrome e nenhum deployment. Atestação de owner para brand/preview/ofertas ainda pendente; não promover PR à main antes dos gates documentados.

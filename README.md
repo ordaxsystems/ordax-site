@@ -32,10 +32,7 @@ O bundle já inclui **todos os arquivos originais do portal**, com os seis biná
 ```sh
 python3 scripts/build.py build \
   --source-commit <SHA40_DO_SITE> \
-  --brand-dir artifacts/brand/os-migration-70b0f7eb \
-  --surface-preview-dir artifacts/surface-preview/os-migration-70b0f7eb \
-  --surface-preview-manifest-sha256 d7142242a5a4ff38b71cfcc952123b48a34e8bd643052b8143de9b5d36fc0cc3 \
-  --offers-dir artifacts/offers/os-migration-70b0f7eb \
+  --migration-lock contracts/migration-artifact-lock.json \
   --public-origin https://ordax.com.br \
   --out out/site
 python3 scripts/build.py verify --out out/site
@@ -45,7 +42,7 @@ python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence
 
 O diretório `brand-dir` deve conter `manifest.json` com `artifact_class=ordax-brand`, `source_commit` e registros `path,size,sha256` para os recursos públicos oficiais. O site jamais recompila a Surface. O `offers-dir` contém **apenas HTML derivado para apresentação**, com manifesto SHA-256, fonte pinada, contratação e alocação de cotas desativadas. Nenhum contrato de entitlements foi copiado; ambos snapshots de migração exigem futura substituição por publicação oficial.
 
-O catálogo de downloads é **vazio** se o publicador não fornecer uma projeção explicitamente autorizada. Um `--publications` aprovado pelo owner real pode ser lido pelo builder, validado e filtrado; a escolha de tornar esse catálogo público pertence ao pipeline autorizado, não ao site. Formulários e Conta dependem de gateway `same-origin` com gates servidor; recuperação/billing não são habilitados por UI.
+O catálogo público de downloads **permanece vazio**. O builder **rejeita** qualquer `--publications` local: campos declaratórios como `public_authorized=true` não são prova criptográfica da publicação pelo owner. Esse gate somente pode ser aberto depois de integração com um pacote oficial atestado, revisionado e pinado. Formulários e Conta dependem de gateway `same-origin`; recuperação/billing não são habilitados por UI.
 
 ## Próximos passos e estado preciso
 
@@ -74,3 +71,9 @@ O source editável do Site **não contém** `surface-snapshot.css`, `playground-
 O CSS original do artefato de migração referia-se a uma fonte com hash do antigo bundler não distribuída. A etapa de build troca **somente no output** esse URL pelo recurso Inter existente no brand verificado e usa fingerprint dos bytes realmente publicados no CSS. Não regrava artefato de origem nem duplica a fonte no bundle.
 
 O pacote da Surface **não está publicado oficialmente**: o status explicitamente aceito pelo builder é `audited-migration-snapshot-not-official-surface-publication`, com origem `ordax-os@70b0f7eb`. A evolução para release assinada/atestada do owner exige aprovação e novo gate de proveniência; não basta o manifesto autoafirmar `official`. Solicitado em [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). Este modelo não transfere ownership de DNS, Web, OS, Account, entitlements, downloads ou deploy.
+
+## Manifestos pinados e lock único de desenvolvimento
+
+`contracts/migration-artifact-lock.json` é a **única fonte de hashes de confiança** dos três insumos temporários de migração (`brand`, `surface_preview`, `offers`). O CI usa `--migration-lock`; o builder recusa overrides de `--brand-dir`, `--surface-preview-dir` ou `--offers-dir` quando recebe esse lock, verifica sha256 do manifesto **antes** de aceitar qualquer declaração interna de identidade, formato, integridade ou status e confirma uma mesma revisão do `ordax-os`. Os manifestos de marca e ofertas agora obedecem à mesma regra da demo.
+
+O lock tem status `development-only-not-authorized-for-production`: **não é assinatura, attestation externa nem autorização para usar artefatos de migração em produção**. As releases oficiais dos owners terão contrato e política de confiança independentes. O Site permanece candidato não publicado.
