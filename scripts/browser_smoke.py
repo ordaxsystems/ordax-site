@@ -516,6 +516,72 @@ def text_enlargement_probe(driver: Driver) -> dict:
     })();""")
 
 
+def text_spacing_probe(driver: Driver) -> dict:
+    """Apply WCAG 1.4.12 spacing overrides to Site text, then inspect layout.
+
+    Browser DOM stress test, not visual proof or validation of Surface internals.
+    """
+    return driver.run(r"""return (() => {
+      const ignored = '.playground, .sr-only, [hidden], [aria-hidden="true"], script, style';
+      const nodes = [...document.querySelectorAll('body *')].filter(el => {
+        if (el.closest(ignored) || el.matches('svg, svg *, img, canvas')) return false;
+        const css = getComputedStyle(el);
+        if (css.display === 'none' || css.visibility !== 'visible') return false;
+        return [...el.childNodes].some(node =>
+          node.nodeType === Node.TEXT_NODE && node.textContent.trim()) ||
+          el.matches('input:not([type="hidden"]), textarea, select');
+      });
+      const paragraphs = [...document.querySelectorAll('p')].filter(el =>
+        !el.closest(ignored) && getComputedStyle(el).display !== 'none' &&
+        el.getBoundingClientRect().height > 0);
+      for (const el of nodes) {
+        el.style.setProperty('line-height', '1.5', 'important');
+        el.style.setProperty('letter-spacing', '0.12em', 'important');
+        el.style.setProperty('word-spacing', '0.16em', 'important');
+      }
+      for (const el of paragraphs)
+        el.style.setProperty('margin-block-end', '2em', 'important');
+      const wrongMetrics = nodes.filter(el => {
+        const c = getComputedStyle(el), sz = parseFloat(c.fontSize);
+        return !sz || parseFloat(c.lineHeight) + 0.25 < 1.5 * sz ||
+          parseFloat(c.letterSpacing) + 0.25 < 0.12 * sz ||
+          parseFloat(c.wordSpacing) + 0.25 < 0.16 * sz;
+      }).slice(0, 12).map(el => ({
+        tag: el.tagName.toLowerCase(), cls: String(el.className || '').slice(0, 65),
+        text: String(el.textContent || el.value || '').trim().slice(0, 70),
+      }));
+      const wrongParagraphMargins = paragraphs.filter(el => {
+        const c = getComputedStyle(el);
+        return parseFloat(c.marginBottom) + 0.25 < 2 * parseFloat(c.fontSize);
+      }).slice(0, 12).map(el => ({
+        text: String(el.textContent || '').trim().slice(0, 65),
+        margin: getComputedStyle(el).marginBottom,
+        fontSize: getComputedStyle(el).fontSize
+      }));
+      const clippedText = nodes.filter(el => {
+        const c = getComputedStyle(el), rect = el.getBoundingClientRect();
+        if (!rect.width || !rect.height) return false;
+        return (/^(hidden|clip)$/.test(c.overflowY) && el.scrollHeight > el.clientHeight + 2) ||
+          (/^(hidden|clip)$/.test(c.overflowX) && el.scrollWidth > el.clientWidth + 2);
+      }).slice(0, 12).map(el => ({
+        tag: el.tagName.toLowerCase(), cls: String(el.className || '').slice(0, 65),
+        text: String(el.textContent || el.value || '').trim().slice(0, 70),
+        width: el.clientWidth, scrollWidth: el.scrollWidth,
+        height: el.clientHeight, scrollHeight: el.scrollHeight
+      }));
+      return {
+        locale: document.documentElement.lang,
+        method: 'dom-wcag-text-spacing-overrides-not-native-text-zoom',
+        spacedTextNodes: nodes.length,
+        spacedParagraphs: paragraphs.length,
+        wrongMetrics, wrongParagraphMargins, clippedText,
+        width: innerWidth, documentScrollWidth: document.documentElement.scrollWidth,
+        noPageHorizontalOverflow: document.documentElement.scrollWidth <= innerWidth + 2,
+        noUnexpectedRuntimeErrors: !(window.__ordaxPageErrors || []).length
+      };
+    })();""")
+
+
 def no_script_probe(driver: Driver) -> dict:
     """Inspect the offline presentation after loading with script execution blocked."""
     return driver.run(r"""return (() => {
@@ -589,6 +655,7 @@ def run(root: Path, evidence: Path) -> dict:
     results = []
     reflow_results = []
     text_enlargement_results = []
+    text_spacing_results = []
     no_script_results = []
     failures = []
     try:
@@ -762,6 +829,44 @@ def run(root: Path, evidence: Path) -> dict:
                 if not passed:
                     failures.append({"route": route, "viewport": "text-200pct",
                                      "rule": rule, "summary": report})
+        # WCAG 1.4.12 spacing stress at 390px in both supported locales.
+        # Overrides exist only in the test DOM; keep external Surface immutable.
+        for route in ROUTES:
+            for locale in ("pt-BR", "en-US"):
+                driver.cdp("Emulation.setDeviceMetricsOverride", {
+                    "width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True
+                })
+                driver.navigate(f"http://127.0.0.1:{server.server_port}{route}")
+                wait_for_route(driver, route)
+                selected_locale = driver.run(
+                    """const selector = document.querySelector('[data-public-locale-select]');
+                    if (!selector) return false;
+                    selector.value = '""" + locale + """';
+                    selector.dispatchEvent(new Event('change', {bubbles: true}));
+                    return selector.value === document.documentElement.lang
+                      && selector.value === '""" + locale + """';"""
+                )
+                report = text_spacing_probe(driver)
+                report.update({"route": route, "expectedLocale": locale, "localeChanged": selected_locale})
+                short = route.strip("/").replace("/", "-") or "home"
+                shot = f"spacing-{locale}-{short}.png"
+                driver.shot(evidence / shot)
+                report["screenshot"] = shot
+                text_spacing_results.append(report)
+                checks = {
+                    "localeApplied": selected_locale and report["locale"] == locale,
+                    "textActuallySpaced": report["spacedTextNodes"] > 0,
+                    "metricsMeet1_4_12": not report["wrongMetrics"] and not report["wrongParagraphMargins"],
+                    "noTextClipping": not report["clippedText"],
+                    "noPageHorizontalOverflow": report["noPageHorizontalOverflow"],
+                    "noUncaughtScripts": report["noUnexpectedRuntimeErrors"],
+                }
+                for rule, passed in checks.items():
+                    if not passed:
+                        failures.append({"route": route, "viewport": f"spacing-{locale}",
+                                         "rule": rule, "summary": report})
+        # Restore the default language to keep the no-JavaScript checks independent.
+        driver.run("""localStorage.setItem('ordax.public.locale', 'pt-BR'); return true;""")
         # Verify that disabling JavaScript at document parse time cannot
         # expose identity forms, verified identity or the Web launch. Re-enable
         # only after loading to inspect the inert DOM; deferred scripts must
@@ -797,9 +902,11 @@ def run(root: Path, evidence: Path) -> dict:
         output = {"schema": "ordax.site-browser-proof/2", "routeCount": len(ROUTES),
                   "viewportCount": len(VIEWPORTS), "checks": len(results),
                   "reflowChecks": len(reflow_results), "textEnlargementChecks": len(text_enlargement_results),
+                  "textSpacingChecks": len(text_spacing_results),
                   "noScriptChecks": len(no_script_results),
                   "failures": failures, "results": results,
                   "reflowResults": reflow_results, "textEnlargementResults": text_enlargement_results,
+                  "textSpacingResults": text_spacing_results,
                   "noScriptResults": no_script_results}
         (evidence / "report.json").write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if failures:
@@ -819,6 +926,13 @@ def run(root: Path, evidence: Path) -> dict:
                                            "documentScrollWidth":r["summary"].get("documentScrollWidth", 0)
                                          }, ensure_ascii=False)
                                          if r["viewport"] == "text-200pct" else "")
+                                      + (":" + json.dumps({
+                                           "wrongMetrics":r["summary"].get("wrongMetrics", []),
+                                           "wrongParagraphMargins":r["summary"].get("wrongParagraphMargins", []),
+                                           "clippedText":r["summary"].get("clippedText", []),
+                                           "documentScrollWidth":r["summary"].get("documentScrollWidth", 0)
+                                         }, ensure_ascii=False)
+                                         if str(r["viewport"]).startswith("spacing-") else "")
                                       for r in failures[:15]))
         return output
     finally:
@@ -838,7 +952,7 @@ def main():
     parser.add_argument("--evidence", default="out/browser-evidence")
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} noscript={output['noScriptChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']}")
 
 
 if __name__ == "__main__":
