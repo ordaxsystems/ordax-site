@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  attestations: read
 
 concurrency:
   group: site-candidate-${{ github.ref }}
@@ -35,6 +36,31 @@ jobs:
         run: node tests/test_legal_documents.mjs
       - name: Fail-closed architecture and catalog tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Verify pinned and attested Surface Dev release before Site build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t lock < <(python3 - <<'PY'
+          import json
+          item=json.load(open('contracts/migration-artifact-lock.json'))['artifacts']['surface_preview']['release']
+          for key in ('release_tag','source_commit','archive_sha256'):
+              print(item[key])
+          PY
+          )
+          mkdir -p "$RUNNER_TEMP/surface-dev-attestation"
+          gh release download "${lock[0]}" --repo ordaxsystems/ordax-surface \
+            --pattern "meridian-dev-${lock[1]}.tar.gz" \
+            --dir "$RUNNER_TEMP/surface-dev-attestation"
+          archive="$RUNNER_TEMP/surface-dev-attestation/meridian-dev-${lock[1]}.tar.gz"
+          echo "${lock[2]}  $archive" | sha256sum --check --status
+          gh attestation verify "$archive" \
+            --repo ordaxsystems/ordax-surface \
+            --signer-workflow ordaxsystems/ordax-surface/.github/workflows/validate-source-integration.yml \
+            --source-ref refs/heads/main --source-digest "${lock[1]}" \
+            --deny-self-hosted-runners
+          echo "SURFACE_SITE_DEV_RELEASE_SIGNATURE=VERIFIED"
       - name: Build standalone static candidate
         run: |
           python3 scripts/build.py build \
@@ -50,58 +76,6 @@ jobs:
         run: python3 scripts/smoke_static.py --out out/site
       - name: Browser proof on Chrome (local-only, offline APIs)
         run: python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence
-      - name: Build Dev Site with authenticated Surface/OS fixture
-        if: github.event_name == 'pull_request'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          surface_repo="ordaxsystems/ordax-surface"
-          surface_sha="a93600e4d8b976ad0a7600e3210465b522fddca7"
-          run_id="40086416679"
-          gh api "repos/$surface_repo/actions/runs/$run_id" \
-            | jq -e --arg repo "$surface_repo" --arg sha "$surface_sha" \
-              '(.repository.full_name==$repo) and (.event=="push") and
-               (.head_branch=="main") and (.head_sha==$sha) and
-               (.status=="completed") and (.conclusion=="success") and
-               (.path==".github/workflows/validate-source-integration.yml")'
-          mkdir -p "$RUNNER_TEMP/verified-surface-dev"
-          gh run download "$run_id" --repo "$surface_repo" \
-            --name "meridian-site-fixture-$surface_sha" \
-            --dir "$RUNNER_TEMP/verified-surface-dev"
-          manifest="$RUNNER_TEMP/verified-surface-dev/manifest.json"
-          test "$(jq -r '.source_commit' "$manifest")" = "$surface_sha"
-          test "$(jq -r '.status' "$manifest")" = candidate-not-published
-          preview_pin="$(sha256sum "$manifest" | cut -d' ' -f1)"
-          mapfile -t records < <(python3 - <<'PY'
-          import sys
-          from pathlib import Path
-          sys.path.insert(0, str(Path("scripts").resolve()))
-          import build
-          locked=build.load_migration_lock(Path("contracts/migration-artifact-lock.json"))
-          for key in ("brand", "offers"):
-              print(locked[key]["directory"])
-              print(locked[key]["manifest_sha256"])
-          PY
-          )
-          python3 scripts/build.py build \
-            --source-commit "$(git rev-parse HEAD)" \
-            --brand-dir "${records[0]}" \
-            --brand-manifest-sha256 "${records[1]}" \
-            --offers-dir "${records[2]}" \
-            --offers-manifest-sha256 "${records[3]}" \
-            --surface-preview-dir "$RUNNER_TEMP/verified-surface-dev" \
-            --surface-preview-manifest-sha256 "$preview_pin" \
-            --public-origin https://ordax.com.br \
-            --out out/site-surface-dev
-          python3 scripts/build.py verify --out out/site-surface-dev
-          python3 scripts/smoke_static.py --out out/site-surface-dev
-          python3 scripts/browser_smoke.py \
-            --out out/site-surface-dev \
-            --evidence out/browser-evidence-surface-dev
-          echo "SITE_DEV_SURFACE_MERIDIAN=PASS"
-
       - name: Upload browser evidence including any failures
         if: always()
         uses: actions/upload-artifact@v4
