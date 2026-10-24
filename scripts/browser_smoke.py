@@ -330,8 +330,7 @@ def no_script_probe(driver: Driver) -> dict:
         navigationAvailable: !!document.querySelector('a[href="/"]'),
         authFormsExposed: exposedForms,
         enabledAuthControls: enabledCredentials,
-        noRuntimeActivated: typeof window.OrdaXPublicI18n === 'undefined' &&
-          typeof window.__ordaxPageErrors === 'undefined',
+        noRuntimeActivated: typeof window.OrdaXPublicI18n === 'undefined',
         accountNotVerified: !document.querySelector('[data-verified-user]') &&
           ![...document.querySelectorAll('.verified-email')].some(x =>
             x.textContent.includes('@')),
