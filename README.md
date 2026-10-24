@@ -164,3 +164,9 @@ O shell em `/login/` descarta sincronicamente qualquer fragmento de URL legado a
 ## Documentos legais: prova positiva de integridade
 
 O gate de cadastro verifica as páginas imutáveis de Privacidade e Termos com URL canônica, MIME HTML, limite de 2 MiB e SHA-256 do contrato legal. O CI agora executa `node tests/test_legal_documents.mjs` sobre a função **real** do Site em VM isolado: aceita documentos íntegros com `Content-Length` numérico ou ausente e rejeita adulteração, redirecionamento, tamanho excessivo e política não habilitada. O teste não publica documentos sintéticos nem ativa cadastro. Consulte ADR-031.
+
+## Hospedagem independente de desenvolvimento
+
+`vercel.json` pertence ao **ordax-site** e produz seu próprio build com `scripts/build.py` e o lock imutável de migração. Esta configuração destina-se **somente ao projeto Vercel separado `ordax-site-dev`**, sem domínio `ordax.com.br` e sem Identity/gateway: `/auth/*`, `/account/*` e funções de cobrança não são implementadas por este repositório. Os formulários permanecem indisponíveis, downloads vazios, e um cabeçalho global `X-Robots-Tag: noindex` impede indexação deste ambiente. Apenas commits de `main` produzem builds Git automáticos.
+
+A publicação de produção, eventual migração de DNS/alias e os endpoints de sessão/autorização exigem etapa explícita do owner de deployment, **não** são consequência do merge de código ou da criação do ambiente de desenvolvimento.
