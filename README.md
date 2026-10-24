@@ -126,4 +126,15 @@ Os testes `tests/test_staging_preflight.py` são executados no CI **sem rede**; 
 
 O catálogo público continua **vazio por padrão** enquanto o publisher de releases não fornecer publicação oficialmente atestada. O validador Python (`scripts/public_release_catalog.py`) exige que o catálogo distribuído mantenha os mesmos metadados, integridade e unicidade de IDs esperados da projeção do publicador. No navegador, `site/assets/site.js` rejeita o catálogo inteiro antes de montar links quando encontra inconsistências, mesmo quando o servidor respondeu HTTP 200.
 
-A suíte existente `scripts/browser_smoke.py` cobre três catálogos inválidos **apenas em loopback e em memória**: `empty` com releases, IDs de destino repetidos e travessia codificada em URL. O esperado é mensagem de erro e **zero links de downloads**, sem modificar o bundle nem inventar oferta/publicação. Isso não substitui atestação de publisher, staging homologado, teste E2E autenticado ou aprovação de produção.
+A suíte existente `scripts/browser_smoke.py` cobre seis cenários adversariais **apenas em loopback e em memória**, inclusive catálogos `ready` falsificados e a alteração simultânea do catálogo e do manifesto, além de IDs repetidos e travessia codificada em URL. O esperado é mensagem de erro e **zero links de downloads**, sem modificar o bundle nem inventar oferta/publicação. Isso não substitui atestação de publisher, staging homologado, teste E2E autenticado ou aprovação de produção.
+
+## Identidade do candidato gerado no CI
+
+Cada revisão de PR é compilada **uma única vez** pelo workflow `.github/workflows/site-source.yml`; a `main` permanece coberta por `push`. A execução da PR faz checkout do **commit real da branch**, não do merge temporário do GitHub. O `source_commit` de `public-site-manifest.json` corresponde a `git rev-parse HEAD`. O log do workflow publica:
+
+```text
+SITE_CANDIDATE_SOURCE_COMMIT=<SHA de 40 caracteres do checkout>
+SITE_CANDIDATE_MANIFEST_SHA256=<SHA-256 do manifesto do artefato CI>
+```
+
+Para um pré-flight de staging autorizado, obter **ambos os valores na mesma execução aprovada** e usar o `ordax-site-candidate` correspondente. Não obter pins da própria hospedagem que está sendo validada. A revisão do processo está na ADR-025. Isso prova rastreabilidade do candidato, não a autorização de produção ou a existência de um preview com Identity real.
