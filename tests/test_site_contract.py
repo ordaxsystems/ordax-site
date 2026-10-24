@@ -1,5 +1,6 @@
 """Independent site contract regressions; no OS checkout, network or secrets."""
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -94,6 +95,38 @@ class SiteContractTests(unittest.TestCase):
         self.assertNotIn('id="playground-fixture"', landing)
         self.assertIn('fetch("/assets/playground-fixture.json"', controller)
         self.assertIn("for (const nestedMain of screen.querySelectorAll('main'))", controller)
+
+    def test_surface_preview_is_single_pinned_artifact(self):
+        source = ROOT / "artifacts/surface-preview/os-migration-70b0f7eb"
+        self.assertTrue((source / "manifest.json").is_file())
+        self.assertFalse((ROOT / "site/assets/playground-fixture.json").exists())
+        self.assertFalse((ROOT / "site/assets/surface-snapshot.css").exists())
+        self.assertFalse((ROOT / "site/assets/surface-snapshot.json").exists())
+        self.assertEqual(
+            build.digest((source / "manifest.json").read_bytes()),
+            "d7142242a5a4ff38b71cfcc952123b48a34e8bd643052b8143de9b5d36fc0cc3"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            stage = Path(tmp) / "stage"
+            stage.mkdir()
+            build.stage_brand(stage, ROOT / "artifacts/brand/os-migration-70b0f7eb")
+            receipt = build.stage_surface_preview(stage, source, build.digest((source / "manifest.json").read_bytes()))
+            self.assertEqual(receipt["file_count"], 2)
+            self.assertEqual(receipt["source_repository"], "ordaxsystems/ordax-os")
+            self.assertTrue(receipt["font_url_rebased"])
+            css = (stage / "assets/surface-snapshot.css").read_text("utf-8")
+            self.assertIn("/assets/fonts/inter-latin-wght-normal.woff2", css)
+            self.assertNotIn("/assets/inter-latin-wght-normal-Dx4kXJAl.woff2", css)
+            self.assertFalse((stage / "assets/surface-snapshot.json").exists())
+            with self.assertRaises(build.SiteError):
+                build.stage_surface_preview(Path(tmp) / "unused", source, "0" * 64)
+
+            altered = Path(tmp) / "altered"
+            shutil.copytree(source, altered)
+            fixture = altered / "assets/playground-fixture.json"
+            fixture.write_bytes(fixture.read_bytes() + b" ")
+            with self.assertRaises(build.SiteError):
+                build.stage_surface_preview(Path(tmp) / "unused", altered, build.digest((altered / "manifest.json").read_bytes()))
 
     def test_site_is_not_native_web_surface(self):
         paths = (ROOT / "site").rglob("*")
