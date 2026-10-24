@@ -53,12 +53,18 @@ class PublicReleaseCatalogError(ValueError):
 
 
 def _same_origin_path(value: object) -> bool:
+    """Exact literal root path only, never an alias or traversal into another route.
+
+    Encoded separators/dots are excluded to avoid intermediary-specific URL
+    normalization. The publisher owns naming; this validator does not rewrite it.
+    """
     return (
         isinstance(value, str)
+        and len(value) > 1
         and value.startswith("/")
-        and not value.startswith("//")
-        and "?" not in value
-        and "#" not in value
+        and "//" not in value
+        and re.fullmatch(r"/[A-Za-z0-9._~/-]+", value) is not None
+        and all(segment not in {".", ".."} for segment in value.split("/"))
     )
 
 
