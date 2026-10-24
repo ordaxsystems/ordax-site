@@ -388,68 +388,13 @@ def stage_surface_dev_preview(stage: Path, directory: Path, manifest: dict,
 
 
 def stage_surface_preview(stage: Path, directory: Path, expected_manifest_sha256: str) -> dict:
-    """Stage the pinned presentation-only migration package, never source code."""
-    manifest, pinned_sha256 = load_pinned_manifest(directory, expected_manifest_sha256, "Surface preview")
-    if manifest.get("artifact_class") == "ordax-meridian-preview":
-        return stage_surface_dev_preview(stage, directory, manifest, pinned_sha256)
-    if (manifest.get("artifact_class") != "ordax-public-surface-preview"
-            or manifest.get("status") != "audited-migration-snapshot-not-official-surface-publication"
-            or manifest.get("source_repository") != "ordaxsystems/ordax-os"
-            or not SHA40.fullmatch(str(manifest.get("source_commit", "")))
-            or manifest.get("immutable") is not True):
-        raise SiteError("unverified, misidentified or falsely official Surface preview")
-    files = manifest.get("files")
-    if not isinstance(files, list) or {row.get("path") for row in files if isinstance(row, dict)} != PREVIEW_FILES or len(files) != len(PREVIEW_FILES):
-        raise SiteError("Surface preview file inventory must be exact")
-    payloads = {}
-    for item in files:
-        name = item["path"]
-        src = directory / name
-        if (src.is_symlink() or not src.is_file()
-                or not SHA256.fullmatch(str(item.get("sha256", "")))
-                or not SHA40.fullmatch(str(item.get("git_sha", "")))):
-            raise SiteError("invalid Surface preview asset: " + name)
-        value = src.read_bytes()
-        if (digest(value) != item["sha256"] or len(value) != item.get("size")
-                or git_blob(value) != item["git_sha"]):
-            raise SiteError("Surface preview source integrity mismatch: " + name)
-        payloads[name] = value
-    fixture = json.loads(payloads["assets/playground-fixture.json"])
-    if (fixture.get("$schema") != PREVIEW_SCHEMA
-            or not isinstance(fixture.get("apps"), list)
-            or not isinstance(fixture.get("home", {}).get("rail_apps"), list)
-            or not isinstance(fixture.get("surface", {}).get("chrome"), str)
-            or not isinstance(fixture.get("surface", {}).get("views", {}).get("home"), str)
-            or fixture["surface"].get("cssSha256") != digest(payloads["assets/surface-snapshot.css"])):
-        raise SiteError("Surface preview fixture/CSS composition mismatch")
-    # Source CSS is immutable. Its historical Vite font URL is not exported
-    # by the public Site. Repoint the staged view to the same Inter font from
-    # the separately verified brand artifact, and hash the delivered CSS.
-    source_font = b"url(/assets/inter-latin-wght-normal-Dx4kXJAl.woff2)"
-    delivered_font = b"url(/assets/fonts/inter-latin-wght-normal.woff2)"
-    css = payloads["assets/surface-snapshot.css"]
-    font_rebased = source_font in css
-    if font_rebased:
-        if not (stage / "assets/fonts/inter-latin-wght-normal.woff2").is_file():
-            raise SiteError("preview font depends on missing verified brand")
-        css = css.replace(source_font, delivered_font)
-    for target in re.findall(rb"url\((/assets/[A-Za-z0-9./_-]+)\)", css):
-        referenced = stage / target.decode("ascii").lstrip("/")
-        if target != b"/assets/surface-snapshot.css" and not referenced.is_file():
-            raise SiteError("preview CSS references a missing same-origin asset: " + target.decode("ascii"))
-    payloads["assets/surface-snapshot.css"] = css
-    for name, value in payloads.items():
-        dest = stage / name
-        if dest.exists():
-            raise SiteError("Site duplicates Surface-owned preview: " + name)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(value)
-    return {"source_repository": manifest["source_repository"],
-            "source_commit": manifest["source_commit"],
-            "manifest_sha256": expected_manifest_sha256,
-            "status": manifest["status"],
-            "file_count": len(PREVIEW_FILES),
-            "rendered_css_sha256": digest(css), "font_url_rebased": font_rebased}
+    """Accept only the currently pinned Surface-owned signed Dev preview."""
+    manifest, pinned_sha256 = load_pinned_manifest(
+        directory, expected_manifest_sha256, "Surface preview"
+    )
+    if manifest.get("artifact_class") != "ordax-meridian-preview":
+        raise SiteError("retired OS Surface migration preview is forbidden")
+    return stage_surface_dev_preview(stage, directory, manifest, pinned_sha256)
 
 
 INACTIVE_PLANS_HTML = '<p class="commercial-notice">Planos em preparação — contratação indisponível.</p>'

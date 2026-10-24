@@ -143,13 +143,11 @@ def assert_candidate(out: Path) -> dict:
                 raise AssertionError(relative + ": credential submission active without server readiness")
         if relative == "index.html":
             receipt = manifest["surface_preview"]
-            if receipt["status"] == "candidate-not-published":
-                if (receipt.get("source_repository") != "ordaxsystems/ordax-surface"
-                        or not receipt.get("os_host_commit")
-                        or receipt.get("font_url_rebased") is not True):
-                    raise AssertionError("invalid Dev Surface producer receipt")
-            elif receipt["status"] != "audited-migration-snapshot-not-official-surface-publication":
-                raise AssertionError("unapproved Surface preview origin")
+            if (receipt.get("status") != "candidate-not-published"
+                    or receipt.get("source_repository") != "ordaxsystems/ordax-surface"
+                    or not receipt.get("os_host_commit")
+                    or receipt.get("font_url_rebased") is not True):
+                raise AssertionError("invalid signed Dev Surface producer receipt")
             css_path = out / "assets/surface-snapshot.css"
             css = css_path.read_bytes()
             delivered_digest = hashlib.sha256(css).hexdigest()
