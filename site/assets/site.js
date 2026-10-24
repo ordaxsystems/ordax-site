@@ -37,6 +37,42 @@
       && new URLSearchParams(window.location.search).get("preview") === "layout";
   }
 
+  const MAX_PUBLIC_JSON_BYTES = 256 * 1024;
+  async function readJsonBytes(response, maxBytes = MAX_PUBLIC_JSON_BYTES) {
+    // One bounded JSON transport for Identity/config/policy and catalog.
+    // Never allocate a server-chosen body before checking its size.
+    const mime = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
+    const length = response.headers.get("Content-Length");
+    if (mime !== "application/json" ||
+        !Number.isSafeInteger(maxBytes) || maxBytes < 0 ||
+        (length !== null && (!/^\\d+$/.test(length) || Number(length) > maxBytes)) ||
+        !response.body?.getReader) {
+      throw new Error("invalid-public-json-response");
+    }
+    const buffer = new Uint8Array(maxBytes);
+    const reader = response.body.getReader();
+    let received = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!(value instanceof Uint8Array) || received + value.length > maxBytes) {
+          await reader.cancel();
+          throw new Error("public-json-too-large");
+        }
+        buffer.set(value, received);
+        received += value.length;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    return buffer.subarray(0, received);
+  }
+
+  function parseJsonBytes(bytes) {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  }
+
   async function loadJson(path, signal) {
     // API contracts belong to their exact same-origin endpoint. A redirected
     // 200 (even to another same-origin route) cannot establish Identity or
@@ -54,7 +90,7 @@
         response.url !== new URL(path, window.location.origin).href) {
       throw new Error("resource-unavailable");
     }
-    return response.json();
+    return parseJsonBytes(await readJsonBytes(response));
   }
 
   async function loadConfig() {
@@ -1043,7 +1079,7 @@
       loadJson("/public-site-manifest.json"),
       fetch(catalogPath, {
         method: "GET", credentials: "same-origin", cache: "no-store",
-        headers: { Accept: "application/json" },
+        redirect: "error", headers: { Accept: "application/json" },
       }),
     ]);
     if (!response.ok || !manifest ||
@@ -1060,31 +1096,20 @@
         !Number.isSafeInteger(record.size) || record.size < 0 || record.size > 262144) {
       throw new Error("catalog-inventory-invalid");
     }
-    // Stream into a bounded buffer: response.arrayBuffer() could allocate an
-    // attacker-chosen body before the advertised digest is checked.
-    if (!window.crypto?.subtle || !response.body?.getReader) {
+    // Reuse the same bounded JSON reader; the catalog additionally needs an
+    // exact-byte match against the candidate's existing immutable inventory.
+    if (!window.crypto?.subtle || response.redirected ||
+        response.url !== new URL(catalogPath, window.location.origin).href) {
       throw new Error("catalog-bundle-mismatch");
     }
-    const bytes = new Uint8Array(record.size);
-    const reader = response.body.getReader();
-    let received = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!(value instanceof Uint8Array) || received + value.length > bytes.length) {
-        await reader.cancel();
-        throw new Error("catalog-bundle-mismatch");
-      }
-      bytes.set(value, received);
-      received += value.length;
-    }
-    if (received !== bytes.length) throw new Error("catalog-bundle-mismatch");
+    const bytes = await readJsonBytes(response, record.size);
+    if (bytes.length !== record.size) throw new Error("catalog-bundle-mismatch");
     const actualHash = await crypto.subtle.digest("SHA-256", bytes);
     const actualSha256 = [...new Uint8Array(actualHash)]
       .map(byte => byte.toString(16).padStart(2, "0")).join("");
     if (actualSha256 !== record.sha256) throw new Error("catalog-bundle-mismatch");
 
-    const catalog = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    const catalog = parseJsonBytes(bytes);
     if (!validCatalog(catalog) || manifest.catalog_status !== catalog.status) {
       throw new Error("catalog-publication-state-mismatch");
     }
