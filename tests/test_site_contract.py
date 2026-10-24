@@ -13,6 +13,9 @@ from public_release_catalog import render_catalog, PublicReleaseCatalogError
 from site_routes import load_routes
 from site_seo import validate_origin, render_html
 
+BRAND_PIN = "24bb0e191f47bc68821d9493406d0b05e7a900a8872e4b9b03a3d6938521dad4"
+OFFERS_PIN = "2bb9aa89a84c27a449c4bf9c048f847fc8ecb4e928759ac47a47b47f15446dd6"
+
 class SiteContractTests(unittest.TestCase):
     def test_owner_and_routes(self):
         report = build.check_source(strict_assets=False)
@@ -30,9 +33,59 @@ class SiteContractTests(unittest.TestCase):
 
     def test_brand_not_implicitly_read_from_os(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(FileNotFoundError):
-                build.stage_brand(Path(tmp), Path(tmp) / "nonexistent")
+            with self.assertRaises(build.SiteError):
+                build.stage_brand(Path(tmp), Path(tmp) / "nonexistent", BRAND_PIN)
         self.assertNotIn("system/surface/", (ROOT / "scripts/build.py").read_text().split("def stage_brand(")[1].split("def build(")[0])
+
+    def test_all_migration_inputs_need_independent_hash_pins(self):
+        brand = ROOT / "artifacts/brand/os-migration-70b0f7eb"
+        offers = ROOT / "artifacts/offers/os-migration-70b0f7eb"
+        self.assertEqual(build.digest((brand / "manifest.json").read_bytes()), BRAND_PIN)
+        self.assertEqual(build.digest((offers / "manifest.json").read_bytes()), OFFERS_PIN)
+        with tempfile.TemporaryDirectory() as tmp:
+            stage = Path(tmp) / "stage"
+            stage.mkdir()
+            receipt = build.stage_brand(stage, brand, BRAND_PIN)
+            self.assertEqual(receipt["manifest_sha256"], BRAND_PIN)
+            with self.assertRaisesRegex(build.SiteError, "pin"):
+                build.stage_brand(stage, brand, None)
+            with self.assertRaisesRegex(build.SiteError, "pin"):
+                build.stage_brand(stage, brand, "0" * 64)
+
+            html, offer_receipt = build.load_reference_offers(offers, OFFERS_PIN)
+            self.assertIn("Planos em preparação", html)
+            self.assertEqual(offer_receipt["manifest_sha256"], OFFERS_PIN)
+            with self.assertRaisesRegex(build.SiteError, "pin"):
+                build.load_reference_offers(offers, None)
+            with self.assertRaisesRegex(build.SiteError, "pin"):
+                build.load_reference_offers(offers, "0" * 64)
+            with self.assertRaises(build.SiteError):
+                build.load_reference_offers(None, OFFERS_PIN)
+
+            # Tamper with payload and rewrite *self-declared* hash in manifest:
+            # the independent pin still rejects the malicious new manifest.
+            modified = Path(tmp) / "brand-forged"
+            shutil.copytree(brand, modified)
+            forged = json.loads((modified / "manifest.json").read_text("utf-8"))
+            forged["status"] = "official-surface-release"
+            (modified / "manifest.json").write_text(json.dumps(forged), encoding="utf-8")
+            with self.assertRaisesRegex(build.SiteError, "pin"):
+                build.stage_brand(stage, modified, BRAND_PIN)
+
+            modified_offers = Path(tmp) / "offers-forged"
+            shutil.copytree(offers, modified_offers)
+            forged_offer = json.loads((modified_offers / "manifest.json").read_text("utf-8"))
+            forged_offer["paid_purchases_enabled"] = True
+            (modified_offers / "manifest.json").write_text(json.dumps(forged_offer), encoding="utf-8")
+            with self.assertRaisesRegex(build.SiteError, "pin"):
+                build.load_reference_offers(modified_offers, OFFERS_PIN)
+
+    def test_unattested_releases_cannot_enter_public_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(build.SiteError, "attested publisher"):
+                build.build(Path(tmp) / "out", "0" * 40, Path(tmp),
+                            Path(tmp) / "arbitrary-publications.json",
+                            public_origin="https://ordax.com.br")
 
     def test_unauthorized_catalog_fails_closed(self):
         result = render_catalog({"releases": []})
@@ -109,7 +162,7 @@ class SiteContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             stage = Path(tmp) / "stage"
             stage.mkdir()
-            build.stage_brand(stage, ROOT / "artifacts/brand/os-migration-70b0f7eb")
+            build.stage_brand(stage, ROOT / "artifacts/brand/os-migration-70b0f7eb", BRAND_PIN)
             receipt = build.stage_surface_preview(stage, source, build.digest((source / "manifest.json").read_bytes()))
             self.assertEqual(receipt["file_count"], 2)
             self.assertEqual(receipt["source_repository"], "ordaxsystems/ordax-os")
