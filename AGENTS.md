@@ -76,3 +76,10 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 - Conta deve ter `h1` **estático de fallback** em `#account-session`, com `.sr-only`, visível para tecnologia assistiva quando JS desativado/indisponível. O runtime existente atualiza `#account-session` e gera `h1` de `#account-content` ao montar, evitando duplicação de heading durante uso.
 - A prova do heading da página exclui exclusivamente os `h1` de dentro de `.playground`, pois são conteúdo de uma **demonstração de outra UI**, não o título do documento externo.
 - Honrar `prefers-reduced-motion: reduce` no shell comum, com rolagem automática e sem transição em `.skip-link` e `.button`. O teste em Chrome aciona preferência **nativa emulada**, não classe CSS artificial, e inspeciona `animationDuration`/`transitionDuration` nos elementos-alvo. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40054611865).
+
+
+## Forced-colors: regressão real de foco (2026-10-23/24)
+
+- O Chrome deve emular `forced-colors: active` por CDP nas 11 rotas desktop e inspecionar que o skip link focado está **dentro da viewport**, não só semanticamente focado. Exigir outline calculado de pelo menos 2 px, sem overflow horizontal; preservar capturas no artefato CI.
+- O shell `site/assets/site.css` mantém transição desativada **somente sob forced-colors** para evitar foco animando fora da tela, com `Highlight` do sistema para o contorno. O teste inicial demonstrou o defeito e a [revisão corrigida passou](https://github.com/ordaxsystems/ordax-site/actions/runs/40055957424).
+- Isso **não** equivale a certificação de contraste WCAG completo, zoom somente texto ou leitores de tela; os gates oficiais de Surface/Identity e produção seguem bloqueados.
