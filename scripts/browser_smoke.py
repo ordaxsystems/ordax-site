@@ -47,6 +47,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b'{"error":"service-unavailable"}')
 
     def do_GET(self):
+        # Negative download-contract responses exist only inside this loopback
+        # browser proof. Never modify the verified build or publish a fixture.
+        catalog_override = getattr(self.server, "catalog_override", None)
+        if self.path == "/releases/catalog.json" and catalog_override is not None:
+            content = json.dumps(catalog_override, separators=(",", ":")).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(content)
+            return
         if self.path.startswith(("/auth/", "/account/", "/api/", "/sync/")):
             self.send_response(503)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -646,6 +658,7 @@ def run(root: Path, evidence: Path) -> dict:
         ("127.0.0.1", 0),
         lambda *a, **k: Handler(*a, root=root, **k),
     )
+    server.catalog_override = None
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     webdriver_port = free_port()
@@ -657,6 +670,7 @@ def run(root: Path, evidence: Path) -> dict:
     text_enlargement_results = []
     text_spacing_results = []
     no_script_results = []
+    catalog_failure_results = []
     failures = []
     try:
         for _ in range(100):
@@ -865,6 +879,62 @@ def run(root: Path, evidence: Path) -> dict:
                     if not passed:
                         failures.append({"route": route, "viewport": f"spacing-{locale}",
                                          "rule": rule, "summary": report})
+        # Exercise poisoned catalogs through the REAL Site browser runtime
+        # without changing the pinned candidate or invoking any publisher.
+        demo_id = "1" * 40
+        artifact = lambda path: {"href": path, "sha256": "a" * 64, "size": 123}
+        demo_target = {"id": "unit-test-only", "label": "Never published",
+                       **artifact("/releases/offline-test-only.img")}
+        demo_release = {
+            "release_id": demo_id, "source_commit": demo_id,
+            "version": "offline-test-only", "channel": "test",
+            "published_at": "2026-10-24",
+            "targets": [demo_target],
+            "compliance": {
+                "sbom": artifact("/compliance/test-sbom.json"),
+                "third_party_notices": artifact("/compliance/test-notices.txt"),
+                "source_bundle": artifact("/compliance/test-sources.tar.gz"),
+            },
+        }
+        invalid_catalogs = [
+            ("empty-with-releases", {"$schema": "prototype-ordax.public-release-catalog/1",
+                                      "status": "empty", "releases": [demo_release]}),
+            ("repeated-target-id", {"$schema": "prototype-ordax.public-release-catalog/1",
+                                     "status": "ready",
+                                     "releases": [{**demo_release,
+                                                   "targets": [demo_target, demo_target]}]}),
+            ("encoded-traversal", {"$schema": "prototype-ordax.public-release-catalog/1",
+                                    "status": "ready",
+                                    "releases": [{**demo_release,
+                                                  "targets": [{**demo_target, "href":
+                                                    "/releases/%2e%2e/auth/login"}]}]}),
+        ]
+        for scenario, payload in invalid_catalogs:
+            server.catalog_override = payload
+            try:
+                driver.cdp("Emulation.setDeviceMetricsOverride", {
+                    "width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True
+                })
+                driver.navigate(f"http://127.0.0.1:{server.server_port}/download/")
+                state = {}
+                for _ in range(45):
+                    state = driver.run("""const status = document.querySelector('[data-download-status] strong');
+                    const expected = window.OrdaXPublicI18n?.t('download.error.title');
+                    return {
+                      errorState: Boolean(status && expected && status.textContent === expected),
+                      visibleReleaseLinks: document.querySelectorAll('[data-release-list] a[href]').length,
+                      runtimeErrors: window.__ordaxPageErrors || []
+                    };""")
+                    if state["errorState"]:
+                        break
+                    time.sleep(0.1)
+                state["scenario"] = scenario
+                catalog_failure_results.append(state)
+                if not state["errorState"] or state["visibleReleaseLinks"] or state["runtimeErrors"]:
+                    failures.append({"route": "/download/", "viewport": "poisoned-catalog",
+                                     "rule": scenario, "summary": state})
+            finally:
+                server.catalog_override = None
         # Restore the default language to keep the no-JavaScript checks independent.
         driver.run("""localStorage.setItem('ordax.public.locale', 'pt-BR'); return true;""")
         # Verify that disabling JavaScript at document parse time cannot
@@ -904,10 +974,12 @@ def run(root: Path, evidence: Path) -> dict:
                   "reflowChecks": len(reflow_results), "textEnlargementChecks": len(text_enlargement_results),
                   "textSpacingChecks": len(text_spacing_results),
                   "noScriptChecks": len(no_script_results),
+                  "catalogFailureChecks": len(catalog_failure_results),
                   "failures": failures, "results": results,
                   "reflowResults": reflow_results, "textEnlargementResults": text_enlargement_results,
                   "textSpacingResults": text_spacing_results,
-                  "noScriptResults": no_script_results}
+                  "noScriptResults": no_script_results,
+                  "catalogFailureResults": catalog_failure_results}
         (evidence / "report.json").write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if failures:
             raise BrowserProofError(f"{len(failures)} browser checks failed; see report.json; "
@@ -952,7 +1024,7 @@ def main():
     parser.add_argument("--evidence", default="out/browser-evidence")
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']}")
 
 
 if __name__ == "__main__":
