@@ -38,6 +38,9 @@ REMOTE_SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=ex
 SCHEMA = "prototype-ordax.independent-public-site-bundle/1"
 PREVIEW_FILES = {"assets/playground-fixture.json", "assets/surface-snapshot.css"}
 PREVIEW_SCHEMA = "prototype-ordax.public-playground-fixture/1"
+MIGRATION_LOCK_SCHEMA = "ordax.site-migration-artifact-lock/1"
+MIGRATION_OWNER = "ordaxsystems/ordax-os"
+MIGRATION_STATUS = "development-only-not-authorized-for-production"
 
 class SiteError(ValueError):
     pass
@@ -99,6 +102,46 @@ def check_source(strict_assets: bool = False) -> dict:
     if strict_assets and missing_binary:
         raise SiteError("missing original source assets: " + ", ".join(missing_binary))
     return {"source_files": len(files), "missing_source_assets": missing_binary}
+
+def load_migration_lock(path: Path) -> dict:
+    """Only the authored lock supplies hashes for the three dev-only artifacts."""
+    if path.is_symlink() or not path.is_file():
+        raise SiteError("migration artifact lock missing or symlinked")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if (set(data) != {"$schema", "status", "source_repository", "source_commit", "artifacts"}
+            or data["$schema"] != MIGRATION_LOCK_SCHEMA
+            or data["status"] != MIGRATION_STATUS
+            or data["source_repository"] != MIGRATION_OWNER
+            or not SHA40.fullmatch(str(data["source_commit"]))
+            or not isinstance(data["artifacts"], dict)
+            or set(data["artifacts"]) != {"brand", "surface_preview", "offers"}):
+        raise SiteError("invalid Site migration artifact trust lock")
+    result = {}
+    for key in ("brand", "surface_preview", "offers"):
+        item = data["artifacts"][key]
+        if not isinstance(item, dict) or set(item) != {"directory", "manifest_sha256"}:
+            raise SiteError("invalid migration artifact lock item: " + key)
+        relative = item["directory"]
+        expected_prefix = {
+            "brand": "artifacts/brand/",
+            "surface_preview": "artifacts/surface-preview/",
+            "offers": "artifacts/offers/",
+        }[key]
+        if (not isinstance(relative, str)
+                or not relative.startswith(expected_prefix)
+                or not re.fullmatch(r"[a-zA-Z0-9/_-]+", relative)
+                or ".." in relative.split("/")
+                or not SHA256.fullmatch(str(item["manifest_sha256"]))):
+            raise SiteError("untrusted migration artifact lock path/digest: " + key)
+        directory = ROOT / relative
+        if directory.is_symlink() or not directory.is_dir():
+            raise SiteError("missing or linked migration artifact: " + key)
+        manifest, _ = load_pinned_manifest(directory, item["manifest_sha256"], key)
+        if manifest.get("source_repository") != MIGRATION_OWNER or manifest.get("source_commit") != data["source_commit"]:
+            raise SiteError("migration artifact diverges from common OS source revision: " + key)
+        result[key] = {"directory": directory, "manifest_sha256": item["manifest_sha256"]}
+    return result
+
 
 def load_pinned_manifest(directory: Path, expected_sha256: str | None, label: str) -> tuple[dict, str]:
     """Verify trust anchor outside the manifest before interpreting any manifest claims."""
@@ -337,6 +380,7 @@ def main() -> None:
     cli.add_argument("--brand-dir")
     cli.add_argument("--brand-manifest-sha256")
     cli.add_argument("--publications")
+    cli.add_argument("--migration-lock")
     cli.add_argument("--offers-dir")
     cli.add_argument("--offers-manifest-sha256")
     cli.add_argument("--public-origin")
@@ -348,16 +392,32 @@ def main() -> None:
         report = check_source()
         print(json.dumps({"structural_check": "PASS", **report}, sort_keys=True))
     elif args.command == "build":
-        if not args.brand_dir:
-            raise SystemExit("brand artifact required (pinned manifest + SHA-256); no OS source fallback")
-        print(json.dumps(build(Path(args.out), args.source_commit or "", Path(args.brand_dir),
+        brand = Path(args.brand_dir) if args.brand_dir else None
+        brand_hash = args.brand_manifest_sha256
+        preview = Path(args.surface_preview_dir) if args.surface_preview_dir else None
+        preview_hash = args.surface_preview_manifest_sha256
+        offers = Path(args.offers_dir) if args.offers_dir else None
+        offers_hash = args.offers_manifest_sha256
+        if args.migration_lock:
+            if any(x is not None for x in (brand, brand_hash, preview, preview_hash, offers, offers_hash)):
+                raise SiteError("migration lock and individual artifact overrides are mutually exclusive")
+            pinned = load_migration_lock(Path(args.migration_lock))
+            brand = pinned["brand"]["directory"]
+            brand_hash = pinned["brand"]["manifest_sha256"]
+            preview = pinned["surface_preview"]["directory"]
+            preview_hash = pinned["surface_preview"]["manifest_sha256"]
+            offers = pinned["offers"]["directory"]
+            offers_hash = pinned["offers"]["manifest_sha256"]
+        if brand is None:
+            raise SiteError("brand artifact required (pinned manifest + SHA-256); no OS source fallback")
+        print(json.dumps(build(Path(args.out), args.source_commit or "", brand,
                                Path(args.publications) if args.publications else None,
-                               Path(args.offers_dir) if args.offers_dir else None,
+                               offers,
                                args.public_origin,
-                               Path(args.surface_preview_dir) if args.surface_preview_dir else None,
-                               args.surface_preview_manifest_sha256,
-                               args.brand_manifest_sha256,
-                               args.offers_manifest_sha256), sort_keys=True))
+                               preview,
+                               preview_hash,
+                               brand_hash,
+                               offers_hash), sort_keys=True))
     else:
         verify(Path(args.out))
         print("SITE_BUNDLE_VERIFY=PASS")
