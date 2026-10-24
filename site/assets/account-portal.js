@@ -224,14 +224,9 @@
     mcpUsageStatus = "loading";
     if (state.section === "consumo") renderContent();
     try {
-      const response = await fetch("/account/usage/mcp", {
-        method: "GET", credentials: "same-origin", cache: "no-store", redirect: "error",
-        headers: { Accept: "application/json" },
-        ...(typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-          ? { signal: AbortSignal.timeout(10000) } : {}),
-      });
-      if (!response.ok) throw new Error("mcp-usage-unavailable");
-      const value = await response.json();
+      const signal = typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+        ? AbortSignal.timeout(10000) : undefined;
+      const value = await account.readMcpUsage(signal);
       if (!value || value.ok !== true || value.schema !== "ordax.product-mcp-usage/1"
           || value.billable !== false || value.observed_only !== true
           || value.coverage !== "partial_observational"
