@@ -339,7 +339,7 @@ class SiteContractTests(unittest.TestCase):
             lock = json.loads((ROOT / "contracts/dev-artifact-lock.json").read_text("utf-8"))
             lock["artifacts"]["surface_preview"]["release"]["release_tag"] = "meridian-dev-main"
             fake.write_text(json.dumps(lock), encoding="utf-8")
-            with self.assertRaisesRegex(build.SiteError, "Surface Dev release lock"):
+            with self.assertRaisesRegex(build.SiteError, "invalid signed Dev release lock"):
                 build.load_dev_artifact_lock(fake)
 
     def test_verified_surface_images_reuse_site_bytes_without_duplicate_aliases(self):
