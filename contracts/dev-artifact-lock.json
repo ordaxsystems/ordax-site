@@ -1,0 +1,25 @@
+{
+  "$schema": "ordax.site-dev-artifact-lock/2",
+  "status": "development-only-not-authorized-for-production",
+  "artifacts": {
+    "brand": {
+      "release": {
+        "source_repository": "ordaxsystems/ordax-surface",
+        "source_commit": "863310a2e0a285f35fb1080c84c3cc5a88d41cde",
+        "release_tag": "brand-dev-863310a2e0a285f35fb1080c84c3cc5a88d41cde",
+        "archive_sha256": "5ca1f30d12c8f6aeebf059fab004f0c1a4def6430c4bd577f72d2c4aa6a02f30",
+        "manifest_sha256": "8b65322e64ac08b6e40bffe154113d73144d9f3e9d5964c61ffd82eec962389e"
+      }
+    },
+    "surface_preview": {
+      "release": {
+        "source_repository": "ordaxsystems/ordax-surface",
+        "source_commit": "1ab73da4aae5991273a5f4ca380d5af135ffd8d5",
+        "os_host_commit": "8b677ba7a1b04cc7abb4795fd6d8dc406dd7109a",
+        "release_tag": "meridian-dev-1ab73da4aae5991273a5f4ca380d5af135ffd8d5",
+        "archive_sha256": "f37cded023174c922c674f2991d531cd2867429cadb4ab3a53694a206f9422c9",
+        "manifest_sha256": "ef8e436cb3cb977c31d7038c3057bb3df9322bd5e1ff3e738ab6fd69270778a0"
+      }
+    }
+  }
+}
