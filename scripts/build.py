@@ -36,6 +36,8 @@ BRAND_FILES = {
 }
 REMOTE_SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
 SCHEMA = "prototype-ordax.independent-public-site-bundle/1"
+MAX_BUNDLE_FILES = 500
+MAX_BUNDLE_BYTES = 64 * 1024 * 1024
 PREVIEW_FILES = {"assets/playground-fixture.json", "assets/surface-snapshot.css"}
 PREVIEW_SCHEMA = "prototype-ordax.public-playground-fixture/1"
 MIGRATION_LOCK_SCHEMA = "ordax.site-migration-artifact-lock/1"
@@ -47,6 +49,47 @@ class SiteError(ValueError):
 
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+def validate_bundle_inventory(ledger: dict) -> dict[str, dict]:
+    """One canonical file inventory validator for local verify and staging.
+
+    Manifests do not authorize publication; they enumerate candidate bytes.
+    """
+    records = ledger.get("files")
+    if not isinstance(records, list) or not records or len(records) > MAX_BUNDLE_FILES:
+        raise SiteError("site-bundle-file-inventory-invalid")
+    files: dict[str, dict] = {}
+    total_bytes = 0
+    for row in records:
+        if (
+            not isinstance(row, dict)
+            or set(row) != {"path", "size", "sha256"}
+            or not isinstance(row["path"], str)
+            or re.fullmatch(r"[A-Za-z0-9._/-]+", row["path"]) is None
+            or row["path"].startswith("/")
+            or any(part in ("", ".", "..") for part in row["path"].split("/"))
+            or row["path"] == "public-site-manifest.json"
+            or not isinstance(row["size"], int) or isinstance(row["size"], bool)
+            or row["size"] < 0
+            or not isinstance(row["sha256"], str)
+            or SHA256.fullmatch(row["sha256"]) is None
+            or row["path"] in files
+        ):
+            raise SiteError("site-bundle-file-inventory-invalid")
+        total_bytes += row["size"]
+        if total_bytes > MAX_BUNDLE_BYTES:
+            raise SiteError("site-bundle-file-inventory-too-large")
+        files[row["path"]] = row
+    for required in ("config/public-site.json", "releases/catalog.json"):
+        if required not in files:
+            raise SiteError("site-bundle-file-inventory-missing:" + required)
+    # No file may simultaneously act as the parent of another file.
+    for name in files:
+        parts = name.split("/")
+        if any("/".join(parts[:i]) in files for i in range(1, len(parts))):
+            raise SiteError("site-bundle-file-inventory-invalid")
+    return files
+
 
 def git_blob(data: bytes) -> str:
     return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
@@ -360,17 +403,20 @@ def verify(out: Path) -> None:
     ledger = json.loads((out / "public-site-manifest.json").read_text("utf-8"))
     if ledger.get("$schema") != SCHEMA or not SHA40.fullmatch(str(ledger.get("source_commit", ""))):
         raise SiteError("bundle identity invalid")
-    expected = ledger.get("files", [])
-    names = [r["path"] for r in expected]
-    if len(names) != len(set(names)):
-        raise SiteError("bundle contains duplicate paths")
-    files = {p.relative_to(out).as_posix(): p for p in out.rglob("*") if p.is_file()}
-    if set(files) != set(names) | {"public-site-manifest.json"}:
+    if ledger.get("artifact_class") != "public-site":
+        raise SiteError("bundle identity invalid")
+    expected = validate_bundle_inventory(ledger)
+    paths = list(out.rglob("*"))
+    if any(p.is_symlink() for p in paths):
+        raise SiteError("bundle contains symbolic links")
+    files = {p.relative_to(out).as_posix(): p for p in paths if p.is_file()}
+    if set(files) != set(expected) | {"public-site-manifest.json"}:
         raise SiteError("bundle path inventory mismatch")
-    for row in expected:
-        path = files[row["path"]]
-        if path.is_symlink() or len(path.read_bytes()) != row["size"] or digest(path.read_bytes()) != row["sha256"]:
-            raise SiteError("bundle integrity mismatch: " + row["path"])
+    for relative, row in expected.items():
+        path = files[relative]
+        raw = path.read_bytes()
+        if len(raw) != row["size"] or digest(raw) != row["sha256"]:
+            raise SiteError("bundle integrity mismatch: " + relative)
     catalog = validate_catalog(out / "releases/catalog.json")
     # The existing Site bundle manifest is the build's publication-state
     # record. Reject a valid but swapped catalog or a forged "ready" marker.
