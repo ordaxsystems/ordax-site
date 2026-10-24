@@ -93,7 +93,7 @@ class SurfaceDevReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(SurfaceReleaseError, "archive entry"):
                 materialize(link_pin, base / "link", open_url=lambda req, timeout: Response(link_data))
             extra_data, extra_pin = fixture(extra=True)
-            with self.assertRaisesRegex(SurfaceReleaseError, "inventory"):
+            with self.assertRaisesRegex(SurfaceReleaseError, "archive entry"):
                 materialize(extra_pin, base / "extra", open_url=lambda req, timeout: Response(extra_data))
             self.assertFalse((base / "digest").exists())
             self.assertFalse((base / "link").exists())
