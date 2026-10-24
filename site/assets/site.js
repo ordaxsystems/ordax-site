@@ -1063,14 +1063,11 @@
     if (!validCatalog(catalog) || manifest.catalog_status !== catalog.status) {
       throw new Error("catalog-publication-state-mismatch");
     }
-    if (catalog.status === "empty") {
-      // The current builder's only authorized output. Any nonempty candidate
-      // must first pass a future publisher-attested build gate.
-      if (manifest.publications_sha256 !== null) {
-        throw new Error("catalog-publication-state-mismatch");
-      }
-    } else if (!validSha256(manifest.publications_sha256)) {
-      throw new Error("catalog-publisher-receipt-missing");
+    // No authorized publisher integration exists in this version.
+    // Never let a self-authored same-origin manifest invent authority.
+    // This block must be redesigned only alongside a verified publisher gate.
+    if (catalog.status !== "empty" || manifest.publications_sha256 !== null) {
+      throw new Error("catalog-publisher-not-attested");
     }
     return catalog;
   }
