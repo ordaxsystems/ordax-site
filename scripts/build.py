@@ -36,6 +36,8 @@ BRAND_FILES = {
 }
 REMOTE_SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
 SCHEMA = "prototype-ordax.independent-public-site-bundle/1"
+PREVIEW_FILES = {"assets/playground-fixture.json", "assets/surface-snapshot.css"}
+PREVIEW_SCHEMA = "prototype-ordax.public-playground-fixture/1"
 
 class SiteError(ValueError):
     pass
@@ -60,6 +62,8 @@ def check_source(strict_assets: bool = False) -> dict:
         raise SiteError("symbolic links forbidden in site source")
     paths = {p.relative_to(SOURCE).as_posix() for p in files}
     missing_routes = set(ROUTES) - paths
+    if paths.intersection(PREVIEW_FILES | {"assets/surface-snapshot.json"}):
+        raise SiteError("generated Surface preview must come only from a pinned external artifact")
     if missing_routes:
         raise SiteError("missing routes: " + ", ".join(sorted(missing_routes)))
     config = json.loads((SOURCE / "config/public-site.json").read_text("utf-8"))
@@ -117,6 +121,60 @@ def stage_brand(stage: Path, brand_dir: Path) -> dict:
         target.write_bytes(payload)
     return {"source_commit": ledger["source_commit"], "manifest_sha256": digest((brand_dir / "manifest.json").read_bytes())}
 
+def stage_surface_preview(stage: Path, directory: Path, expected_manifest_sha256: str) -> dict:
+    """Stage the pinned presentation-only migration package, never source code."""
+    if not SHA256.fullmatch(str(expected_manifest_sha256)):
+        raise SiteError("Surface preview manifest SHA-256 pin is mandatory")
+    manifest_path = directory / "manifest.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise SiteError("Surface preview manifest missing or symlinked")
+    manifest_bytes = manifest_path.read_bytes()
+    if digest(manifest_bytes) != expected_manifest_sha256:
+        raise SiteError("Surface preview manifest pin mismatch")
+    manifest = json.loads(manifest_bytes)
+    if (manifest.get("artifact_class") != "ordax-public-surface-preview"
+            or manifest.get("status") != "audited-migration-snapshot-not-official-surface-publication"
+            or manifest.get("source_repository") != "ordaxsystems/ordax-os"
+            or not SHA40.fullmatch(str(manifest.get("source_commit", "")))
+            or manifest.get("immutable") is not True):
+        raise SiteError("unverified, misidentified or falsely official Surface preview")
+    files = manifest.get("files")
+    if not isinstance(files, list) or {row.get("path") for row in files if isinstance(row, dict)} != PREVIEW_FILES or len(files) != len(PREVIEW_FILES):
+        raise SiteError("Surface preview file inventory must be exact")
+    payloads = {}
+    for item in files:
+        name = item["path"]
+        src = directory / name
+        if (src.is_symlink() or not src.is_file()
+                or not SHA256.fullmatch(str(item.get("sha256", "")))
+                or not SHA40.fullmatch(str(item.get("git_sha", "")))):
+            raise SiteError("invalid Surface preview asset: " + name)
+        value = src.read_bytes()
+        if (digest(value) != item["sha256"] or len(value) != item.get("size")
+                or git_blob(value) != item["git_sha"]):
+            raise SiteError("Surface preview source integrity mismatch: " + name)
+        payloads[name] = value
+    fixture = json.loads(payloads["assets/playground-fixture.json"])
+    if (fixture.get("$schema") != PREVIEW_SCHEMA
+            or not isinstance(fixture.get("apps"), list)
+            or not isinstance(fixture.get("home", {}).get("rail_apps"), list)
+            or not isinstance(fixture.get("surface", {}).get("chrome"), str)
+            or not isinstance(fixture.get("surface", {}).get("views", {}).get("home"), str)
+            or fixture["surface"].get("cssSha256") != digest(payloads["assets/surface-snapshot.css"])):
+        raise SiteError("Surface preview fixture/CSS composition mismatch")
+    for name, value in payloads.items():
+        dest = stage / name
+        if dest.exists():
+            raise SiteError("Site duplicates Surface-owned preview: " + name)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(value)
+    return {"source_repository": manifest["source_repository"],
+            "source_commit": manifest["source_commit"],
+            "manifest_sha256": expected_manifest_sha256,
+            "status": manifest["status"],
+            "file_count": len(PREVIEW_FILES)}
+
+
 def load_reference_offers(directory: Path | None) -> tuple[str, dict | None]:
     if directory is None:
         # No official presentation projection supplied: reference offers stay unavailable.
@@ -150,7 +208,9 @@ def load_reference_offers(directory: Path | None) -> tuple[str, dict | None]:
 
 
 def build(out: Path, sha: str, brand: Path, publications: Path | None,
-          offers_dir: Path | None = None, public_origin: str | None = None) -> dict:
+          offers_dir: Path | None = None, public_origin: str | None = None,
+          surface_preview_dir: Path | None = None,
+          surface_preview_manifest_sha256: str | None = None) -> dict:
     if not SHA40.fullmatch(sha):
         raise SiteError("full Git SHA required")
     origin = validate_origin(public_origin)
@@ -162,6 +222,11 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
     try:
         shutil.copytree(SOURCE, temp, dirs_exist_ok=True)
         brand_receipt = stage_brand(temp, brand)
+        if surface_preview_dir is None:
+            raise SiteError("Surface preview artifact required; no embedded Surface copy")
+        preview_receipt = stage_surface_preview(
+            temp, surface_preview_dir, surface_preview_manifest_sha256 or ""
+        )
         offers_html, offers_receipt = load_reference_offers(offers_dir)
         route_by_source = {item["source"]: item for item in ROUTE_RECORDS}
         for page in temp.rglob("*.html"):
@@ -197,7 +262,8 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
             for p in sorted(temp.rglob("*")) if p.is_file()
         ]
         manifest = {"$schema": SCHEMA, "source_commit": sha, "artifact_class": "public-site",
-                    "brand": brand_receipt, "offers": offers_receipt, "publications_sha256": publications_digest,
+                    "brand": brand_receipt, "surface_preview": preview_receipt,
+                    "offers": offers_receipt, "publications_sha256": publications_digest,
                     "seo_origin": origin, "indexable_routes": [row["path"] for row in ROUTE_RECORDS if row["indexable"]],
                     "catalog_status": catalog["status"], "files": records}
         (temp / "public-site-manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -233,6 +299,8 @@ def main() -> None:
     cli.add_argument("--publications")
     cli.add_argument("--offers-dir")
     cli.add_argument("--public-origin")
+    cli.add_argument("--surface-preview-dir")
+    cli.add_argument("--surface-preview-manifest-sha256")
     cli.add_argument("--out", default="out/site")
     args = cli.parse_args()
     if args.command == "check":
@@ -244,7 +312,9 @@ def main() -> None:
         print(json.dumps(build(Path(args.out), args.source_commit or "", Path(args.brand_dir),
                                Path(args.publications) if args.publications else None,
                                Path(args.offers_dir) if args.offers_dir else None,
-                               args.public_origin), sort_keys=True))
+                               args.public_origin,
+                               Path(args.surface_preview_dir) if args.surface_preview_dir else None,
+                               args.surface_preview_manifest_sha256), sort_keys=True))
     else:
         verify(Path(args.out))
         print("SITE_BUNDLE_VERIFY=PASS")
