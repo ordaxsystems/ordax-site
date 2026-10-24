@@ -27,6 +27,8 @@ MAX_CONFIG = 32 * 1024
 MAX_SESSION = 16 * 1024
 MAX_CATALOG = 256 * 1024
 MAX_MANIFEST = 512 * 1024
+MAX_BUNDLE_BYTES = 64 * 1024 * 1024
+MAX_BUNDLE_FILES = 500
 FULL_SHA = re.compile(r"[0-9a-f]{40}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -114,21 +116,69 @@ def _fetch_json(origin: str, path: str, maximum: int) -> tuple[int, dict, str, i
         return status, result, hashlib.sha256(raw).hexdigest(), len(raw)
 
 
+def _public_file_url(relative: str) -> str:
+    """Resolve directory-index HTML to the navigation URL browsers actually use."""
+    if relative == "index.html":
+        return "/"
+    if relative.endswith("/index.html"):
+        return "/" + relative[:-len("index.html")]
+    return "/" + relative
+
+
+def _fetch_asset_digest(origin: str, relative: str, expected_size: int) -> tuple[str, int]:
+    """Stream one public static asset without cookies, redirects or buffering binary."""
+    path = _public_file_url(relative)
+    opener = build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()), NoRedirect())
+    request = Request(origin + path, headers={
+        "Accept": "*/*",
+        "Accept-Encoding": "identity",
+        "User-Agent": "OrdaX-Site-Staging-Preflight/1",
+    }, method="GET")
+    try:
+        response = opener.open(request, timeout=10)
+    except HTTPError as error:
+        response = error
+    except (URLError, TimeoutError, OSError) as error:
+        raise StagingPreflightError("site-bundle-file-unavailable:" + relative) from error
+    with response:
+        if response.status != 200 or response.geturl() != origin + path:
+            raise StagingPreflightError("site-bundle-file-http-mismatch:" + relative)
+        advertised = response.headers.get("Content-Length")
+        if advertised is not None and (not advertised.isdigit() or int(advertised) != expected_size):
+            raise StagingPreflightError("site-bundle-file-size-mismatch:" + relative)
+        size = 0
+        digest = hashlib.sha256()
+        while True:
+            chunk = response.read(min(65536, expected_size - size + 1))
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > expected_size:
+                raise StagingPreflightError("site-bundle-file-size-mismatch:" + relative)
+            digest.update(chunk)
+        return digest.hexdigest(), size
+
+
 def _manifest_files(manifest: dict) -> dict:
     """Index trusted bundle inventory for exact output-byte spot checks."""
     records = manifest.get("files")
-    if not isinstance(records, list) or len(records) > 10000:
+    if not isinstance(records, list) or not records or len(records) > MAX_BUNDLE_FILES:
         raise StagingPreflightError("site-bundle-file-inventory-invalid")
     files = {}
+    total_bytes = 0
     for row in records:
         if (not isinstance(row, dict) or set(row) != {"path", "size", "sha256"}
                 or not isinstance(row["path"], str)
                 or not re.fullmatch(r"[A-Za-z0-9._/-]+", row["path"])
-                or row["path"].startswith("/") or ".." in row["path"].split("/")
+                or row["path"].startswith("/") or any(
+                    part in ("", ".", "..") for part in row["path"].split("/"))
                 or not isinstance(row["size"], int) or isinstance(row["size"], bool)
                 or row["size"] < 0 or not isinstance(row["sha256"], str)
                 or not SHA256.fullmatch(row["sha256"]) or row["path"] in files):
             raise StagingPreflightError("site-bundle-file-inventory-invalid")
+        total_bytes += row["size"]
+        if total_bytes > MAX_BUNDLE_BYTES:
+            raise StagingPreflightError("site-bundle-file-inventory-too-large")
         files[row["path"]] = row
     for required in ("config/public-site.json", "releases/catalog.json"):
         if required not in files:
@@ -142,7 +192,7 @@ def _verify_published_file(path: str, record: dict, digest: str, size: int) -> N
 
 
 def evaluate_gateway_contracts(
-    fetch_json, *, expected_site_commit: str, expected_manifest_sha256: str
+    fetch_json, fetch_asset, *, expected_site_commit: str, expected_manifest_sha256: str
 ) -> dict:
     """Check the pinned Site bundle before interpreting anonymous gateway APIs.
 
@@ -166,6 +216,14 @@ def evaluate_gateway_contracts(
             or manifest.get("publications_sha256") is not None):
         raise StagingPreflightError("site-bundle-manifest-identity-invalid")
     files = _manifest_files(manifest)
+    # A valid manifest alone is insufficient: a preview can serve correct
+    # config/catalog while substituting login HTML, JS or Surface assets.
+    # Verify all published files against the pinned CI inventory first.
+    for relative, record in sorted(files.items()):
+        if relative in ("config/public-site.json", "releases/catalog.json"):
+            continue  # Their JSON and raw bytes are checked separately below.
+        actual_digest, actual_size = fetch_asset(relative, record["size"])
+        _verify_published_file(relative, record, actual_digest, actual_size)
     config_status, config, config_digest, config_size = fetch_json("/config/public-site.json", MAX_CONFIG)
     _verify_published_file("config/public-site.json", files["config/public-site.json"],
                            config_digest, config_size)
@@ -214,6 +272,7 @@ def evaluate_gateway_contracts(
         "identity_mode": identity_mode,
         "catalog_status": checked["status"],
         "candidate_source_commit": expected_site_commit,
+        "verified_bundle_files": len(files),
         "authenticated_e2e": "NOT_TESTED",
         "publisher_attestation": "NOT_TESTED",
         "production_approval": False,
@@ -224,6 +283,7 @@ def run(staging_origin: str, expected_site_commit: str, expected_manifest_sha256
     origin = validate_staging_origin(staging_origin)
     return evaluate_gateway_contracts(
         lambda path, maximum: _fetch_json(origin, path, maximum),
+        lambda relative, size: _fetch_asset_digest(origin, relative, size),
         expected_site_commit=expected_site_commit,
         expected_manifest_sha256=expected_manifest_sha256,
     )
