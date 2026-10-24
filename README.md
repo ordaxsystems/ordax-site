@@ -121,3 +121,9 @@ Substitua o domínio do exemplo pelo host de staging autorizado. Extraia o commi
 **Situação inspecionada em 2026-10-24:** a conta Vercel OrdaX tinha `ordax-os-public` e `ordax-web`, mas nenhum projeto `ordax-site`; os previews existentes eram do legado `ordax-os` e protegidos por SSO, não evidência de deploy desta PR. Os últimos deployments de produção que o Vercel retornou para esses dois projetos estavam em `ERROR`. Não configurar ou reutilizar esses endereços como staging do Site sem preparar e autorizar um preview próprio. Nenhum deployment foi criado nesta etapa.
 
 Os testes `tests/test_staging_preflight.py` são executados no CI **sem rede**; um resultado `SITE_STAGING_PREFLIGHT=PASS` comprova exclusivamente que contratos anônimos foram servidos adequadamente, **não** que login, recuperação de senha, faturamento, publicação de releases ou cutover estejam prontos. Os gates completos continuam em `docs/HANDOFF.md`, `docs/ACCESSIBILITY-GATES.md` e nas PRs dos owners externos.
+
+## Regressão de segurança do catálogo público
+
+O catálogo público continua **vazio por padrão** enquanto o publisher de releases não fornecer publicação oficialmente atestada. O validador Python (`scripts/public_release_catalog.py`) exige que o catálogo distribuído mantenha os mesmos metadados, integridade e unicidade de IDs esperados da projeção do publicador. No navegador, `site/assets/site.js` rejeita o catálogo inteiro antes de montar links quando encontra inconsistências, mesmo quando o servidor respondeu HTTP 200.
+
+A suíte existente `scripts/browser_smoke.py` cobre três catálogos inválidos **apenas em loopback e em memória**: `empty` com releases, IDs de destino repetidos e travessia codificada em URL. O esperado é mensagem de erro e **zero links de downloads**, sem modificar o bundle nem inventar oferta/publicação. Isso não substitui atestação de publisher, staging homologado, teste E2E autenticado ou aprovação de produção.
