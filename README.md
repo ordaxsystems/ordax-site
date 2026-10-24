@@ -60,7 +60,7 @@ O CI exercita o **skip link via Tab+Enter**, leitura de nomes pela Accessibility
 
 ## Contrato do pacote público Surface — sem espelho
 
-O source editável do Site **não contém** `surface-snapshot.css`, `playground-fixture.json` ou a cópia redundante `surface-snapshot.json`. A demonstração Meridian é materializada da **prerelease Dev assinada pela Surface**, com commit Surface/OS, archive e manifesto SHA-256 fixados em `contracts/migration-artifact-lock.json`. O build valida o download, as entradas, o grafo de origem, as 11 telas e as dependências de CSS. O snapshot histórico da demonstração do OS foi excluído. O objeto `surface` já existe dentro da fixture; o JSON independente anterior era idêntico e foi eliminado.
+O source editável do Site **não contém** `surface-snapshot.css`, `playground-fixture.json` ou a cópia redundante `surface-snapshot.json`. A demonstração Meridian é materializada da **prerelease Dev assinada pela Surface**, com commits Surface/OS e SHA-256 do archive e manifesto fixados em `contracts/dev-artifact-lock.json`. O build valida o download, as entradas, o grafo de origem, as 11 telas e as dependências de CSS. O snapshot histórico da demonstração do OS foi excluído. O objeto `surface` já existe dentro da fixture; o JSON independente anterior era idêntico e foi eliminado.
 
 O CSS do renderer Meridian inclui uma fonte Inter fingerprintada. A etapa de build troca **somente no output** esse URL pelo recurso Inter existente no brand verificado e usa fingerprint dos bytes realmente publicados no CSS. Não regrava artefato de origem nem duplica a fonte no bundle.
 
@@ -68,15 +68,15 @@ A demo Dev usa a prerelease atestada [`meridian-dev-1ab73da4…`](https://github
 
 ## Manifestos pinados e lock único de desenvolvimento
 
-`contracts/migration-artifact-lock.json` é a **única fonte de hashes de confiança** das três entradas do build Dev (`brand`, `surface_preview`, `offers`). O CI usa `--migration-lock`; o builder recusa overrides de `--brand-dir`, `--surface-preview-dir` ou `--offers-dir` quando recebe esse lock, verifica sha256 do manifesto **antes** de aceitar qualquer declaração interna de identidade, formato, integridade ou status e confirma a mesma revisão histórica do `ordax-os` somente entre marca e ofertas. A demo usa pins multi-owner Surface+OS e assinatura verificada pelo CI.
+`contracts/dev-artifact-lock.json` é a **única fonte de pins do build Dev**, contendo somente `brand` e `surface_preview`, cada um proveniente de uma prerelease assinada do `ordax-surface`. O CI verifica SHA-256 dos archives e atestações vinculadas aos commits fixados; o builder usa `--dev-lock`, verifica o manifesto e a integridade dos artefatos extraídos. **Não há entrada `offers`**, snapshot comercial do OS nem permissão para preços ou contratação. A demonstração conserva a proveniência Surface/OS verificada.
 
-O lock tem status `development-only-not-authorized-for-production`: **a assinatura do preview não concede autorização de produção, Stable ou downloads**. As releases oficiais dos owners terão contrato e política de confiança independentes. O Site permanece candidato não publicado.
+O lock tem status `development-only-not-authorized-for-production`: **as assinaturas Dev não concedem autorização de produção, Stable ou downloads**. A publicação pública depende de aprovação separada dos owners; o Site Dev não autoriza contratos comerciais nem contas reais.
 
 ## Recursos CSS e erros de navegador
 
 O build independente é verificado contra **todas as referências CSS** (`url(...)` local e `@import`) e falha quando uma fonte ou imagem distribuída está ausente, quando uma URL sai da origem autorizada ou atravessa diretórios. Testes unitários provocam essas falhas. O Chrome observa exceções JavaScript/rejeições não tratadas desde o início da navegação e confirma ausência de recursos estáticos com status de erro (o backend de Identity propositalmente isolado continua respondendo 503). O favicon padrão de cada página é o símbolo OrdaX publicado pelo **brand verificado**, sem criar outro asset ou ícones redundantes. [CI navegador+smoke PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40048444731).
 
-Os checks são regressões técnicas; não substituem staging real, auditoria completa WCAG nem publicação oficial de marca/preview/ofertas.
+Os checks são regressões técnicas; não substituem prova HTTP externa, homologação Identity, auditoria completa WCAG nem autorização de produção.
 
 ## Fail-closed sem JavaScript e reflow de CSS (23/10/2026)
 
