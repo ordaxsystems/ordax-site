@@ -118,3 +118,10 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 
 - Para qualquer prova externa do Site, o manifesto de build verificado no CI confiável é a âncora obrigatória. O pré-flight **não** pode limitar a conferência a `config/public-site.json` e `releases/catalog.json`: deve comprovar hash SHA-256 e tamanho dos **demais arquivos inventariados**, incluindo HTML das rotas, JS, CSS e fixture pública, antes de consultar `/auth/session`. Rotas `*/index.html` são solicitadas como `*/`; rejeitar redirects, diferenças de bytes e inventário ambíguo. Não converter teste de unidade em prova de staging executado.
 - Não criar novos espelhos nem publicar o pacote de migração em produção para obter um URL de teste. O preview independente e a autoridade Identity continuam pertencendo ao owner de deployment, com a aprovação e os controles de acesso necessários.
+
+
+## Catálogo distribuído rejeitado integralmente (2026-10-24)
+
+- `public_release_catalog.render_catalog` e `validate_catalog` devem conservar paridade dos campos de release/target/compliance, unicidade dos IDs e caminhos literais seguros; o browser `site/assets/site.js` é uma defesa adicional, não um segundo publicador. `status=empty` deve conter zero releases, e qualquer inconsistência deve **impedir todos os links**, sem renderizar parcialmente uma lista inválida.
+- Preservar os três testes negativos **dentro** de `scripts/browser_smoke.py` via resposta de catálogo sobrescrita apenas no servidor local de prova; nenhuma alteração em `out/site`, manifestos, fixtures da Surface ou catálogo real. Não tratar a projeção sintética de teste como release autorizada.
+- A política atual de `ordax-os/docs/contracts/public-site-deployment.json` não autoriza Identity em preview; obter aprovação expressa do owner antes de qualquer integração de gateway a staging. Não mudar Vercel, DNS, autenticação, assinatura ou produção nesta branch.
