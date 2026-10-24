@@ -48,6 +48,33 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b'{"error":"service-unavailable"}')
 
     def do_GET(self):
+        # Identity JSON attacks are local to this browser proof: a 200 with
+        # JSON bytes is not enough if MIME or the byte budget is wrong.
+        json_attack = getattr(self.server, "auth_json_attack_for_test", None)
+        if self.path == "/auth/session" and json_attack:
+            payload = {
+                "$schema": "prototype-ordax.public-identity-session/1",
+                "provider": "supabase", "status": "authenticated",
+                "authenticated": True, "subject": "synthetic-json-attack",
+                "email": "untrusted-json@example.test",
+            }
+            if json_attack == "oversized":
+                payload["padding"] = "x" * 270000
+            content = json.dumps(payload).encode("utf-8")
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain" if json_attack == "wrong-mime"
+                                 else "application/json")
+                self.send_header("Cache-Control", "no-store")
+                # Omitting Content-Length in the oversized case proves the
+                # actual streaming cap, not merely a header-size rejection.
+                if json_attack != "oversized":
+                    self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         # Delayed old anonymous response vs. immediate new unavailability:
         # page revalidation must not resurrect a stale Identity form.
         if self.path == "/auth/session" and getattr(self.server, "auth_session_race_for_test", False):
@@ -718,6 +745,7 @@ def run(root: Path, evidence: Path) -> dict:
     server.catalog_override = None
     server.manifest_override = None
     server.auth_session_redirect_for_test = False
+    server.auth_json_attack_for_test = None
     server.auth_session_race_for_test = False
     server.auth_race_requests = 0
     server.auth_race_lock = threading.Lock()
@@ -734,6 +762,7 @@ def run(root: Path, evidence: Path) -> dict:
     no_script_results = []
     catalog_failure_results = []
     redirect_identity_results = []
+    json_contract_results = []
     identity_race_results = []
     failures = []
     try:
@@ -1031,30 +1060,36 @@ def run(root: Path, evidence: Path) -> dict:
         # A redirected 200 with plausible authenticated JSON must not grant
         # even a verified *visual* account state. Test at the existing browser
         # entry point rather than introducing a second Identity simulator.
-        server.auth_session_redirect_for_test = True
-        try:
-            driver.navigate(f"http://127.0.0.1:{server.server_port}/conta/")
-            report = {}
-            for _ in range(45):
-                report = driver.run("""return (() => {
-                  const panel = document.getElementById('account-session');
-                  return {
-                    status: panel?.dataset?.status || null,
-                    hasAttackerEmail: document.body.textContent.includes('redirect-attacker@example.test'),
-                    hasVerifiedEmail: [...document.querySelectorAll('.verified-email')].some(node => node.textContent.includes('redirect-attacker@example.test')),
-                    errors: window.__ordaxPageErrors || []
-                  };
-                })();""")
-                if report["status"] == "unavailable":
-                    break
-                time.sleep(0.1)
-            report["scenario"] = "redirected-authenticated-session"
-            redirect_identity_results.append(report)
-            if report["status"] != "unavailable" or report["hasAttackerEmail"] or report["hasVerifiedEmail"] or report["errors"]:
-                failures.append({"route": "/conta/", "viewport": "redirected-identity",
-                                 "rule": "session-cannot-follow-redirect", "summary": report})
-        finally:
-            server.auth_session_redirect_for_test = False
+        for scenario in ("redirect", "oversized", "wrong-mime"):
+            server.auth_session_redirect_for_test = scenario == "redirect"
+            server.auth_json_attack_for_test = scenario if scenario != "redirect" else None
+            try:
+                driver.navigate(f"http://127.0.0.1:{server.server_port}/conta/")
+                report = {}
+                for _ in range(45):
+                    report = driver.run("""return (() => {
+                      const panel = document.getElementById('account-session');
+                      const poisoned = ['redirect-attacker@example.test', 'untrusted-json@example.test'];
+                      const hasPoison = text => poisoned.some(email => text.includes(email));
+                      return {
+                        status: panel?.dataset?.status || null,
+                        hasAttackerEmail: hasPoison(document.body.textContent),
+                        hasVerifiedEmail: [...document.querySelectorAll('.verified-email')]
+                          .some(node => hasPoison(node.textContent)),
+                        errors: window.__ordaxPageErrors || []
+                      };
+                    })();""")
+                    if report["status"] == "unavailable":
+                        break
+                    time.sleep(0.1)
+                report["scenario"] = scenario
+                (redirect_identity_results if scenario == "redirect" else json_contract_results).append(report)
+                if report["status"] != "unavailable" or report["hasAttackerEmail"] or report["hasVerifiedEmail"] or report["errors"]:
+                    failures.append({"route": "/conta/", "viewport": "untrusted-identity-json",
+                                     "rule": "reject-" + scenario, "summary": report})
+            finally:
+                server.auth_session_redirect_for_test = False
+                server.auth_json_attack_for_test = None
         # The old /auth/session GET deliberately returns after a newer refresh
         # has failed. The older 200 must not reactivate a login form even for
         # a moment after the 503 was accepted by the current generation.
@@ -1145,6 +1180,7 @@ def run(root: Path, evidence: Path) -> dict:
                   "noScriptChecks": len(no_script_results),
                   "catalogFailureChecks": len(catalog_failure_results),
                   "redirectIdentityChecks": len(redirect_identity_results),
+                  "jsonContractChecks": len(json_contract_results),
                   "identityRaceChecks": len(identity_race_results),
                   "failures": failures, "results": results,
                   "reflowResults": reflow_results, "textEnlargementResults": text_enlargement_results,
@@ -1152,6 +1188,7 @@ def run(root: Path, evidence: Path) -> dict:
                   "noScriptResults": no_script_results,
                   "catalogFailureResults": catalog_failure_results,
                   "redirectIdentityResults": redirect_identity_results,
+                  "jsonContractResults": json_contract_results,
                   "identityRaceResults": identity_race_results}
         (evidence / "report.json").write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if failures:
@@ -1197,7 +1234,7 @@ def main():
     parser.add_argument("--evidence", default="out/browser-evidence")
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} identityRace={output['identityRaceChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']}")
 
 
 if __name__ == "__main__":
