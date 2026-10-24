@@ -1128,3 +1128,13 @@ a {
   html { scroll-behavior: auto; }
   .skip-link, .button { transition: none; }
 }
+
+/* Keep the keyboard escape hatch visibly identifiable when the OS forces its
+   high-contrast palette. System colors, not authored RGB, own this outline. */
+@media (forced-colors: active) {
+  .skip-link:focus {
+    transform: none;
+    outline: 2px solid Highlight;
+    outline-offset: 3px;
+  }
+}
