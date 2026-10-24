@@ -47,6 +47,11 @@ def render_html(source: str, route: dict, origin: str) -> str:
         if robots and "noindex" not in robots.group(1).lower():
             raise ValueError("gated/unavailable route has incompatible robots policy")
         snippet = "" if robots else '  <meta name="robots" content="noindex, nofollow">'
+    # Brand symbol comes from the verified brand artifact. Without a favicon,
+    # Chrome falls back to GET /favicon.ico, producing a real 404 even when all
+    # explicitly linked scripts/styles/images are valid.
+    if not re.search(r'<link[^>]+\brel=["\'](?:shortcut )?icon["\']', source, re.I):
+        snippet += ('\n' if snippet else '') + '  <link rel="icon" href="/assets/ordax-symbol.png" type="image/png">'
     return source.replace("</head>", snippet + "\n</head>" if snippet else "</head>")
 
 
