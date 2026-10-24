@@ -1,7 +1,7 @@
 name: Site Candidate — isolated
 on:
   push:
-    branches: [main, feat/site-independent-extraction]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -18,6 +18,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          # PR merge refs are synthetic. Candidate receipts must identify the
+          # exact real Git commit compiled, not an ephemeral merge revision.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Assert exact candidate source revision
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
       - name: Compile Python tools
         run: python3 -m compileall -q scripts tests
       - name: Audit independent presentation and assets
@@ -29,11 +36,14 @@ jobs:
       - name: Build standalone static candidate
         run: |
           python3 scripts/build.py build \
-            --source-commit "${{ github.sha }}" \
+            --source-commit "$(git rev-parse HEAD)" \
             --migration-lock contracts/migration-artifact-lock.json \
             --public-origin https://ordax.com.br \
             --out out/site
           python3 scripts/build.py verify --out out/site
+          test "$(python3 -c 'import json; print(json.load(open("out/site/public-site-manifest.json"))["source_commit"])')" = "$(git rev-parse HEAD)"
+          echo "SITE_CANDIDATE_SOURCE_COMMIT=$(git rev-parse HEAD)"
+          echo "SITE_CANDIDATE_MANIFEST_SHA256=$(sha256sum out/site/public-site-manifest.json | cut -d ' ' -f1)"
       - name: Verify all built routes and fail-closed default states
         run: python3 scripts/smoke_static.py --out out/site
       - name: Browser proof on Chrome (local-only, offline APIs)
