@@ -48,6 +48,51 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b'{"error":"service-unavailable"}')
 
     def do_GET(self):
+        # Three synthetic sessions share an email but differ in identity.
+        # Usage A (91) is shown, B (44) is delayed, and C (7) must replace
+        # both. Only the loopback proof serves these read-only fixtures.
+        if getattr(self.server, "same_email_usage_test", False) and self.path in (
+                "/auth/session", "/account/usage/mcp"):
+            with self.server.same_email_lock:
+                if self.path == "/auth/session":
+                    self.server.same_email_session_requests += 1
+                    attempt = self.server.same_email_session_requests
+                else:
+                    self.server.same_email_usage_requests += 1
+                    attempt = self.server.same_email_usage_requests
+            if self.path == "/auth/session":
+                payload = {
+                    "$schema": "prototype-ordax.public-identity-session/1",
+                    "provider": "supabase", "status": "authenticated",
+                    "authenticated": True, "subject": "synthetic-owner-" + str(attempt),
+                    "email": "same-email@example.test",
+                }
+            else:
+                if attempt == 2:
+                    time.sleep(1.05)
+                count = {1: 91, 2: 44, 3: 7}.get(attempt, 0)
+                payload = {
+                    "ok": True, "schema": "ordax.product-mcp-usage/1",
+                    "billable": False, "observed_only": True,
+                    "coverage": "partial_observational",
+                    "collection_active_now": True,
+                    "quota": None, "charge": None,
+                    "current_month": "2026-10-01",
+                    "previous_month": "2026-09-01",
+                    "entries": [{"month": "2026-10-01", "tool_name": "local_test",
+                                 "tool_calls": count}],
+                }
+            content = json.dumps(payload).encode("utf-8")
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         # Identity JSON attacks are local to this browser proof: a 200 with
         # JSON bytes is not enough if MIME or the byte budget is wrong.
         json_attack = getattr(self.server, "auth_json_attack_for_test", None)
@@ -749,6 +794,10 @@ def run(root: Path, evidence: Path) -> dict:
     server.auth_session_race_for_test = False
     server.auth_race_requests = 0
     server.auth_race_lock = threading.Lock()
+    server.same_email_usage_test = False
+    server.same_email_session_requests = 0
+    server.same_email_usage_requests = 0
+    server.same_email_lock = threading.Lock()
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     webdriver_port = free_port()
@@ -764,6 +813,7 @@ def run(root: Path, evidence: Path) -> dict:
     redirect_identity_results = []
     json_contract_results = []
     identity_race_results = []
+    same_email_usage_results = []
     failures = []
     try:
         for _ in range(100):
@@ -1139,6 +1189,67 @@ def run(root: Path, evidence: Path) -> dict:
                                      "rule": "old-session-result-reactivated-form", "summary": report})
         finally:
             server.auth_session_race_for_test = False
+        # Changing verified session with the SAME email must clear usage A
+        # instantly; an older B request may never override the newer C data.
+        server.same_email_usage_test = True
+        with server.same_email_lock:
+            server.same_email_session_requests = 0
+            server.same_email_usage_requests = 0
+        try:
+            driver.navigate(f"http://127.0.0.1:{server.server_port}/conta/#consumo")
+            def usage_probe():
+                return driver.run("""return (() => ({
+                  session: document.getElementById('account-session')?.dataset?.status,
+                  measurement: document.querySelector('.usage-mcp-panel .billing-large')?.textContent?.trim() || '',
+                  email: document.querySelector('#account-session .session-email')?.textContent || '',
+                  errors: window.__ordaxPageErrors || []
+                }))();""")
+            initial = {}
+            for _ in range(60):
+                initial = usage_probe()
+                if initial["measurement"] == "91":
+                    break
+                time.sleep(0.1)
+            if initial.get("measurement") != "91":
+                failures.append({"route": "/conta/#consumo", "viewport": "same-email-usage",
+                                 "rule": "first-observed-session-not-loaded", "summary": initial})
+            else:
+                driver.run("""void window.OrdaXPublicAccount.refreshSession(); return true;""")
+                cleared = usage_probe()
+                for _ in range(40):
+                    with server.same_email_lock:
+                        b_started = server.same_email_usage_requests >= 2
+                    if b_started:
+                        break
+                    time.sleep(0.05)
+                driver.run("""void window.OrdaXPublicAccount.refreshSession(); return true;""")
+                final = {}
+                for _ in range(50):
+                    final = usage_probe()
+                    if final["measurement"] == "7":
+                        break
+                    time.sleep(0.1)
+                time.sleep(1.2)  # Delayed B (44) must not replace current C (7).
+                after_delayed = usage_probe()
+                with server.same_email_lock:
+                    counts = (server.same_email_session_requests,
+                              server.same_email_usage_requests)
+                report = {"scenario": "same-email-different-sessions",
+                          "initial": initial, "afterRefresh": cleared,
+                          "afterCurrent": final, "afterDelayedOldResponse": after_delayed,
+                          "sessionAndUsageRequests": counts}
+                same_email_usage_results.append(report)
+                if (not b_started or counts[0] < 3 or counts[1] < 3
+                    or cleared["measurement"] == "91"
+                    or final["measurement"] != "7"
+                    or after_delayed["measurement"] != "7"
+                    or after_delayed["email"] != "same-email@example.test"
+                    or after_delayed["session"] != "authenticated"
+                    or after_delayed["errors"]):
+                    failures.append({"route": "/conta/#consumo", "viewport": "same-email-usage",
+                                     "rule": "session-usage-cache-crossed-boundary", "summary": report})
+        finally:
+            server.same_email_usage_test = False
         # Restore the default language to keep the no-JavaScript checks independent.
         driver.run("""localStorage.setItem('ordax.public.locale', 'pt-BR'); return true;""")
         # Verify that disabling JavaScript at document parse time cannot
@@ -1182,6 +1293,7 @@ def run(root: Path, evidence: Path) -> dict:
                   "redirectIdentityChecks": len(redirect_identity_results),
                   "jsonContractChecks": len(json_contract_results),
                   "identityRaceChecks": len(identity_race_results),
+                  "sameEmailUsageChecks": len(same_email_usage_results),
                   "failures": failures, "results": results,
                   "reflowResults": reflow_results, "textEnlargementResults": text_enlargement_results,
                   "textSpacingResults": text_spacing_results,
@@ -1189,7 +1301,8 @@ def run(root: Path, evidence: Path) -> dict:
                   "catalogFailureResults": catalog_failure_results,
                   "redirectIdentityResults": redirect_identity_results,
                   "jsonContractResults": json_contract_results,
-                  "identityRaceResults": identity_race_results}
+                  "identityRaceResults": identity_race_results,
+                  "sameEmailUsageResults": same_email_usage_results}
         (evidence / "report.json").write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if failures:
             raise BrowserProofError(f"{len(failures)} browser checks failed; see report.json; "
@@ -1234,7 +1347,7 @@ def main():
     parser.add_argument("--evidence", default="out/browser-evidence")
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']}")
 
 
 if __name__ == "__main__":
