@@ -408,6 +408,18 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn('document.getElementById("account-session").innerHTML', runtime)
         self.assertIn('document.getElementById("account-content").innerHTML', runtime)
 
+    def test_ci_candidate_comes_from_real_git_revision_once_per_pr(self):
+        # Avoid building two different candidates for the same PR revision:
+        # Actions defaults to an ephemeral merge SHA on pull_request events.
+        workflow = (ROOT / ".github/workflows/site-source.yml").read_text("utf-8")
+        self.assertIn("branches: [main]", workflow)
+        self.assertNotIn("branches: [main, feat/site-independent-extraction]", workflow)
+        self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", workflow)
+        self.assertIn("persist-credentials: false", workflow)
+        self.assertIn('--source-commit "$(git rev-parse HEAD)"', workflow)
+        self.assertIn("SITE_CANDIDATE_SOURCE_COMMIT=", workflow)
+        self.assertIn("SITE_CANDIDATE_MANIFEST_SHA256=", workflow)
+
     def test_site_is_not_native_web_surface(self):
         paths = (ROOT / "site").rglob("*")
         self.assertFalse(any("node_modules" in x.parts or ".env.production" in x.parts for x in paths))
