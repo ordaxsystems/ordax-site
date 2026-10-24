@@ -239,19 +239,28 @@
     return turnstileLoader;
   }
 
-  async function armTurnstile(form, sitekey) {
+  let activeTurnstile = null;
+  function removeTurnstile() {
+    if (!activeTurnstile) return;
+    const { runtime, widget } = activeTurnstile;
+    activeTurnstile = null;
+    try { runtime.remove?.(widget); } catch { /* Already detached. */ }
+  }
+
+  async function armTurnstile(form, sitekey, isCurrent) {
     const host = form.querySelector("[data-turnstile]");
     const submit = form.querySelector('button[type="submit"]');
     if (!host || !submit || !validTurnstileSitekey(sitekey)) return false;
     submit.disabled = true;
     try {
       const runtime = await loadTurnstileRuntime();
-      runtime.render(host, {
+      if (!isCurrent()) return false;
+      const widget = runtime.render(host, {
         sitekey,
         action: TURNSTILE_ACTION,
         theme: "auto",
         callback(token) {
-          submit.disabled = typeof token !== "string" || token.length < 1;
+          submit.disabled = !isCurrent() || typeof token !== "string" || token.length < 1;
         },
         "expired-callback"() {
           submit.disabled = true;
@@ -260,6 +269,7 @@
           submit.disabled = true;
         },
       });
+      activeTurnstile = { runtime, widget };
       return true;
     } catch {
       submit.disabled = true;
@@ -677,10 +687,12 @@
     }
   }
 
-  async function renderIdentity(config) {
+  async function renderIdentity(config, generation) {
     const state = document.querySelector("[data-identity-state]");
     const form = document.querySelector("[data-identity-form]");
     if (!state || !form) return;
+    const sessionAtStart = sessionRevision;
+    const isCurrent = () => generation === startRevision && sessionAtStart === sessionRevision;
 
     const kind = form.dataset.identityForm;
     // Explicit, local-only presentation mode. Render the SAME native form,
@@ -733,17 +745,22 @@
         // The server is authoritative: a static configuration alone cannot
         // enable forms when the public identity gateway is unavailable.
         available = !!(await verifiedIdentitySession());
+        if (!isCurrent()) return;
       } catch {
+        if (!isCurrent()) return;
         available = false;
       }
     }
     if (available && kind === "register") {
       try {
         const policy = await loadJson("/auth/registration-policy");
-        available = (await verifyPublishedRegistrationDocuments(policy))
-          && renderRegistrationPolicy(form, policy);
+        if (!isCurrent()) return;
+        const verified = await verifyPublishedRegistrationDocuments(policy);
+        if (!isCurrent()) return;
+        available = verified && renderRegistrationPolicy(form, policy);
         if (!available) renderRegistrationPolicy(form, null);
       } catch {
+        if (!isCurrent()) return;
         available = false;
         renderRegistrationPolicy(form, null);
       }
@@ -756,13 +773,15 @@
       available = false;
     }
 
+    if (!isCurrent()) return;
     const controls = form.querySelectorAll("input, button");
     if (available) {
       form.action = target;
       form.hidden = false;
       for (const control of controls) control.disabled = false;
       if (TURNSTILE_PROTECTED_KINDS.has(kind)) {
-        available = await armTurnstile(form, config.identity.turnstile_sitekey);
+        available = await armTurnstile(form, config.identity.turnstile_sitekey, isCurrent);
+        if (!isCurrent()) return;
       }
     }
     if (!available) {
@@ -1133,6 +1152,23 @@
   let startRevision = 0;
   async function start() {
     const generation = ++startRevision;
+    // A second locale/session check revokes any previous form or challenge
+    // synchronously, before waiting for the config or the Identity gateway.
+    const identityForm = document.querySelector("[data-identity-form]");
+    if (identityForm && !isIdentityLayoutPreview()) {
+      removeTurnstile();
+      identityForm.removeAttribute("action");
+      identityForm.hidden = true;
+      for (const control of identityForm.querySelectorAll("input, button")) {
+        control.disabled = true;
+      }
+      document.body.dataset.identityReady = "false";
+      const state = document.querySelector("[data-identity-state]");
+      if (state) {
+        state.dataset.status = "checking";
+        state.setAttribute("aria-busy", "true");
+      }
+    }
     const webLaunch = document.querySelector("[data-web-launch]");
     if (webLaunch) {
       webLaunch.hidden = true;
@@ -1168,7 +1204,7 @@
       || page === "recuperar"
       || page === "recuperar-nova-senha"
     ) {
-      await renderIdentity(config);
+      await renderIdentity(config, generation);
     }
   }
 
@@ -1205,6 +1241,7 @@
 
   window.addEventListener("pagehide", () => {
     invalidateIdentitySession();
+    removeTurnstile();
     disposeProfileMenu();
     disposeProfileMenu = () => {};
   });
