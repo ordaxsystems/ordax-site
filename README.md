@@ -160,3 +160,7 @@ A Conta reutiliza esse transporte por `OrdaXPublicAccount.readMcpUsage`, sem imp
 ## Fragmentos antigos de autenticação no login
 
 O shell em `/login/` descarta sincronicamente qualquer fragmento de URL legado antes de consultar configuração ou Identity. Isso protege o endereço de tokens de redirecionamentos hospedados antigos sem tentar trocá-los ou persistir credenciais no Site; a navegação continua no mesmo pathname/query. A suíte Chrome retém artificialmente a resposta de configuração em loopback e exige que o fragmento já tenha desaparecido (`fragmentScrub=1`). Os protocolos reais de autenticação permanecem responsabilidade do owner Identity/OS, com staging ainda não autorizado (ADR-030).
+
+## Documentos legais: prova positiva de integridade
+
+O gate de cadastro verifica as páginas imutáveis de Privacidade e Termos com URL canônica, MIME HTML, limite de 2 MiB e SHA-256 do contrato legal. O CI agora executa `node tests/test_legal_documents.mjs` sobre a função **real** do Site em VM isolado: aceita documentos íntegros com `Content-Length` numérico ou ausente e rejeita adulteração, redirecionamento, tamanho excessivo e política não habilitada. O teste não publica documentos sintéticos nem ativa cadastro. Consulte ADR-031.
