@@ -42,7 +42,7 @@ python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence
 
 O diretório `brand-dir` deve conter `manifest.json` com `artifact_class=ordax-brand`, `source_commit` e registros `path,size,sha256` para os recursos públicos oficiais. O site jamais recompila a Surface. O `offers-dir` contém **apenas HTML derivado para apresentação**, com manifesto SHA-256, fonte pinada, contratação e alocação de cotas desativadas. Nenhum contrato de entitlements foi copiado; ambos snapshots de migração exigem futura substituição por publicação oficial.
 
-O catálogo público de downloads **permanece vazio**. O builder **rejeita** qualquer `--publications` local: campos declaratórios como `public_authorized=true` não são prova criptográfica da publicação pelo owner. Esse gate somente pode ser aberto depois de integração com um pacote oficial atestado, revisionado e pinado. Formulários e Conta dependem de gateway `same-origin`; recuperação/billing não são habilitados por UI.
+O catálogo público de downloads **permanece vazio**. O builder **rejeita** qualquer `--publications` local: campos declaratórios como `public_authorized=true` não são prova criptográfica da publicação pelo owner. A verificação do bundle e a interface **rejeitam também `ready` com manifesto autoconsistente**, pois o próprio host pode forjar catálogo, hashes e recibos; nenhum deles equivale a uma atestação independente. Esse gate somente pode ser aberto depois de integração com um pacote oficial atestado, revisionado e pinado pelo responsável pelas releases. Formulários e Conta dependem de gateway `same-origin`; recuperação/billing não são habilitados por UI.
 
 ## Próximos passos e estado preciso
 
