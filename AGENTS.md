@@ -26,7 +26,7 @@ Este repositório é o **owner do código de apresentação do site público** a
 Branch -> auditoria de diffs e conflitos -> testes de rotas/i18n/segurança -> pacote com provenance SHA-256 -> CI -> PR review -> cutover OS só depois de prova de paridade -> publicação sob autorização separada. Registrar atualizações em `docs/HANDOFF.md`.
 
 ## Status
-O **código e o build independentes já estão integrados à `main`**, com consumo Dev da demonstração Meridian (`ordax-site#2`) e configuração de projeto Dev isolado. O repoint dos builds do OS foi integrado em `ordax-os#2225` e a remoção da apresentação histórica foi integrada em `ordax-os#2229`. Faltam publicação oficial de Surface/Platform, testes completos de acessibilidade e Identity em staging e autorização própria para produção. Os gates Dev não substituem essas provas.
+O **cutover de código e artefatos Dev está integrado à `main`**. Surface #13/#14 publica Meridian e marca em prereleases Dev assinadas, Site #10 consome ambas sem snapshots históricos e OS #2238 verifica portal/login Web. Permanecem independentes os gates de acessibilidade manual, staging Identity, catálogo oficial de releases/comércio e produção. A situação operacional fica em [HANDOFF.md](docs/HANDOFF.md).
 
 
 ## Gates de implementação atualmente verificados
@@ -34,7 +34,7 @@ O **código e o build independentes já estão integrados à `main`**, com consu
 - Landing: somente `site/assets/playground-fixture.json`; proibido recolocar fixture inline como segundo estado.
 - `contracts/site-routes.json`: único catálogo de rotas do Site; robots, sitemap e testes o consomem.
 - `--public-origin` deve ser fornecido pelo owner de deployment (OS/Platform); nunca mover DNS ou aceitar origem definida pelo browser.
-- A PR concorrente [ordax-os#2198](https://github.com/ordaxsystems/ordax-os/pull/2198) envolve remoção de fonte visual. O Site ainda requer material oficial versionado e não autoriza o cutover por essa PR.
+- Não reabrir migração Dev nem restaurar diretórios `sites/public`, `artifacts/` do Site ou contratos de migração descontinuados para contornar falhas.
 
 
 - A prova Chrome deve manter `main#conteudo` programaticamente focável, skip link acionável por teclado, nomes na árvore AX, `img[alt]` e troca real PT/EN. [Teclado+AX PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042024846), [locale E2E PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042154013).
@@ -42,10 +42,10 @@ O **código e o build independentes já estão integrados à `main`**, com consu
 
 ## Publicação Surface — contrato de consumo
 
-- Fixture e CSS gerados **não** pertencem a `site/assets`; sua única entrada é `--surface-preview-dir`, acompanhada de `--surface-preview-manifest-sha256` pinado. O bundle materializa os arquivos após verificar proveniência e integridade.
+- Fixture/CSS Meridian e arquivos de marca não pertencem ao source editável do Site: o build padrão exige `--dev-lock contracts/dev-artifact-lock.json`, baixa ambas as prereleases assinadas da Surface e materializa seus arquivos somente depois das provas de proveniência e integridade.
 - Sem arquivo `surface-snapshot.json` distribuído duplicando `fixture.surface`. O preview source é imutável e a eventual correção de URL de fonte ocorre **apenas na saída de build** com fingerprint recalculado.
 - O preview Dev usa a prerelease Surface `meridian-dev-1ab73da4…`, com digests e commits Surface/OS fixados no lock. O snapshot de migração antigo foi excluído; não recriar cópia no Site/OS. Não alterar o status para `official` sem verificação real do publisher.
-- Os gates públicos de marca e demais distribuições permanecem em [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). Até essa entrega, a **publicação em produção** continua bloqueada; o cutover de código e build no ambiente Dev é independente desse gate.
+- O pacote Dev solicitado na [Surface #3](https://github.com/ordaxsystems/ordax-surface/issues/3) já foi entregue pelas PRs #13/#14. Lançamento, DNS, Identity, releases públicas e billing ainda requerem gates dos respectivos owners.
 
 ## Lock SSOT de insumos externos e segurança de releases
 
