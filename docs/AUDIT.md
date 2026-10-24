@@ -1,3 +1,5 @@
+> **Atualização Dev 2026-10-24:** os achados de snapshots abaixo são históricos. `ordax-site` não mantém mais pacotes OS de demo, marca ou ofertas; o source visual e as duas releases Dev assinadas pertencem à Surface. O estado comercial é não disponível. Consulte `contracts/dev-artifact-lock.json` e o `README.md` atual para execução.
+
 # Auditoria de extração — baseline 2026-10-23
 
 ## Inventário e proveniência

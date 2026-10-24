@@ -14,9 +14,9 @@ from site_routes import load_routes
 from site_seo import validate_origin, render_html
 from smoke_static import check_css_dependencies
 
-MIGRATION_LOCK = build.load_migration_lock(ROOT / "contracts/migration-artifact-lock.json")
-BRAND_PIN = MIGRATION_LOCK["brand"]["manifest_sha256"]
-PREVIEW_PIN = MIGRATION_LOCK["surface_preview"]["manifest_sha256"]
+DEV_LOCK = build.load_dev_artifact_lock(ROOT / "contracts/dev-artifact-lock.json")
+BRAND_PIN = DEV_LOCK["brand"]["manifest_sha256"]
+PREVIEW_PIN = DEV_LOCK["surface_preview"]["manifest_sha256"]
 
 class SiteContractTests(unittest.TestCase):
     def test_owner_and_routes(self):
@@ -54,49 +54,30 @@ class SiteContractTests(unittest.TestCase):
                 build.stage_brand(Path(tmp), Path(tmp) / "nonexistent", BRAND_PIN)
         self.assertNotIn("system/surface/", (ROOT / "scripts/build.py").read_text().split("def stage_brand(")[1].split("def build(")[0])
 
-    def test_migration_lock_is_single_source_and_rejects_override(self):
-        self.assertEqual(set(MIGRATION_LOCK), {"brand", "surface_preview"})
-        self.assertEqual(MIGRATION_LOCK["brand"]["directory"],
-                         ROOT / "artifacts/brand/os-migration-70b0f7eb")
+    def test_development_lock_accepts_only_owner_releases(self):
+        self.assertEqual(set(DEV_LOCK), {"brand", "surface_preview"})
+        pin = DEV_LOCK["brand"]["release"]
+        self.assertEqual(pin["source_repository"], "ordaxsystems/ordax-surface")
+        self.assertEqual(pin["release_tag"], "brand-dev-" + pin["source_commit"])
+        self.assertRegex(pin["archive_sha256"], r"^[0-9a-f]{64}$")
+        self.assertEqual(pin["manifest_sha256"], BRAND_PIN)
+        self.assertFalse((ROOT / "artifacts/brand/os-migration-70b0f7eb").exists())
         with tempfile.TemporaryDirectory() as tmp:
-            forged_path = Path(tmp) / "migration.json"
-            original = json.loads((ROOT / "contracts/migration-artifact-lock.json").read_text("utf-8"))
+            path = Path(tmp) / "fake.json"
+            original = json.loads((ROOT / "contracts/dev-artifact-lock.json").read_text("utf-8"))
             original["status"] = "official"
-            forged_path.write_text(json.dumps(original), encoding="utf-8")
+            path.write_text(json.dumps(original), encoding="utf-8")
             with self.assertRaisesRegex(build.SiteError, "lock"):
-                build.load_migration_lock(forged_path)
-            original["status"] = build.MIGRATION_STATUS
-            original["artifacts"]["brand"]["directory"] = "../../secrets"
-            forged_path.write_text(json.dumps(original), encoding="utf-8")
-            with self.assertRaisesRegex(build.SiteError, "lock"):
-                build.load_migration_lock(forged_path)
-
-    def test_all_migration_inputs_need_independent_hash_pins(self):
-        brand = ROOT / "artifacts/brand/os-migration-70b0f7eb"
-        self.assertEqual(build.digest((brand / "manifest.json").read_bytes()), BRAND_PIN)
-        with tempfile.TemporaryDirectory() as tmp:
-            stage = Path(tmp) / "stage"
-            stage.mkdir()
-            receipt = build.stage_brand(stage, brand, BRAND_PIN)
-            self.assertEqual(receipt["manifest_sha256"], BRAND_PIN)
-            with self.assertRaisesRegex(build.SiteError, "pin"):
-                build.stage_brand(stage, brand, None)
-            with self.assertRaisesRegex(build.SiteError, "pin"):
-                build.stage_brand(stage, brand, "0" * 64)
-
-            # Tamper with payload and rewrite *self-declared* hash in manifest:
-            # the independent pin still rejects the malicious new manifest.
-            modified = Path(tmp) / "brand-forged"
-            shutil.copytree(brand, modified)
-            forged = json.loads((modified / "manifest.json").read_text("utf-8"))
-            forged["status"] = "official-surface-release"
-            (modified / "manifest.json").write_text(json.dumps(forged), encoding="utf-8")
-            with self.assertRaisesRegex(build.SiteError, "pin"):
-                build.stage_brand(stage, modified, BRAND_PIN)
+                build.load_dev_artifact_lock(path)
+            original["status"] = build.DEV_ARTIFACT_STATUS
+            original["artifacts"]["brand"]["release"]["release_tag"] = "brand-dev-main"
+            path.write_text(json.dumps(original), encoding="utf-8")
+            with self.assertRaisesRegex(build.SiteError, "signed Dev release"):
+                build.load_dev_artifact_lock(path)
 
     def test_site_inactive_plans_do_not_duplicate_os_entitlements(self):
         self.assertFalse((ROOT / "artifacts/offers/os-migration-70b0f7eb").exists())
-        self.assertNotIn("offers", MIGRATION_LOCK)
+        self.assertNotIn("offers", DEV_LOCK)
         self.assertIn("Planos em preparação", build.INACTIVE_PLANS_HTML)
         self.assertIn("contratação indisponível", build.INACTIVE_PLANS_HTML)
         self.assertNotIn("commercial-plan", build.INACTIVE_PLANS_HTML)
@@ -344,7 +325,7 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn("for (const nestedMain of screen.querySelectorAll('main'))", controller)
 
     def test_surface_preview_is_one_pinned_external_release_without_legacy_copy(self):
-        pin = MIGRATION_LOCK["surface_preview"]["release"]
+        pin = DEV_LOCK["surface_preview"]["release"]
         self.assertEqual(pin["source_repository"], "ordaxsystems/ordax-surface")
         self.assertEqual(pin["release_tag"], "meridian-dev-" + pin["source_commit"])
         self.assertEqual(pin["manifest_sha256"], PREVIEW_PIN)
@@ -355,11 +336,11 @@ class SiteContractTests(unittest.TestCase):
         self.assertFalse((ROOT / "site/assets/surface-snapshot.json").exists())
         with tempfile.TemporaryDirectory() as tmp:
             fake = Path(tmp) / "forged-lock.json"
-            lock = json.loads((ROOT / "contracts/migration-artifact-lock.json").read_text("utf-8"))
+            lock = json.loads((ROOT / "contracts/dev-artifact-lock.json").read_text("utf-8"))
             lock["artifacts"]["surface_preview"]["release"]["release_tag"] = "meridian-dev-main"
             fake.write_text(json.dumps(lock), encoding="utf-8")
-            with self.assertRaisesRegex(build.SiteError, "Surface Dev release lock"):
-                build.load_migration_lock(fake)
+            with self.assertRaisesRegex(build.SiteError, "invalid signed Dev release lock"):
+                build.load_dev_artifact_lock(fake)
 
     def test_verified_surface_images_reuse_site_bytes_without_duplicate_aliases(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -462,7 +443,7 @@ class SiteContractTests(unittest.TestCase):
         self.assertEqual(config["outputDirectory"], "out/site")
         self.assertEqual(config["framework"], None)
         self.assertIn("scripts/build.py build", config["buildCommand"])
-        self.assertIn("--migration-lock contracts/migration-artifact-lock.json",
+        self.assertIn("--dev-lock contracts/dev-artifact-lock.json",
                       config["buildCommand"])
         self.assertIn("scripts/build.py verify", config["buildCommand"])
         self.assertNotIn("tools/public-site", config["buildCommand"])

@@ -1,12 +1,15 @@
 {
-  "$schema": "ordax.site-migration-artifact-lock/1",
+  "$schema": "ordax.site-dev-artifact-lock/2",
   "status": "development-only-not-authorized-for-production",
-  "source_repository": "ordaxsystems/ordax-os",
-  "source_commit": "70b0f7eb5d5085be0d4f176f5232def37c7a2a24",
   "artifacts": {
     "brand": {
-      "directory": "artifacts/brand/os-migration-70b0f7eb",
-      "manifest_sha256": "24bb0e191f47bc68821d9493406d0b05e7a900a8872e4b9b03a3d6938521dad4"
+      "release": {
+        "source_repository": "ordaxsystems/ordax-surface",
+        "source_commit": "863310a2e0a285f35fb1080c84c3cc5a88d41cde",
+        "release_tag": "brand-dev-863310a2e0a285f35fb1080c84c3cc5a88d41cde",
+        "archive_sha256": "5ca1f30d12c8f6aeebf059fab004f0c1a4def6430c4bd577f72d2c4aa6a02f30",
+        "manifest_sha256": "8b65322e64ac08b6e40bffe154113d73144d9f3e9d5964c61ffd82eec962389e"
+      }
     },
     "surface_preview": {
       "release": {

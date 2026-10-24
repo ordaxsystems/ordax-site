@@ -1,3 +1,11 @@
+## Cutover completo dos artefatos visuais Dev — 24/10/2026
+
+A [Surface #14](https://github.com/ordaxsystems/ordax-surface/pull/14) publica marca/fontes como prerelease Dev atestada. O Site usa exclusivamente as duas releases Surface fixadas em `contracts/dev-artifact-lock.json` e removeu o diretório de brand importado do OS. A [Site #9](https://github.com/ordaxsystems/ordax-site/pull/9) eliminou o catálogo histórico de ofertas: **nenhuma oferta comercial está autorizada** e a UI mostra estado indisponível, em vez de simular planos. Build e browser Dev permanecem isolados; DNS, Stable, Identity, billing e downloads não são autorizados.
+
+**As seções abaixo preservam a cronologia das PRs históricas, não a orientação operacional vigente.** A receita atual está no `README.md`, sob `Build de candidato Dev`.
+
+---
+
 ## Cutover da demonstração Dev — 24/10/2026
 
 **Estado atual:** o código Site foi extraído, e a apresentação duplicada do OS foi removida na [OS #2229](https://github.com/ordaxsystems/ordax-os/pull/2229). A projeção canônica de apps/atalhos do OS pertence à [OS #2234](https://github.com/ordaxsystems/ordax-os/pull/2234), sem ressuscitar os geradores de páginas. A [Surface #13](https://github.com/ordaxsystems/ordax-surface/pull/13) publicou a prerelease Dev durável e atestada com 11 telas e 4 apps. O Site consome o archive e manifesto fixados por SHA-256 no único `contracts/migration-artifact-lock.json`, verificando assinatura no CI, procedência Surface/OS, integridade e segurança de extração no build.

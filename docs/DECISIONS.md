@@ -1,3 +1,5 @@
+**SITE-ADR-012 — Encerramento dos snapshots temporários (2026-10-24):** Surface publica marca e Meridian em prereleases Dev assinadas com pins externos de archive+manifesto, e o Site usa o único `contracts/dev-artifact-lock.json`. Nenhum snapshot OS, clone do renderer, plano comercial fictício ou atalho de publicação é preservado no fluxo padrão. Os ADRs anteriores descrevem fases históricas, não instruções atuais.
+
 # Decisões arquiteturais — OrdaX Site
 
 **SITE-ADR-001 — Isolamento de repositório (2026-10-23):** HTML/CSS/JS e catálogo local PT-BR/en-US têm owner no Site. Nenhum runtime, backend, código React da Surface ou utilitário de kernel entra no artefato.

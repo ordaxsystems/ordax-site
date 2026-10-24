@@ -36,36 +36,44 @@ jobs:
         run: node tests/test_legal_documents.mjs
       - name: Fail-closed architecture and catalog tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Verify pinned and attested Surface Dev release before Site build
+      - name: Verify owner-signed brand and Meridian releases on every CI build
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mapfile -t lock < <(python3 - <<'PY'
-          import json
-          item=json.load(open('contracts/migration-artifact-lock.json'))['artifacts']['surface_preview']['release']
+          for component in brand surface_preview; do
+            mapfile -t pin < <(COMPONENT="$component" python3 - <<'PY'
+          import json,os
+          item=json.load(open('contracts/dev-artifact-lock.json'))['artifacts'][os.environ['COMPONENT']]['release']
           for key in ('release_tag','source_commit','archive_sha256'):
               print(item[key])
           PY
-          )
-          mkdir -p "$RUNNER_TEMP/surface-dev-attestation"
-          gh release download "${lock[0]}" --repo ordaxsystems/ordax-surface \
-            --pattern "meridian-dev-${lock[1]}.tar.gz" \
-            --dir "$RUNNER_TEMP/surface-dev-attestation"
-          archive="$RUNNER_TEMP/surface-dev-attestation/meridian-dev-${lock[1]}.tar.gz"
-          echo "${lock[2]}  $archive" | sha256sum --check --status
-          gh attestation verify "$archive" \
-            --repo ordaxsystems/ordax-surface \
-            --signer-workflow ordaxsystems/ordax-surface/.github/workflows/validate-source-integration.yml \
-            --source-ref refs/heads/main --source-digest "${lock[1]}" \
-            --deny-self-hosted-runners
-          echo "SURFACE_SITE_DEV_RELEASE_SIGNATURE=VERIFIED"
+            )
+            if [ "$component" = "brand" ]; then
+              archive="ordax-brand-${pin[1]}.tar.gz"
+              signer=".github/workflows/public-brand-candidate.yml"
+            else
+              archive="meridian-dev-${pin[1]}.tar.gz"
+              signer=".github/workflows/validate-source-integration.yml"
+            fi
+            mkdir -p "$RUNNER_TEMP/surface-$component"
+            gh release download "${pin[0]}" --repo ordaxsystems/ordax-surface \
+              --pattern "$archive" --dir "$RUNNER_TEMP/surface-$component"
+            file="$RUNNER_TEMP/surface-$component/$archive"
+            echo "${pin[2]}  $file" | sha256sum --check --status
+            gh attestation verify "$file" \
+              --repo ordaxsystems/ordax-surface \
+              --signer-workflow "ordaxsystems/ordax-surface/$signer" \
+              --source-ref refs/heads/main --source-digest "${pin[1]}" \
+              --deny-self-hosted-runners
+          done
+          echo "SITE_DEV_SURFACE_RELEASE_SIGNATURES=VERIFIED"
       - name: Build standalone static candidate
         run: |
           python3 scripts/build.py build \
             --source-commit "$(git rev-parse HEAD)" \
-            --migration-lock contracts/migration-artifact-lock.json \
+            --dev-lock contracts/dev-artifact-lock.json \
             --public-origin https://ordax.com.br \
             --out out/site
           python3 scripts/build.py verify --out out/site
