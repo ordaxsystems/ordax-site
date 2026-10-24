@@ -3,6 +3,7 @@
 from __future__ import annotations
 import argparse
 import json
+import hashlib
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -111,6 +112,22 @@ def assert_candidate(out: Path) -> dict:
             if any("disabled" not in button for button in page.submit_buttons):
                 raise AssertionError(relative + ": credential submission active without server readiness")
         if relative == "index.html":
+            receipt = manifest["surface_preview"]
+            if receipt["status"] != "audited-migration-snapshot-not-official-surface-publication":
+                raise AssertionError("unapproved Surface preview origin")
+            css_path = out / "assets/surface-snapshot.css"
+            css = css_path.read_bytes()
+            delivered_digest = hashlib.sha256(css).hexdigest()
+            if delivered_digest != receipt["rendered_css_sha256"]:
+                raise AssertionError("delivered Surface CSS differs from verified receipt")
+            if f"/assets/surface-snapshot.css?v={delivered_digest[:12]}" not in html:
+                raise AssertionError("Surface CSS cache key is not tied to distributed bytes")
+            if b"inter-latin-wght-normal-Dx4kXJAl.woff2" in css:
+                raise AssertionError("Surface preview retains unpublished hashed font URL")
+            if b"/assets/fonts/inter-latin-wght-normal.woff2" not in css:
+                raise AssertionError("preview font is not referenced from verified brand")
+            if (out / "assets/surface-snapshot.json").exists():
+                raise AssertionError("duplicated embedded Surface snapshot JSON reached the public bundle")
             if 'id="playground-fixture"' in html:
                 raise AssertionError("landing embeds a duplicate fixture instead of the canonical JSON asset")
             fixture = out / "assets/playground-fixture.json"
