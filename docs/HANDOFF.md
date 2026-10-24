@@ -103,3 +103,9 @@
 - O teste mede os tamanhos **antes** de aplicar as alterações, para não duplicar fatores por herança. A camada `.playground` é material publicado da Surface e não é modificada ou declarada aprovada como CSS pertencente ao Site. Exige ao menos um nó textual ampliado por rota, nenhuma divergência do fator 2, nenhuma caixa textual truncada sob overflow oculto e nenhum overflow horizontal de página. Não altera CSS fonte nem HTML entregue.
 - [CI da PR aprovado](https://github.com/ordaxsystems/ordax-site/actions/runs/40056870866), commit `176a8fae`: `SITE_BROWSER_PROOF=PASS routes=11 viewports=3 checks=33 reflow=22 text200=11 noscript=6`. O job push equivalente também passou.
 - **Limitação explícita:** isto é um teste de stress alterando `font-size` computado, não é o zoom somente texto nativo do browser. A prova não detecta todos os tipos de sobreposição, textos gerados em `::before/::after`, leitores de tela ou contraste com fundos complexos. Nenhum desses gates pode ser declarado concluído por inferência. Faltam também Identity em staging e os artefatos comerciais/Surface oficiais. PR Site mantém status draft; sem deploy ou cutover.
+
+
+## Próxima prova presencial — sem declarar conformidade prematura
+
+- Criado `docs/ACCESSIBILITY-GATES.md` como protocolo único de verificação manual por rota, com zoom de página **nativo** 200/400%, zoom somente texto 200% em navegador que o suporte, parâmetros de espaçamento WCAG 1.4.12, leitores de tela e critérios de evidência/aceitação. O protocolo está **pendente**, não representa validação executada.
+- O teste automatizado `text200` permanece um estresse de fonte independente de zoom de browser. Não autoriza produção, cutover nem modificação da Surface. Para o próximo owner/validador, usar a revisão exata do build candidato e o catálogo `contracts/site-routes.json`, sem copiar rotas para outro SSOT.
