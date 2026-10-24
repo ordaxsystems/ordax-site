@@ -100,3 +100,9 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 
 - Preservar `text_spacing_probe` na única suíte `scripts/browser_smoke.py`: 11 rotas × 2 idiomas efetivos, parâmetros WCAG 1.4.12 injetados **somente no browser** (linha 1.5×, margem de parágrafo 2×, letras 0.12× e palavras 0.16×). Checar estilos computados, corte de texto em overflow oculto, scroll horizontal e falhas JS; gerar screenshots `spacing-*.png` no artefato CI. [CI branch PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40057544890).
 - Nenhum CSS ou snapshot da Surface foi editado. A validação visual/manual continua definida em `docs/ACCESSIBILITY-GATES.md` e não pode ser declarada cumprida por esse gate parcial. Production/Identity/Surface permanecem bloqueados.
+
+
+## Preflight externo e catálogo sem autorização implícita (2026-10-24)
+
+- O Site **não** implementa Identity, backend de conta ou publicador de releases. `scripts/staging_preflight.py` é uma verificação opcional de staging read-only com origem HTTPS fornecida por operador, que reutiliza os validadores canônicos de sessão e catálogo. Não existe URL de staging hardcoded, login falso nem chamada remota no CI; os testes offline cobrem os bloqueios. `PASS` afirma somente contrato anônimo, sem equivaler a gate de staging autenticado.
+- Paths de downloads e compliance precisam permanecer literais, seguros, de mesma origem e livres de traversal/encodings ambíguos. Não afrouxar `public_release_catalog._same_origin_path` quando um owner publicar oficialmente artefatos. Catálogo permanece vazio até prova de autoridade independente.
