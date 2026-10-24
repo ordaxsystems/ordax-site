@@ -316,6 +316,25 @@ def stage_surface_dev_preview(stage: Path, directory: Path, manifest: dict,
             or surface.get("cssSha256") != digest(payloads["assets/surface-snapshot.css"])
             or surface.get("presentation") != "example-only-not-an-authorized-session"):
         raise SiteError("Surface preview fixture/source/CSS mismatch")
+    # Vite fingerprints the same Inter font already supplied by the
+    # verified brand package. Rebase its public URL to the single brand
+    # asset rather than shipping a second identical binary.
+    css = payloads["assets/surface-snapshot.css"]
+    bundled_fonts = [
+        name for name in payloads
+        if re.fullmatch(r"assets/inter-latin-wght-normal-[A-Za-z0-9_-]+\\.woff2", name)
+    ]
+    if len(bundled_fonts) != 1:
+        raise SiteError("expected one canonical Vite Inter font in Dev preview")
+    brand_font = stage / "assets/fonts/inter-latin-wght-normal.woff2"
+    if not brand_font.is_file() or brand_font.read_bytes() != payloads[bundled_fonts[0]]:
+        raise SiteError("Surface renderer font does not match verified brand font")
+    source_font_url = b"/" + bundled_fonts[0].encode("ascii")
+    if source_font_url not in css:
+        raise SiteError("Surface preview CSS does not reference its verified font")
+    css = css.replace(source_font_url, b"/assets/fonts/inter-latin-wght-normal.woff2")
+    payloads["assets/surface-snapshot.css"] = css
+    del payloads[bundled_fonts[0]]
     for name, raw in payloads.items():
         dst = stage / name
         if dst.exists():
@@ -331,7 +350,7 @@ def stage_surface_dev_preview(stage: Path, directory: Path, manifest: dict,
             "manifest_sha256": manifest_sha256,
             "file_count": len(files),
             "rendered_css_sha256": digest(payloads["assets/surface-snapshot.css"]),
-            "font_url_rebased": False}
+            "font_url_rebased": True}
 
 
 def stage_surface_preview(stage: Path, directory: Path, expected_manifest_sha256: str) -> dict:
