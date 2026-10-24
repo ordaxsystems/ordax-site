@@ -50,7 +50,7 @@ O **código e o build independentes já estão integrados à `main`**, com consu
 ## Lock SSOT de insumos externos e segurança de releases
 
 - `contracts/dev-artifact-lock.json` fixa exclusivamente as duas prereleases Dev assinadas da Surface (marca + Meridian), com digests de archive/manifesto e proveniência Surface/OS. O CI verifica ambas as atestações. Use `--dev-lock`; não reintroduzir snapshots OS, geradores visuais nem arquivos duplicados.
-- Os manifestos de brand, preview e offers são validados **contra o digest pinado no lock antes de ler suas alegações internas**. Revisão OS de origem deve coincidir entre todos. Lock é estritamente **dev-only**; não autoriza produção.
+- Os dois insumos (`brand`, `surface_preview`) são validados contra os digests externos fixados em `contracts/dev-artifact-lock.json`, com identidade de workflow assinante atestada em CI, integridade de arquivos e proveniência Surface/OS. **Não existe insumo `offers` autorizado**: planos e contratação permanecem indisponíveis. Lock estritamente **Dev**; não autoriza produção.
 - O builder **rejeita** `--publications` mesmo que o JSON local afirme `public_authorized=true`. Downloads permanecem vazios até integração explícita de evidência oficial do publisher (mais que flags autorreferentes).
 
 ## Prova de integridade visual entregue (2026-10-23)
