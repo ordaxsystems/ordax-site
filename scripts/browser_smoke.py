@@ -355,7 +355,8 @@ def solid_surface_contrast_probe(driver: Driver) -> dict:
         '.page-shell p', '.page-shell a', '.download-container h2',
         '.download-container p', '.download-container a',
         '.account-ui h1', '.account-ui h2', '.account-ui a',
-        '.account-ui p', '.account-ui label'
+        '.account-ui p', '.account-ui label',
+        '.topbar-center a', '.breadcrumb a', '.page-footer a'
       ];
       const nodes = [...new Set(selectors.flatMap(s => [...document.querySelectorAll(s)]))];
       const failed = [], unchecked = {};
