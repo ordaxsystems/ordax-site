@@ -11,7 +11,7 @@ Este repositório é o **owner do código de apresentação do site público** a
 6. `site/config/public-site.json`
 
 ## Autoridades e limites
-- `ordax-site/main` é a autoridade do site **somente após conclusão de migração validada**; até lá, o site atual em `ordax-os/main` não deve ser removido.
+- `ordax-site/main` já é a autoridade da apresentação e do build independentes no **ambiente Dev**. O OS repontou seus builds em `ordax-os#2225`; a limpeza do antigo `sites/public` é acompanhada por `ordax-os#2229`. Nenhum desses passos autoriza publicação Stable ou ativação pública.
 - Nunca importar `system/surface`, `tools/surface-web` ou código de kernel, USB, Creator ou apps.
 - Marca e demos da Surface são **artefatos publicados, imutáveis e verificáveis**, nunca cópias de código para compilar no site.
 - Backend de Identity, sessão, autorização, pagamentos e banco pertence a seus respectivos owners (`ordax-platform` / serviços canônicos). Browser só consome APIs autorizadas de mesma origem.
@@ -26,7 +26,7 @@ Este repositório é o **owner do código de apresentação do site público** a
 Branch -> auditoria de diffs e conflitos -> testes de rotas/i18n/segurança -> pacote com provenance SHA-256 -> CI -> PR review -> cutover OS só depois de prova de paridade -> publicação sob autorização separada. Registrar atualizações em `docs/HANDOFF.md`.
 
 ## Status
-Extração é **candidata em draft**; todos os assets originais, incluindo dois PNGs grandes, foram preservados. Build CI independente, smoke estático e snapshot de ofertas/brand de migração aprovados. Há E2E **local isolado** em navegador. Faltam a publicação **oficial** desses insumos pelo owner Surface/Platform, testes completos de acessibilidade e Identity em staging, e cutover no OS. Nenhum build de produção autorizado.
+O **código e o build independentes já estão integrados à `main`**, com consumo Dev da demonstração Meridian (`ordax-site#2`) e configuração de projeto Dev isolado. O repoint de build do OS foi integrado em `ordax-os#2225`, enquanto a remoção de apresentação histórica está em `ordax-os#2229`. Faltam publicação oficial de Surface/Platform, testes completos de acessibilidade e Identity em staging e autorização própria para produção. Os gates Dev não substituem essas provas.
 
 
 ## Gates de implementação atualmente verificados
@@ -45,7 +45,7 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 - Fixture e CSS gerados **não** pertencem a `site/assets`; sua única entrada é `--surface-preview-dir`, acompanhada de `--surface-preview-manifest-sha256` pinado. O bundle materializa os arquivos após verificar proveniência e integridade.
 - Sem arquivo `surface-snapshot.json` distribuído duplicando `fixture.surface`. O preview source é imutável e a eventual correção de URL de fonte ocorre **apenas na saída de build** com fingerprint recalculado.
 - `artifacts/surface-preview/os-migration-70b0f7eb` é um pacote de migração **não oficial**, vindo do OS, e não uma release/assinatura da Surface. Não alterar o status para `official` sem verificação real do publisher.
-- A obrigação de publicação oficial de brand/demo pertence à [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). Até essa entrega, o Site permanece em draft, sem cutover nem deploy.
+- A obrigação de publicação oficial de brand/demo pertence à [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). Até essa entrega, a **publicação em produção** continua bloqueada; o cutover de código e build no ambiente Dev é independente desse gate.
 
 ## Lock SSOT de insumos externos e segurança de releases
 
