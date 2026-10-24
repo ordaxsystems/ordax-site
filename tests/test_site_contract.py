@@ -117,12 +117,19 @@ class SiteContractTests(unittest.TestCase):
             artifact = out / "releases/catalog.json"
             artifact.parent.mkdir()
             artifact.write_text(json.dumps(render_catalog({"releases": []})), encoding="utf-8")
+            config = out / "config/public-site.json"
+            config.parent.mkdir()
+            config.write_text('{"$schema":"prototype-ordax.public-site-runtime/1"}', encoding="utf-8")
             ledger = {
                 "$schema": build.SCHEMA, "source_commit": "1" * 40,
+                "artifact_class": "public-site",
                 "catalog_status": "empty", "publications_sha256": None,
-                "files": [{"path": "releases/catalog.json",
-                           "size": artifact.stat().st_size,
-                           "sha256": build.digest(artifact.read_bytes())}],
+                "files": [
+                    {"path": entry.relative_to(out).as_posix(),
+                     "size": entry.stat().st_size,
+                     "sha256": build.digest(entry.read_bytes())}
+                    for entry in (artifact, config)
+                ],
             }
             manifest = out / "public-site-manifest.json"
 
@@ -137,6 +144,31 @@ class SiteContractTests(unittest.TestCase):
                 verify_with(publications_sha256="f" * 64)
             with self.assertRaisesRegex(build.SiteError, "publication state mismatch"):
                 verify_with(catalog_status="missing")
+
+    def test_build_and_staging_share_one_strict_bundle_inventory_contract(self):
+        records = [
+            {"path": "config/public-site.json", "size": 12, "sha256": "a" * 64},
+            {"path": "releases/catalog.json", "size": 0, "sha256": "b" * 64},
+            {"path": "login/index.html", "size": 24, "sha256": "c" * 64},
+        ]
+        manifest = {"files": records}
+        self.assertEqual(set(build.validate_bundle_inventory(manifest)),
+                         {row["path"] for row in records})
+        for modification in (
+            lambda v: v["files"].append(dict(v["files"][0])),
+            lambda v: v["files"][0].update({"path": "login/../index.html"}),
+            lambda v: v["files"][0].update({"path": "public-site-manifest.json"}),
+            lambda v: v["files"][0].update({"size": True}),
+            lambda v: v["files"][0].update({"sha256": "not-hash"}),
+            lambda v: v["files"].append({"path": "login", "size": 1, "sha256": "d" * 64}),
+            lambda v: v["files"].pop(0),
+            lambda v: v["files"][0].update({"size": build.MAX_BUNDLE_BYTES + 1}),
+        ):
+            import copy
+            bad = copy.deepcopy(manifest)
+            modification(bad)
+            with self.subTest(bad=bad), self.assertRaises(build.SiteError):
+                build.validate_bundle_inventory(bad)
 
     def test_unauthorized_catalog_fails_closed(self):
         result = render_catalog({"releases": []})
