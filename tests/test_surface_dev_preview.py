@@ -27,7 +27,7 @@ class SurfaceDevPreviewTests(unittest.TestCase):
              "path": "system/services/i18n/surface.mjs", "git_blob": "e" * 40,
              "sha256": "f" * 64},
         ]
-        css = b".demo-native { color: #111; }\n"
+        css = b".demo-native { color: #111; background: url(/assets/inter-latin-wght-normal-TEST.woff2); }\n"
         fixture = {
             "$schema": build.PREVIEW_SCHEMA,
             "home": {"rail_apps": ["settings"]},
@@ -45,6 +45,7 @@ class SurfaceDevPreviewTests(unittest.TestCase):
             "assets/surface-snapshot.css": css,
             "assets/playground-fixture.json": (json.dumps(fixture) + "\n").encode(),
             "assets/public-theme-image.jpg": b"\xff\xd8" + b"image-data",
+            "assets/inter-latin-wght-normal-TEST.woff2": b"test-inter-font",
         }
         for path, content in paths.items():
             file = root / path
@@ -76,12 +77,17 @@ class SurfaceDevPreviewTests(unittest.TestCase):
             directory, _, pin = self.make_package(tmp)
             stage = Path(tmp) / "built"
             stage.mkdir()
+            font = stage / "assets/fonts/inter-latin-wght-normal.woff2"
+            font.parent.mkdir(parents=True)
+            font.write_bytes(b"test-inter-font")
             result = build.stage_surface_preview(stage, directory, pin)
             self.assertEqual(result["status"], "candidate-not-published")
             self.assertEqual(result["source_repository"], "ordaxsystems/ordax-surface")
-            self.assertEqual(result["file_count"], 3)
+            self.assertEqual(result["file_count"], 4)
             self.assertTrue((stage / "assets/playground-fixture.json").is_file())
             self.assertTrue((stage / "assets/public-theme-image.jpg").is_file())
+            self.assertFalse((stage / "assets/inter-latin-wght-normal-TEST.woff2").exists())
+            self.assertTrue(result["font_url_rebased"])
 
     def test_wrong_pin_forged_authority_and_extra_file_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
