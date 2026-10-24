@@ -215,7 +215,9 @@
   // Observational data only. Never an entitlement, quota or invoice.
   let mcpUsage = null;
   let mcpUsageStatus = "unavailable";
-  let mcpUsageIdentity = null;
+  // Identity is the immutable published session snapshot, not a public email.
+  // Every revalidation invalidates cached private usage even for the same email.
+  let mcpUsageSession = null;
   let mcpUsageRevision = 0;
 
   async function loadMcpUsage() {
@@ -784,13 +786,12 @@
     account.subscribe(value => {
       const focused = document.activeElement?.id;
       session = value;
-      const nextUsageIdentity = signedIn() ? session.email || "verified-session" : null;
-      if (mcpUsageIdentity !== nextUsageIdentity) {
-        mcpUsageIdentity = nextUsageIdentity;
+      if (mcpUsageSession !== session) {
+        mcpUsageSession = session;
         mcpUsageRevision += 1;
         mcpUsage = null;
         mcpUsageStatus = "unavailable";
-        if (nextUsageIdentity) void loadMcpUsage();
+        if (signedIn()) void loadMcpUsage();
       }
       renderSession();
       // Revalidation must clear personal data, but not replace unrelated controls
