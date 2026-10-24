@@ -172,7 +172,7 @@ class StagingPreflightTests(unittest.TestCase):
                 return status, payload, "f" * 64, size
             return status, payload, sha, size
         with self.assertRaisesRegex(StagingPreflightError, "site-bundle-file-mismatch:config"):
-            prove(tampered_config, pin)
+            prove(tampered_config, pin, asset=fetch.asset)
 
         def tampered_catalog(path, maximum):
             status, payload, sha, size = fetch(path, maximum)
@@ -180,7 +180,7 @@ class StagingPreflightTests(unittest.TestCase):
                 return status, payload, sha, size + 1
             return status, payload, sha, size
         with self.assertRaisesRegex(StagingPreflightError, "site-bundle-file-mismatch:releases"):
-            prove(tampered_catalog, pin)
+            prove(tampered_catalog, pin, asset=fetch.asset)
 
     def test_injected_login_html_or_javascript_is_rejected_before_identity(self):
         for tampered in ("login/index.html", "assets/site.js"):
