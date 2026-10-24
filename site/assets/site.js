@@ -15,12 +15,13 @@
   const t = (messageId, variables) => i18n.t(messageId, variables);
 
   function sameOriginPath(value) {
+    // Keep browser links aligned with the Site catalog's canonical path gate.
+    // Disallow encoded separators/dots, traversals and URL normalization aliases.
     return (
       typeof value === "string" &&
-      value.startsWith("/") &&
-      !value.startsWith("//") &&
-      !value.includes("?") &&
-      !value.includes("#")
+      /^\/[A-Za-z0-9._~/-]+$/.test(value) &&
+      !value.includes("//") &&
+      !value.split("/").some(part => part === "." || part === "..")
     );
   }
 
@@ -877,12 +878,41 @@
   }
 
   function validCatalog(catalog) {
-    return (
-      catalog &&
-      catalog.$schema === CATALOG_SCHEMA &&
-      Array.isArray(catalog.releases) &&
-      (catalog.status === "empty" || catalog.status === "ready")
-    );
+    // Reject the *whole* response before producing any download link.
+    // A JSON status flag is not permission to publish: the build still emits
+    // an empty catalog until publisher attestation is integrated separately.
+    if (!catalog || catalog.$schema !== CATALOG_SCHEMA ||
+        !Array.isArray(catalog.releases) ||
+        (catalog.status !== "empty" && catalog.status !== "ready")) return false;
+    if (catalog.status === "empty") return catalog.releases.length === 0;
+    if (catalog.releases.length === 0) return false;
+
+    const releaseIds = new Set();
+    for (const release of catalog.releases) {
+      if (!release || typeof release !== "object" ||
+          typeof release.release_id !== "string" ||
+          !/^[0-9a-f]{40}$/.test(release.release_id) ||
+          release.source_commit !== release.release_id ||
+          releaseIds.has(release.release_id) ||
+          !["version", "channel", "published_at"].every(
+            key => typeof release[key] === "string" && release[key].trim()
+          ) || !Array.isArray(release.targets) || release.targets.length === 0) {
+        return false;
+      }
+      releaseIds.add(release.release_id);
+      const ids = new Set();
+      for (const target of release.targets) {
+        if (!target || typeof target.id !== "string" || !target.id.trim() ||
+            ids.has(target.id) || typeof target.label !== "string" ||
+            !target.label.trim() || !validIntegrityArtifact(target)) return false;
+        ids.add(target.id);
+      }
+      const compliance = release.compliance;
+      if (!compliance || !["sbom", "third_party_notices", "source_bundle"].every(
+        key => validIntegrityArtifact(compliance[key])
+      )) return false;
+    }
+    return true;
   }
 
   function renderCatalog(catalog) {
