@@ -25,14 +25,15 @@ node tests/test_localization.mjs
 
 `check` é inspeção de fontes; **não é um pacote pronto para publicação**.
 
-## Build de candidato
+## Build de candidato Dev — artefatos oficiais dos owners
 
-O bundle já inclui **todos os arquivos originais do portal**, com os seis binários de imagem preservando seus Git SHAs. O CI usa o snapshot auditado de marca `artifacts/brand/os-migration-70b0f7eb` e gera o candidato estático sem compilar a Surface nem montar o produto Web. Este snapshot de migração **não** é ainda uma publicação oficial da Surface:
+O Site usa **duas prereleases Dev assinadas do `ordax-surface`**, uma para marca/fontes e outra para a demonstração Meridian, fixadas por source SHA + SHA-256 de archive e manifesto em `contracts/dev-artifact-lock.json`. Os insumos de apps/atalhos da demonstração vêm da projeção canônica do OS; nenhum gerador visual ou snapshot editável permanece no OS ou no Site. A validação CI exige a identidade de assinatura do workflow Surface para cada archive antes de montar o candidato.
 
 ```sh
+python3 scripts/build.py check
 python3 scripts/build.py build \
   --source-commit <SHA40_DO_SITE> \
-  --migration-lock contracts/migration-artifact-lock.json \
+  --dev-lock contracts/dev-artifact-lock.json \
   --public-origin https://ordax.com.br \
   --out out/site
 python3 scripts/build.py verify --out out/site
@@ -40,14 +41,7 @@ python3 scripts/smoke_static.py --out out/site
 python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence
 ```
 
-O diretório `brand-dir` deve conter `manifest.json` com `artifact_class=ordax-brand`, `source_commit` e registros `path,size,sha256` para os recursos públicos oficiais. O site jamais recompila a Surface. O `offers-dir` contém **apenas HTML derivado para apresentação**, com manifesto SHA-256, fonte pinada, contratação e alocação de cotas desativadas. Nenhum contrato de entitlements foi copiado; ambos snapshots de migração exigem futura substituição por publicação oficial.
-
-O catálogo público de downloads **permanece vazio**. O builder **rejeita** qualquer `--publications` local: campos declaratórios como `public_authorized=true` não são prova criptográfica da publicação pelo owner. A verificação do bundle e a interface **rejeitam também `ready` com manifesto autoconsistente**, pois o próprio host pode forjar catálogo, hashes e recibos; nenhum deles equivale a uma atestação independente. Esse gate somente pode ser aberto depois de integração com um pacote oficial atestado, revisionado e pinado pelo responsável pelas releases. Formulários e Conta dependem de gateway `same-origin`; recuperação/billing não são habilitados por UI.
-
-## Próximos passos e estado preciso
-
-Consultar [Auditoria](docs/AUDIT.md), [Decisões](docs/DECISIONS.md) e [Handoff](docs/HANDOFF.md). As transferências PNG e o build independente com integridade foram comprovados no [CI](https://github.com/ordaxsystems/ordax-site/actions/runs/40039062149). Permanecem pendentes a publicação **oficial** de marca/demonstração e ofertas pelos owners, comparação visual/acessibilidade/SEO em staging e a integração/cutover atômicos no `ordax-os`. O [CI mais recente](https://github.com/ordaxsystems/ordax-site/actions/runs/40039633625) confirma a apresentação de referência em quatro planos, sem habilitar billing. Nada disso é autorização para deploy.
-
+A apresentação de planos mostra apenas **Planos em preparação — contratação indisponível**; não possui catálogo de ofertas autorizado e não exibe preços/cotas fictícios. O catálogo de downloads permanece vazio sem publicação atestada do owner. Login/Identity, pagamentos, DNS e Stable continuam bloqueados pelos gates próprios; uma prerelease Dev não é autorização de produção.
 
 ## Site SSOT, SEO e prova real de browser
 
