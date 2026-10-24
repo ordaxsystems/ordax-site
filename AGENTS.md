@@ -11,7 +11,7 @@ Este repositório é o **owner do código de apresentação do site público** a
 6. `site/config/public-site.json`
 
 ## Autoridades e limites
-- `ordax-site/main` já é a autoridade da apresentação e do build independentes no **ambiente Dev**. O OS repontou seus builds em `ordax-os#2225`; a limpeza do antigo `sites/public` é acompanhada por `ordax-os#2229`. Nenhum desses passos autoriza publicação Stable ou ativação pública.
+- `ordax-site/main` já é a autoridade da apresentação e do build independentes no **ambiente Dev**. O OS repontou seus builds em `ordax-os#2225` e removeu a apresentação legada em `ordax-os#2229` (merge `c7533bc6`). Nenhum desses passos autoriza publicação Stable ou ativação pública.
 - Nunca importar `system/surface`, `tools/surface-web` ou código de kernel, USB, Creator ou apps.
 - Marca e demos da Surface são **artefatos publicados, imutáveis e verificáveis**, nunca cópias de código para compilar no site.
 - Backend de Identity, sessão, autorização, pagamentos e banco pertence a seus respectivos owners (`ordax-platform` / serviços canônicos). Browser só consome APIs autorizadas de mesma origem.
@@ -26,7 +26,7 @@ Este repositório é o **owner do código de apresentação do site público** a
 Branch -> auditoria de diffs e conflitos -> testes de rotas/i18n/segurança -> pacote com provenance SHA-256 -> CI -> PR review -> cutover OS só depois de prova de paridade -> publicação sob autorização separada. Registrar atualizações em `docs/HANDOFF.md`.
 
 ## Status
-O **código e o build independentes já estão integrados à `main`**, com consumo Dev da demonstração Meridian (`ordax-site#2`) e configuração de projeto Dev isolado. O repoint de build do OS foi integrado em `ordax-os#2225`, enquanto a remoção de apresentação histórica está em `ordax-os#2229`. Faltam publicação oficial de Surface/Platform, testes completos de acessibilidade e Identity em staging e autorização própria para produção. Os gates Dev não substituem essas provas.
+O **código e o build independentes já estão integrados à `main`**, com consumo Dev da demonstração Meridian (`ordax-site#2`) e configuração de projeto Dev isolado. O repoint dos builds do OS foi integrado em `ordax-os#2225` e a remoção da apresentação histórica foi integrada em `ordax-os#2229`. Faltam publicação oficial de Surface/Platform, testes completos de acessibilidade e Identity em staging e autorização própria para produção. Os gates Dev não substituem essas provas.
 
 
 ## Gates de implementação atualmente verificados
