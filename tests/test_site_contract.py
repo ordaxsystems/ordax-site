@@ -12,6 +12,7 @@ import build
 from public_release_catalog import render_catalog, PublicReleaseCatalogError
 from site_routes import load_routes
 from site_seo import validate_origin, render_html
+from smoke_static import check_css_dependencies
 
 MIGRATION_LOCK = build.load_migration_lock(ROOT / "contracts/migration-artifact-lock.json")
 BRAND_PIN = MIGRATION_LOCK["brand"]["manifest_sha256"]
@@ -201,6 +202,30 @@ class SiteContractTests(unittest.TestCase):
             fixture.write_bytes(fixture.read_bytes() + b" ")
             with self.assertRaises(build.SiteError):
                 build.stage_surface_preview(Path(tmp) / "unused", altered, build.digest((altered / "manifest.json").read_bytes()))
+
+    def test_delivered_css_dependencies_must_be_local_and_exist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            css_dir = bundle / "assets"
+            css_dir.mkdir()
+            (css_dir / "font.woff2").write_bytes(b"local-font")
+            sheet = css_dir / "site.css"
+            sheet.write_text('a{background:url("./font.woff2")} b{background:url(data:image/svg+xml,%3csvg%3e)}')
+            self.assertEqual(check_css_dependencies(bundle), 1)
+            for malicious in (
+                "https://tracker.example/remote.png",
+                "//tracker.example/remote.png",
+                "../missing.png",
+                "/assets/never-published.woff2",
+                "/assets/../private.png",
+            ):
+                with self.subTest(malicious=malicious):
+                    sheet.write_text('a{background:url("' + malicious + '")}')
+                    with self.assertRaises(AssertionError):
+                        check_css_dependencies(bundle)
+            sheet.write_text('@import url("https://tracker.example/x.css");')
+            with self.assertRaisesRegex(AssertionError, "import"):
+                check_css_dependencies(bundle)
 
     def test_site_is_not_native_web_surface(self):
         paths = (ROOT / "site").rglob("*")
