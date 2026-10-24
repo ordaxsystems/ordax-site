@@ -19,3 +19,5 @@
 
 
 **SITE-ADR-009 — Navegação de teclado como contrato do portal (2026-10-23):** todo `main#conteudo` é programaticamente focável por skip link, sem entrar na ordem Tab natural; o handler de Conta pode focar diretamente sem exigir fragmento na URL. Prova usa teclado ChromeDriver e Chrome Accessibility Tree; não basta string estática em HTML. Troca de idioma é testada no seletor real, incluindo persistência.
+
+**SITE-ADR-010 — Artefato de apresentação externa pinado sem JSON redundante (2026-10-23/24):** o snapshot JSON separado equivalia integralmente a `fixture.surface`, por isso não é distribuído. CSS+fixture migraram para artefato read-only manifestado com SHA-256/ Git blob e pin explícito fornecido no build; o Site não edita nem recompila Surface. CSS distribuído só rebasa URL da fonte Inter para o brand externo verificado, sem alterar arquivo-fonte. Produção requer futura release oficial do owner e gate de proveniência não autoafirmado. [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3).

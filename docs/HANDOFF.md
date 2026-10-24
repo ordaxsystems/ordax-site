@@ -27,7 +27,7 @@
 
 ## Recomendações operacionais
 - Começar por `python3 scripts/build.py check` e `node tests/test_localization.mjs`.
-- `python3 scripts/build.py build --source-commit <sha40> --brand-dir artifacts/brand/os-migration-70b0f7eb --offers-dir artifacts/offers/os-migration-70b0f7eb` **gera pacote candidato**, recusando imagens ausentes e artifacts com hashes inválidos.
+- `python3 scripts/build.py build --source-commit <sha40> --brand-dir artifacts/brand/os-migration-70b0f7eb --surface-preview-dir artifacts/surface-preview/os-migration-70b0f7eb --surface-preview-manifest-sha256 d7142242a5a4ff38b71cfcc952123b48a34e8bd643052b8143de9b5d36fc0cc3 --offers-dir artifacts/offers/os-migration-70b0f7eb --public-origin https://ordax.com.br` **gera pacote candidato**, recusando imagens ausentes e artifacts com hashes inválidos.
 - Jamais transformar candidato CI em autorização de produção: ainda exige os artefatos oficiais de marca/planos/demonstração e E2E de staging.
 - Revalidar `ordax-os/main` e PRs concorrentes antes de qualquer alteração compartilhada.
 - Atualizar este arquivo após cada PR/CI/gate concluído; SSOT do projeto são seus códigos/contratos externos, não este handoff.
@@ -48,3 +48,11 @@
 - A segunda prova aciona o **seletor real PT-BR/en-US**, verifica `html[lang]`, conteúdo traduzido de “Ir para o conteúdo” e a preferência `ordax.public.locale` no storage; restaura português para não contaminar a navegação subsequente. [CI locale E2E PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042154013).
 - **Ainda pendentes:** inspeção manual com leitor de tela, levantamento de contraste por estados interativos, testes a 200%/400% de zoom e teclado com modais reais conectados à Conta, além do end-to-end com gateway autorizado. Esses gates não são cobertos pelas provas acima.
 - `ordax-os/main` foi rechecado em `7677226def5fd027d37a84a8c7981c3c90d49b10` neste ciclo; a PR `#2198` da Surface continuava draft. Nenhum repoint/deploy foi feito.
+
+## Pacote Surface externo, consumidor fechado (2026-10-23/24)
+
+- `site/assets/` deixou de conter o snapshot/fixture gerados. Uma fixture contém o próprio `surface` snapshot; a cópia JSON idêntica foi excluída. Dados demo read-only agora vivem apenas em `artifacts/surface-preview/os-migration-70b0f7eb` com manifesto de origem OS.
+- O build exige `--surface-preview-dir` **e** `--surface-preview-manifest-sha256 d7142242a5a4ff38b71cfcc952123b48a34e8bd643052b8143de9b5d36fc0cc3`. Testes de integridade validam SHA256, SHA Git, source commit, status não oficial e coerência `fixture.surface.cssSha256`/CSS; manifest e bytes incorretos são rejeitados.
+- A fonte Inter herdada no CSS Surface possuía caminho de bundler não presente. No output, a referência passou a usar **a mesma fonte do brand** já validado, com cache fingerprint recalculado. O artefato de migração não é modificado.
+- Issue ao owner Surface para publicação real de marca/demo: [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). **Ainda não há release oficial detectada**; Site continua proibindo status de publicação autoafirmado, sem autorização para produção.
+- Envolve apenas `ordax-site#1` em draft; OS atual continua owner até cutover validado. Se outra equipe gerar sua release, primeiro verificar origem e adaptar explicitamente o gate, nunca modificar os hashes no silêncio nem restaurar source espelhado.

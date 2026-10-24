@@ -33,6 +33,8 @@ O bundle já inclui **todos os arquivos originais do portal**, com os seis biná
 python3 scripts/build.py build \
   --source-commit <SHA40_DO_SITE> \
   --brand-dir artifacts/brand/os-migration-70b0f7eb \
+  --surface-preview-dir artifacts/surface-preview/os-migration-70b0f7eb \
+  --surface-preview-manifest-sha256 d7142242a5a4ff38b71cfcc952123b48a34e8bd643052b8143de9b5d36fc0cc3 \
   --offers-dir artifacts/offers/os-migration-70b0f7eb \
   --public-origin https://ordax.com.br \
   --out out/site
@@ -64,3 +66,11 @@ Os snapshots de marca/ofertas continuam sendo **apenas materiais de migração v
 ## Navegação de teclado e internacionalização verificada
 
 O CI exercita o **skip link via Tab+Enter**, leitura de nomes pela Accessibility Tree nativa do Chrome, `alt` em imagens visíveis e troca de idioma pelo seletor real com persistência. O `main#conteudo` deve ter `tabindex="-1"` para permitir foco programático; a Conta usa um handler específico que move o foco diretamente. [Browser CI teclado/a11y PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042024846) e [seletor de idioma E2E PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042154013). A prova não cobre integralmente WCAG, compatibilidade com leitores de tela nem identidade em staging.
+
+## Contrato do pacote público Surface — sem espelho
+
+O source editável do Site **não contém** `surface-snapshot.css`, `playground-fixture.json` ou a cópia redundante `surface-snapshot.json`. Os dois arquivos necessários à demo são materializados exclusivamente do pacote externo `artifacts/surface-preview/os-migration-70b0f7eb` por `scripts/build.py`, que exige **SHA-256 fixo do manifesto** e valida SHA-256, SHA Git, tamanho e coerência entre fixture e CSS. O objeto `surface` já existe dentro da fixture; o JSON independente anterior era idêntico e foi eliminado.
+
+O CSS original do artefato de migração referia-se a uma fonte com hash do antigo bundler não distribuída. A etapa de build troca **somente no output** esse URL pelo recurso Inter existente no brand verificado e usa fingerprint dos bytes realmente publicados no CSS. Não regrava artefato de origem nem duplica a fonte no bundle.
+
+O pacote da Surface **não está publicado oficialmente**: o status explicitamente aceito pelo builder é `audited-migration-snapshot-not-official-surface-publication`, com origem `ordax-os@70b0f7eb`. A evolução para release assinada/atestada do owner exige aprovação e novo gate de proveniência; não basta o manifesto autoafirmar `official`. Solicitado em [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). Este modelo não transfere ownership de DNS, Web, OS, Account, entitlements, downloads ou deploy.

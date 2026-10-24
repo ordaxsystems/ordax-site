@@ -39,3 +39,10 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 
 - A prova Chrome deve manter `main#conteudo` programaticamente focável, skip link acionável por teclado, nomes na árvore AX, `img[alt]` e troca real PT/EN. [Teclado+AX PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042024846), [locale E2E PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042154013).
 - Não declarar conformidade WCAG completa: contrastes, leitor de tela, zoom e fluxos autenticados de staging ainda exigem provas específicas.
+
+## Publicação Surface — contrato de consumo
+
+- Fixture e CSS gerados **não** pertencem a `site/assets`; sua única entrada é `--surface-preview-dir`, acompanhada de `--surface-preview-manifest-sha256` pinado. O bundle materializa os arquivos após verificar proveniência e integridade.
+- Sem arquivo `surface-snapshot.json` distribuído duplicando `fixture.surface`. O preview source é imutável e a eventual correção de URL de fonte ocorre **apenas na saída de build** com fingerprint recalculado.
+- `artifacts/surface-preview/os-migration-70b0f7eb` é um pacote de migração **não oficial**, vindo do OS, e não uma release/assinatura da Surface. Não alterar o status para `official` sem verificação real do publisher.
+- A obrigação de publicação oficial de brand/demo pertence à [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). Até essa entrega, o Site permanece em draft, sem cutover nem deploy.
