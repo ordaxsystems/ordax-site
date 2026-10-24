@@ -423,6 +423,22 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn('document.getElementById("account-session").innerHTML', runtime)
         self.assertIn('document.getElementById("account-content").innerHTML', runtime)
 
+    def test_independent_vercel_dev_has_no_legacy_os_runtime_or_identity_activation(self):
+        config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+        self.assertEqual(config["outputDirectory"], "out/site")
+        self.assertEqual(config["framework"], None)
+        self.assertIn("scripts/build.py build", config["buildCommand"])
+        self.assertIn("--migration-lock contracts/migration-artifact-lock.json",
+                      config["buildCommand"])
+        self.assertIn("scripts/build.py verify", config["buildCommand"])
+        self.assertNotIn("tools/public-site", config["buildCommand"])
+        self.assertNotIn("ordax-os", config["buildCommand"])
+        self.assertEqual(config["git"]["deploymentEnabled"], {"**": False, "main": True})
+        self.assertNotIn("rewrites", config)
+        headers = config["headers"][0]["headers"]
+        self.assertIn({"key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive"}, headers)
+        self.assertTrue(any(row["key"] == "Content-Security-Policy" for row in headers))
+
     def test_ci_candidate_comes_from_real_git_revision_once_per_pr(self):
         # Avoid building two different candidates for the same PR revision:
         # Actions defaults to an ephemeral merge SHA on pull_request events.
