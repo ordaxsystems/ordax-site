@@ -908,6 +908,16 @@ def run(root: Path, evidence: Path) -> dict:
                                     "releases": [{**demo_release,
                                                   "targets": [{**demo_target, "href":
                                                     "/releases/%2e%2e/auth/login"}]}]}),
+            # This one is structurally valid. It must STILL fail because the
+            # immutable CI bundle authorizes only the original empty catalog.
+            ("valid-ready-but-unattested", {
+                "$schema": "prototype-ordax.public-release-catalog/1",
+                "status": "ready", "releases": [demo_release],
+            }),
+            ("empty-with-unauthorized-field", {
+                "$schema": "prototype-ordax.public-release-catalog/1",
+                "status": "empty", "releases": [], "injected": True,
+            }),
         ]
         for scenario, payload in invalid_catalogs:
             server.catalog_override = payload
