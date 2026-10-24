@@ -22,6 +22,7 @@ from urllib.request import HTTPSHandler, HTTPRedirectHandler, ProxyHandler, Requ
 from build import SCHEMA as SITE_BUNDLE_SCHEMA, SiteError, validate_bundle_inventory
 from public_identity_state import PublicIdentityStateError, resolve_public_identity_mode
 from public_release_catalog import PublicReleaseCatalogError, validate_catalog
+from vercel_staging_transport import VercelTransportError, get_raw as vercel_get_raw
 
 MAX_CONFIG = 32 * 1024
 MAX_SESSION = 16 * 1024
@@ -75,11 +76,36 @@ def validate_staging_origin(value: str) -> str:
     return "https://" + hostname
 
 
+def _parse_json_response(status: int, headers, raw: bytes, path: str,
+                         maximum: int) -> tuple[int, dict, str, int]:
+    """One JSON/MIME/size validation contract for both HTTPS transports."""
+    if status not in (200, 503):
+        raise StagingPreflightError("unexpected-response-status:" + path)
+    media_type = headers.get("Content-Type", headers.get("content-type", ""))
+    if media_type.split(";", 1)[0].strip().lower() != "application/json":
+        raise StagingPreflightError("json-content-type:" + path)
+    cache = headers.get("Cache-Control", headers.get("cache-control", ""))
+    if path == "/auth/session" and "no-store" not in cache.lower():
+        raise StagingPreflightError("session-not-no-store")
+    length = headers.get("Content-Length", headers.get("content-length"))
+    if length is not None and (not length.isdigit() or int(length) > maximum):
+        raise StagingPreflightError("response-too-large:" + path)
+    if len(raw) > maximum:
+        raise StagingPreflightError("response-too-large:" + path)
+    try:
+        result = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeError) as error:
+        raise StagingPreflightError("invalid-json:" + path) from error
+    if not isinstance(result, dict):
+        raise StagingPreflightError("json-object-required:" + path)
+    return status, result, hashlib.sha256(raw).hexdigest(), len(raw)
+
+
 def _fetch_json(origin: str, path: str, maximum: int) -> tuple[int, dict, str, int]:
-    opener = build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()), NoRedirect())
+    opener = build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()),
+                          NoRedirect())
     req = Request(origin + path, headers={
-        "Accept": "application/json",
-        "Accept-Encoding": "identity",
+        "Accept": "application/json", "Accept-Encoding": "identity",
         "User-Agent": "OrdaX-Site-Staging-Preflight/1",
     }, method="GET")
     try:
@@ -89,29 +115,19 @@ def _fetch_json(origin: str, path: str, maximum: int) -> tuple[int, dict, str, i
     except (URLError, TimeoutError, OSError) as error:
         raise StagingPreflightError("staging-network-unavailable") from error
     with response:
-        status = response.status
-        if status not in (200, 503):
-            raise StagingPreflightError("unexpected-response-status:" + path)
         if response.geturl() != origin + path:
             raise StagingPreflightError("redirect-or-origin-mismatch:" + path)
-        media_type = response.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
-        if media_type != "application/json":
-            raise StagingPreflightError("json-content-type:" + path)
-        if path == "/auth/session" and "no-store" not in response.headers.get("Cache-Control", "").lower():
-            raise StagingPreflightError("session-not-no-store")
-        advertised = response.headers.get("Content-Length")
-        if advertised is not None and (not advertised.isdigit() or int(advertised) > maximum):
-            raise StagingPreflightError("response-too-large:" + path)
-        raw = response.read(maximum + 1)
-        if len(raw) > maximum:
-            raise StagingPreflightError("response-too-large:" + path)
-        try:
-            result = json.loads(raw.decode("utf-8"))
-        except (ValueError, UnicodeError) as error:
-            raise StagingPreflightError("invalid-json:" + path) from error
-        if not isinstance(result, dict):
-            raise StagingPreflightError("json-object-required:" + path)
-        return status, result, hashlib.sha256(raw).hexdigest(), len(raw)
+        return _parse_json_response(response.status, response.headers,
+                                    response.read(maximum + 1), path, maximum)
+
+
+def _fetch_vercel_json(origin: str, path: str, maximum: int) -> tuple[int, dict, str, int]:
+    try:
+        status, headers, raw = vercel_get_raw(origin, path, maximum)
+    except VercelTransportError as error:
+        raise StagingPreflightError(str(error)) from error
+    return _parse_json_response(status, headers, raw, path, maximum)
+
 
 
 def _public_file_url(relative: str) -> str:
@@ -155,6 +171,18 @@ def _fetch_asset_digest(origin: str, relative: str, expected_size: int) -> tuple
                 raise StagingPreflightError("site-bundle-file-size-mismatch:" + relative)
             digest.update(chunk)
         return digest.hexdigest(), size
+
+
+def _fetch_vercel_asset_digest(origin: str, relative: str,
+                               expected_size: int) -> tuple[str, int]:
+    """Authenticated CLI, same verifier: hash unmodified response bytes."""
+    try:
+        status, _, raw = vercel_get_raw(origin, _public_file_url(relative), expected_size)
+    except VercelTransportError as error:
+        raise StagingPreflightError(str(error)) from error
+    if status != 200 or len(raw) != expected_size:
+        raise StagingPreflightError("site-bundle-file-http-or-size-mismatch:" + relative)
+    return hashlib.sha256(raw).hexdigest(), len(raw)
 
 
 def _manifest_files(manifest: dict) -> dict:
@@ -265,11 +293,18 @@ def evaluate_gateway_contracts(
 
 
 def run(staging_origin: str, expected_site_commit: str, expected_manifest_sha256: str,
-        *, scope: str = "anonymous") -> dict:
+        *, scope: str = "anonymous", transport: str = "direct") -> dict:
     origin = validate_staging_origin(staging_origin)
+    if transport == "direct":
+        read_json = lambda path, maximum: _fetch_json(origin, path, maximum)
+        read_asset = lambda relative, size: _fetch_asset_digest(origin, relative, size)
+    elif transport == "vercel-cli":
+        read_json = lambda path, maximum: _fetch_vercel_json(origin, path, maximum)
+        read_asset = lambda relative, size: _fetch_vercel_asset_digest(origin, relative, size)
+    else:
+        raise StagingPreflightError("staging-transport-unsupported")
     return evaluate_gateway_contracts(
-        lambda path, maximum: _fetch_json(origin, path, maximum),
-        lambda relative, size: _fetch_asset_digest(origin, relative, size),
+        read_json, read_asset,
         expected_site_commit=expected_site_commit,
         expected_manifest_sha256=expected_manifest_sha256,
         scope=scope,
@@ -282,13 +317,15 @@ def main() -> None:
                         help="Explicit HTTPS preview/staging origin, never production")
     parser.add_argument("--scope", choices=("static", "anonymous"), default="anonymous",
                         help="Static bundle integrity without Identity, or anonymous gateway integration")
+    parser.add_argument("--transport", choices=("direct", "vercel-cli"), default="direct",
+                        help="Use official authenticated Vercel CLI to read protected staging bytes")
     parser.add_argument("--expected-site-commit", required=True,
                         help="Exact build source commit from a trusted Site CI artifact")
     parser.add_argument("--expected-manifest-sha256", required=True,
                         help="SHA-256 of public-site-manifest.json from trusted Site CI")
     args = parser.parse_args()
     report = run(args.staging_origin, args.expected_site_commit,
-                 args.expected_manifest_sha256, scope=args.scope)
+                 args.expected_manifest_sha256, scope=args.scope, transport=args.transport)
     print("SITE_STAGING_PREFLIGHT=" + json.dumps(report, sort_keys=True))
 
 
