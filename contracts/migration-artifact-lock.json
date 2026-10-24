@@ -14,8 +14,8 @@
         "source_commit": "1ab73da4aae5991273a5f4ca380d5af135ffd8d5",
         "os_host_commit": "8b677ba7a1b04cc7abb4795fd6d8dc406dd7109a",
         "release_tag": "meridian-dev-1ab73da4aae5991273a5f4ca380d5af135ffd8d5",
-        "archive_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-        "manifest_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        "archive_sha256": "f37cded023174c922c674f2991d531cd2867429cadb4ab3a53694a206f9422c9",
+        "manifest_sha256": "ef8e436cb3cb977c31d7038c3057bb3df9322bd5e1ff3e738ab6fd69270778a0"
       }
     },
     "offers": {
