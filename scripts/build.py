@@ -371,7 +371,17 @@ def verify(out: Path) -> None:
         path = files[row["path"]]
         if path.is_symlink() or len(path.read_bytes()) != row["size"] or digest(path.read_bytes()) != row["sha256"]:
             raise SiteError("bundle integrity mismatch: " + row["path"])
-    validate_catalog(out / "releases/catalog.json")
+    catalog = validate_catalog(out / "releases/catalog.json")
+    # The existing Site bundle manifest is the build's publication-state
+    # record. Reject a valid but swapped catalog or a forged "ready" marker.
+    if ledger.get("catalog_status") != catalog["status"]:
+        raise SiteError("bundle publication state mismatch")
+    publication_digest = ledger.get("publications_sha256")
+    if catalog["status"] == "empty":
+        if publication_digest is not None:
+            raise SiteError("empty catalog cannot have a publisher receipt")
+    elif not isinstance(publication_digest, str) or not SHA256.fullmatch(publication_digest):
+        raise SiteError("ready catalog requires an attested publisher receipt")
 
 def main() -> None:
     cli = argparse.ArgumentParser()
