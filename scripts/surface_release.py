@@ -91,7 +91,9 @@ def materialize(pin: dict, destination: Path, *, open_url=None) -> Path:
                     continue
                 if not member.isfile() or (path != "manifest.json" and (
                         ASSET.fullmatch(path) is None
-                        or any(s in ("", ".", "..") for s in path.split("/")))):
+                        or any(s in ("", ".", "..") for s in path.split("/"))
+                        or Path(path).suffix.lower() not in
+                        (".json", ".css", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".woff2")))):
                     raise SurfaceReleaseError("untrusted Surface Dev archive entry")
                 if path in records or len(records) >= MAX_FILES + 1:
                     raise SurfaceReleaseError("duplicate or excessive Surface Dev entries")
