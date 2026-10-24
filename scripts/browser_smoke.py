@@ -23,6 +23,9 @@ from site_routes import PATHS as ROUTES
 VIEWPORTS = ((1440, 900), (390, 844), (320, 740))
 NO_SCRIPT_ROUTES = ("/login/", "/cadastro/", "/recuperar/",
                     "/recuperar/nova-senha/", "/conta/", "/web/")
+# 1280px layout viewed through 200% and 400% effective CSS viewports.
+# This checks responsive reflow, not real browser zoom or text magnification.
+REFLOW_WIDTHS = ((640, 200), (320, 400))
 
 
 class BrowserProofError(RuntimeError):
@@ -340,6 +343,26 @@ def no_script_probe(driver: Driver) -> dict:
     })();""")
 
 
+def wait_for_route(driver: Driver, route: str) -> None:
+    """Wait for visible state without depending on a privileged backend."""
+    for _ in range(35):
+        if driver.run("return document.readyState === 'complete'"):
+            break
+        time.sleep(0.1)
+    if route == "/":
+        for _ in range(40):
+            done = driver.run("""return document.querySelector('.playground')?.dataset.fixtureReady || null;""")
+            if done in ("true", "false"):
+                break
+            time.sleep(0.1)
+    if route in NO_SCRIPT_ROUTES:
+        for _ in range(30):
+            status = driver.run("""const el=document.querySelector('[data-identity-state],#account-session,[data-web-state]'); return el?.dataset?.status || null;""")
+            if status not in (None, "checking"):
+                break
+            time.sleep(0.1)
+
+
 def run(root: Path, evidence: Path) -> dict:
     if not (root / "public-site-manifest.json").is_file():
         raise BrowserProofError("build candidate missing; never browse unpackaged source")
@@ -357,6 +380,7 @@ def run(root: Path, evidence: Path) -> dict:
     child = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     driver = Driver(webdriver_port)
     results = []
+    reflow_results = []
     no_script_results = []
     failures = []
     try:
@@ -379,24 +403,9 @@ def run(root: Path, evidence: Path) -> dict:
                 })
                 url = f"http://127.0.0.1:{server.server_port}{route}"
                 driver.navigate(url)
-                # Auth/readiness can be asynchronous. No user data or privileged
-                # service is available: all API requests fail closed at loopback.
-                for _ in range(35):
-                    if driver.run("return document.readyState === 'complete'"):
-                        break
-                    time.sleep(0.1)
-                if route == "/":
-                    for _ in range(40):
-                        done = driver.run("""return document.querySelector('.playground')?.dataset.fixtureReady || null;""")
-                        if done in ("true", "false"):
-                            break
-                        time.sleep(0.1)
-                if route in ("/login/", "/cadastro/", "/recuperar/", "/recuperar/nova-senha/", "/conta/", "/web/"):
-                    for _ in range(30):
-                        status = driver.run("""const el=document.querySelector('[data-identity-state],#account-session,[data-web-state]'); return el?.dataset?.status || null;""")
-                        if status not in (None, "checking"):
-                            break
-                        time.sleep(0.1)
+                # No user data or privileged service is available; all
+                # backend requests remain fail-closed on loopback.
+                wait_for_route(driver, route)
                 report = probe(driver, route, width, height)
                 # The viewport and browser accessibility tree are audited on
                 # every route. Keyboard travel is tested on desktop only:
@@ -442,6 +451,44 @@ def run(root: Path, evidence: Path) -> dict:
                     if not success:
                         failures.append({"route": route, "viewport": width, "rule": name,
                                          "summary": report})
+        # Simulate the CSS layout viewport available when a 1280px desktop
+        # is viewed at 200% and 400% scale. Keep mobile=False so responsive
+        # rules are exercised in desktop emulation, distinct from the 320px
+        # phone proof. This does not claim full text zoom conformance.
+        for route in ROUTES:
+            for width, scale in REFLOW_WIDTHS:
+                driver.cdp("Emulation.setDeviceMetricsOverride", {
+                    "width": width, "height": 900, "deviceScaleFactor": 1,
+                    "mobile": False,
+                })
+                driver.navigate(f"http://127.0.0.1:{server.server_port}{route}")
+                wait_for_route(driver, route)
+                report = probe(driver, route, width, 900)
+                report["equivalentScalePercent"] = scale
+                short = route.strip("/").replace("/", "-") or "home"
+                shot = f"reflow-{scale}pct-{short}.png"
+                driver.shot(evidence / shot)
+                report["screenshot"] = shot
+                reflow_results.append(report)
+                checks = {
+                    "routeRendered": report["complete"] and report["pathname"] == route
+                        and report["mainCount"] == 1,
+                    "effectiveCssViewport": report["width"] == width,
+                    "reflowsWithoutPageHorizontalScroll": report["noOverflow"],
+                    "noRemoteResources": not report["remoteResources"],
+                    "noBrokenStaticResources": not report["failedStaticAssets"],
+                    "noUncaughtScripts": not report["runtimeErrors"],
+                }
+                if route == "/":
+                    checks["landingDemoMounted"] = report["landingFixturePresent"]
+                if route == "/conta/":
+                    checks["noInventedVerifiedUser"] = not report["accountHasVerifiedUser"]
+                if route in NO_SCRIPT_ROUTES[:4]:
+                    checks["formsRemainFailClosed"] = not report["exposedAuthForms"] and not report["enabledCredentials"]
+                for rule, good in checks.items():
+                    if not good:
+                        failures.append({"route": route, "viewport": f"reflow-{scale}",
+                                         "rule": rule, "summary": report})
         # Verify that disabling JavaScript at document parse time cannot
         # expose identity forms, verified identity or the Web launch. Re-enable
         # only after loading to inspect the inert DOM; deferred scripts must
@@ -475,9 +522,9 @@ def run(root: Path, evidence: Path) -> dict:
                                      "rule": rule, "summary": report})
         output = {"schema": "ordax.site-browser-proof/2", "routeCount": len(ROUTES),
                   "viewportCount": len(VIEWPORTS), "checks": len(results),
-                  "noScriptChecks": len(no_script_results),
+                  "reflowChecks": len(reflow_results), "noScriptChecks": len(no_script_results),
                   "failures": failures, "results": results,
-                  "noScriptResults": no_script_results}
+                  "reflowResults": reflow_results, "noScriptResults": no_script_results}
         (evidence / "report.json").write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if failures:
             raise BrowserProofError(f"{len(failures)} browser checks failed; see report.json; "
@@ -500,7 +547,7 @@ def main():
     parser.add_argument("--evidence", default="out/browser-evidence")
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} noscript={output['noScriptChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} noscript={output['noScriptChecks']}")
 
 
 if __name__ == "__main__":
