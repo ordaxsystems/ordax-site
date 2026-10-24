@@ -439,6 +439,32 @@ def reduced_motion_probe(driver: Driver) -> dict:
     })();""")
 
 
+def forced_colors_probe(driver: Driver) -> dict:
+    """Verify Chrome's native forced-colors mode and a perceivable skip-link focus.
+
+    This is a focused automated regression, not a screen-reader or WCAG audit.
+    """
+    driver.run("""const skip = document.querySelector('.skip-link[href="#conteudo"]');
+      if (skip) skip.focus({preventScroll:true});
+      return Boolean(skip);""")
+    return driver.run(r"""return (() => {
+      const skip = document.querySelector('.skip-link[href="#conteudo"]');
+      const style = skip && getComputedStyle(skip);
+      const rect = skip && skip.getBoundingClientRect();
+      const focused = skip && document.activeElement === skip;
+      return {
+        preferenceMatches: matchMedia('(forced-colors: active)').matches,
+        skipFocused: Boolean(focused),
+        skipPerceivable: Boolean(focused && rect && rect.width > 0 && rect.height > 0 &&
+          rect.top >= 0 && rect.bottom <= innerHeight &&
+          style.visibility === 'visible' && style.display !== 'none'),
+        skipFocusIndicator: Boolean(style && style.outlineStyle !== 'none' &&
+          parseFloat(style.outlineWidth) >= 2),
+        noHorizontalOverflow: document.documentElement.scrollWidth <= innerWidth + 2,
+      };
+    })();""")
+
+
 def no_script_probe(driver: Driver) -> dict:
     """Inspect the offline presentation after loading with script execution blocked."""
     return driver.run(r"""return (() => {
@@ -553,6 +579,19 @@ def run(root: Path, evidence: Path) -> dict:
                         driver.cdp("Emulation.setEmulatedMedia", {"features": [
                             {"name": "prefers-reduced-motion", "value": "no-preference"}
                         ]})
+                    driver.cdp("Emulation.setEmulatedMedia", {"features": [
+                        {"name": "forced-colors", "value": "active"}
+                    ]})
+                    try:
+                        report["forcedColors"] = forced_colors_probe(driver)
+                        short = route.strip("/").replace("/", "-") or "home"
+                        forced_shot = f"forced-colors-{short}.png"
+                        driver.shot(evidence / forced_shot)
+                        report["forcedColors"]["screenshot"] = forced_shot
+                    finally:
+                        driver.cdp("Emulation.setEmulatedMedia", {"features": [
+                            {"name": "forced-colors", "value": "none"}
+                        ]})
                 short = route.strip("/").replace("/", "-") or "home"
                 filename = f"{short}-{width}x{height}.png"
                 driver.shot(evidence / filename)
@@ -585,6 +624,12 @@ def run(root: Path, evidence: Path) -> dict:
                         "reducedMotionBrowserPreferenceHonored": report["reducedMotion"]["preferenceMatches"]
                           and report["reducedMotion"]["scrollingIsInstant"]
                           and not report["reducedMotion"]["activeMotion"],
+                        "nativeForcedColorsAndSkipFocus": all(
+                            report["forcedColors"][key] for key in (
+                                "preferenceMatches", "skipFocused", "skipPerceivable",
+                                "skipFocusIndicator", "noHorizontalOverflow"
+                            )
+                        ),
                     })
                 if route in ("/login/", "/cadastro/", "/recuperar/", "/recuperar/nova-senha/"):
                     check.update({"formsFailClosed": not report["exposedAuthForms"] and not report["enabledCredentials"]})
@@ -599,7 +644,9 @@ def run(root: Path, evidence: Path) -> dict:
                                          "summary": ({"contrast": report["solidSurfaceContrast"]}
                                                      if name == "measuredFlatSurfaceTextContrast"
                                                      else {"reducedMotion": report["reducedMotion"]}
-                                                     if name == "reducedMotionBrowserPreferenceHonored" else report)})
+                                                     if name == "reducedMotionBrowserPreferenceHonored"
+                                                     else {"forcedColors": report["forcedColors"]}
+                                                     if name == "nativeForcedColorsAndSkipFocus" else report)})
         # Simulate the CSS layout viewport available when a 1280px desktop
         # is viewed at 200% and 400% scale. Keep mobile=False so responsive
         # rules are exercised in desktop emulation, distinct from the 320px
@@ -685,6 +732,8 @@ def run(root: Path, evidence: Path) -> dict:
                                          if r["rule"] == "measuredFlatSurfaceTextContrast" else "")
                                       + (":" + json.dumps(r["summary"].get("reducedMotion", {}), ensure_ascii=False)
                                          if r["rule"] == "reducedMotionBrowserPreferenceHonored" else "")
+                                      + (":" + json.dumps(r["summary"].get("forcedColors", {}), ensure_ascii=False)
+                                         if r["rule"] == "nativeForcedColorsAndSkipFocus" else "")
                                       for r in failures[:15]))
         return output
     finally:
