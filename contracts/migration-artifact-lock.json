@@ -17,10 +17,6 @@
         "archive_sha256": "f37cded023174c922c674f2991d531cd2867429cadb4ab3a53694a206f9422c9",
         "manifest_sha256": "ef8e436cb3cb977c31d7038c3057bb3df9322bd5e1ff3e738ab6fd69270778a0"
       }
-    },
-    "offers": {
-      "directory": "artifacts/offers/os-migration-70b0f7eb",
-      "manifest_sha256": "2bb9aa89a84c27a449c4bf9c048f847fc8ecb4e928759ac47a47b47f15446dd6"
     }
   }
 }
