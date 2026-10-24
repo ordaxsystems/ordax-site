@@ -138,3 +138,9 @@ SITE_CANDIDATE_MANIFEST_SHA256=<SHA-256 do manifesto do artefato CI>
 ```
 
 Para um pré-flight de staging autorizado, obter **ambos os valores na mesma execução aprovada** e usar o `ordax-site-candidate` correspondente. Não obter pins da própria hospedagem que está sendo validada. A revisão do processo está na ADR-025. Isso prova rastreabilidade do candidato, não a autorização de produção ou a existência de um preview com Identity real.
+
+## Identidade: respostas do endpoint original
+
+O shell público faz consultas GET a `/auth/session`, `/auth/registration-policy` e demais contratos de apresentação. Essas respostas precisam vir **diretamente da URL de mesma origem requisitada**: `site/assets/site.js::loadJson` recusa redirects, respostas entregues por aliases e paths ambíguos antes de interpretar o JSON. Não existem sessões simuladas ou fluxos de autenticação próprios do Site.
+
+O navegador de CI injeta, **somente no loopback**, um 302 em `/auth/session` apontando para JSON 200 que imita uma sessão autenticada. A prova exige que a Conta permaneça indisponível, sem exibir e-mail fictício. Isso verifica a fronteira HTTP; a autenticação real, os cookies e o provisionamento continuam exclusivos do owner Identity/OS e dependem de ambiente de homologação autorizado (ADR-026).
