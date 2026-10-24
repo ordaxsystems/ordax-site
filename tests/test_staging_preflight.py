@@ -33,6 +33,11 @@ CATALOG = {
     "$schema": "prototype-ordax.public-release-catalog/1",
     "status": "empty", "releases": [],
 }
+ASSETS = {
+    "index.html": b"<!doctype html><title>OrdaX</title>",
+    "assets/site.js": b"console.log('public shell')",
+    "login/index.html": b"<!doctype html><title>Login</title>",
+}
 
 
 def encoded(value):
@@ -55,6 +60,12 @@ def make_fetch(overrides=None):
     for path in ("config/public-site.json", "releases/catalog.json"):
         item = responses["/" + path][1]
         inventory.append({"path": path, "sha256": digest(item), "size": len(encoded(item))})
+    for name, content in ASSETS.items():
+        inventory.append({
+            "path": name,
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "size": len(content),
+        })
     manifest = {
         "$schema": SITE_BUNDLE_SCHEMA,
         "source_commit": SITE_COMMIT,
@@ -72,12 +83,18 @@ def make_fetch(overrides=None):
         status, payload = responses[path]
         return status, copy.deepcopy(payload), digest(payload), len(encoded(payload))
 
+    def fetch_asset(name, size):
+        observed.append(("asset:" + name, size))
+        content = ASSETS[name]
+        return hashlib.sha256(content).hexdigest(), len(content)
+
+    fetch.asset = fetch_asset
     return fetch, observed, expected_manifest_sha256
 
 
-def prove(fetch, trusted_manifest_sha256):
+def prove(fetch, trusted_manifest_sha256, *, asset=None):
     return evaluate_gateway_contracts(
-        fetch,
+        fetch, asset or getattr(fetch, "asset", lambda *_: (_ for _ in ()).throw(AssertionError("early-failure-required"))),
         expected_site_commit=SITE_COMMIT,
         expected_manifest_sha256=trusted_manifest_sha256,
     )
@@ -113,8 +130,9 @@ class StagingPreflightTests(unittest.TestCase):
         self.assertEqual(result["publisher_attestation"], "NOT_TESTED")
         self.assertFalse(result["production_approval"])
         self.assertEqual([path for path, _ in calls], [
-            "/public-site-manifest.json", "/config/public-site.json",
-            "/auth/session", "/releases/catalog.json"
+            "/public-site-manifest.json",
+            "asset:assets/site.js", "asset:index.html", "asset:login/index.html",
+            "/config/public-site.json", "/auth/session", "/releases/catalog.json"
         ])
 
     def test_stale_os_bundle_or_mismatched_manifest_never_passes(self):
@@ -126,16 +144,16 @@ class StagingPreflightTests(unittest.TestCase):
             "/config/public-site.json": (200, CONFIG)
         })
         with self.assertRaisesRegex(StagingPreflightError, "expected-site-commit-invalid"):
-            evaluate_gateway_contracts(fetch, expected_site_commit="old",
+            evaluate_gateway_contracts(fetch, fetch.asset, expected_site_commit="old",
                                        expected_manifest_sha256=pin)
         with self.assertRaisesRegex(StagingPreflightError, "expected-site-manifest-sha256-invalid"):
-            evaluate_gateway_contracts(fetch, expected_site_commit=SITE_COMMIT,
+            evaluate_gateway_contracts(fetch, fetch.asset, expected_site_commit=SITE_COMMIT,
                                        expected_manifest_sha256="weak")
 
     def test_incorrect_site_source_commit_or_legacy_bundle_is_blocked(self):
         fetch, _, pin = make_fetch()
         with self.assertRaisesRegex(StagingPreflightError, "site-bundle-manifest-identity-invalid"):
-            evaluate_gateway_contracts(fetch, expected_site_commit="2" * 40,
+            evaluate_gateway_contracts(fetch, fetch.asset, expected_site_commit="2" * 40,
                                        expected_manifest_sha256=pin)
 
         def legacy(path, limit):
@@ -163,6 +181,28 @@ class StagingPreflightTests(unittest.TestCase):
             return status, payload, sha, size
         with self.assertRaisesRegex(StagingPreflightError, "site-bundle-file-mismatch:releases"):
             prove(tampered_catalog, pin)
+
+    def test_injected_login_html_or_javascript_is_rejected_before_identity(self):
+        for tampered in ("login/index.html", "assets/site.js"):
+            with self.subTest(tampered=tampered):
+                fetch, calls, pin = make_fetch()
+
+                def injected(name, size):
+                    actual_sha, actual_size = fetch.asset(name, size)
+                    if name == tampered:
+                        return "f" * 64, actual_size
+                    return actual_sha, actual_size
+
+                with self.assertRaisesRegex(StagingPreflightError, "site-bundle-file-mismatch"):
+                    prove(fetch, pin, asset=injected)
+                self.assertNotIn("/auth/session", [path for path, _ in calls])
+
+    def test_missing_static_asset_is_not_ignored(self):
+        fetch, _, pin = make_fetch()
+        def unavailable(name, size):
+            raise StagingPreflightError("site-bundle-file-http-mismatch:" + name)
+        with self.assertRaisesRegex(StagingPreflightError, "site-bundle-file-http-mismatch"):
+            prove(fetch, pin, asset=unavailable)
 
     def test_unavailable_active_gateway_is_never_reported_ready(self):
         bad = {"$schema": "prototype-ordax.public-site-proxy-error/1",
