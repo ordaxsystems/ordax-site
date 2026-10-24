@@ -83,3 +83,12 @@ O lock tem status `development-only-not-authorized-for-production`: **não é as
 O build independente é verificado contra **todas as referências CSS** (`url(...)` local e `@import`) e falha quando uma fonte ou imagem distribuída está ausente, quando uma URL sai da origem autorizada ou atravessa diretórios. Testes unitários provocam essas falhas. O Chrome observa exceções JavaScript/rejeições não tratadas desde o início da navegação e confirma ausência de recursos estáticos com status de erro (o backend de Identity propositalmente isolado continua respondendo 503). O favicon padrão de cada página é o símbolo OrdaX publicado pelo **brand verificado**, sem criar outro asset ou ícones redundantes. [CI navegador+smoke PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40048444731).
 
 Os checks são regressões técnicas; não substituem staging real, auditoria completa WCAG nem publicação oficial de marca/preview/ofertas.
+
+## Fail-closed sem JavaScript e reflow de CSS (23/10/2026)
+
+O `scripts/browser_smoke.py` mantém **33 cenários normais** (11 rotas × 3 telas) e exerce duas famílias de regressões separadas:
+
+- **6 estados sem execução de JavaScript:** login, cadastro, recuperação, redefinição de senha, Conta e Web. O Chrome bloqueia scripts **antes da navegação** e comprova que os avisos `noscript` são visíveis, links de navegação funcionam e nenhum formulário de credenciais, sessão verificada ou entrada Web fica disponível. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051439195).
+- **22 cenários de reflow:** todas as 11 rotas com viewport CSS de 640 px e 320 px em **emulação de desktop**, equivalentes à largura disponível em uma janela de 1280 px com escala de 200% e 400%. Verificam conteúdo principal, ausência de rolagem horizontal na página, demo montada, estados auth fail-closed e recursos/JavaScript sem erros. A prova detectou quatro cabeçalhos com seletor de idioma ultrapassando a largura; o **CSS Site canônico** foi corrigido para quebrar a linha em Download, Licenças, Privacidade e Termos. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051704031).
+
+Há capturas por cenário no artefato `ordax-site-browser-evidence` do GitHub CI. **Isto não é um teste do comando de zoom real do navegador nem conformidade WCAG integral**: continuam pendentes ampliação exclusiva de texto, contraste completo e avaliação manual por leitor de tela, além de Identity em staging.

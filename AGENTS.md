@@ -26,7 +26,7 @@ Este repositório é o **owner do código de apresentação do site público** a
 Branch -> auditoria de diffs e conflitos -> testes de rotas/i18n/segurança -> pacote com provenance SHA-256 -> CI -> PR review -> cutover OS só depois de prova de paridade -> publicação sob autorização separada. Registrar atualizações em `docs/HANDOFF.md`.
 
 ## Status
-Extração é **candidata em draft**; todos os assets originais, incluindo dois PNGs grandes, foram preservados. Build CI independente, smoke estático e snapshot de ofertas/brand de migração aprovados. Falta a publicação **oficial** desses insumos pelo owner Surface/Platform, E2E de browser e cutover no OS. Nenhum build de produção autorizado.
+Extração é **candidata em draft**; todos os assets originais, incluindo dois PNGs grandes, foram preservados. Build CI independente, smoke estático e snapshot de ofertas/brand de migração aprovados. Há E2E **local isolado** em navegador. Faltam a publicação **oficial** desses insumos pelo owner Surface/Platform, testes completos de acessibilidade e Identity em staging, e cutover no OS. Nenhum build de produção autorizado.
 
 
 ## Gates de implementação atualmente verificados
@@ -58,3 +58,9 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 - O smoke estático varre o **CSS realmente distribuído**, não os artefatos-fonte, e rejeita `url(...)` externos, com travessia de diretório, que referenciem arquivos ausentes, e `@import` não controlado. `data:image/` e referências fragmento permanecem permitidas. Os recursos externos/gerados da Surface também estão cobertos.
 - O Chrome instala um observador **antes** dos scripts da página para capturar erros JS, rejeições de promise e carregamento de imagem/script/stylesheet com erro, além de HTTP 4xx/5xx para recursos estáticos. Erros esperados nos serviços `/auth/`, `/account/`, `/api/`, `/sync/` não são confundidos com falhas de asset.
 - O SEO projection injeta `rel="icon"` apontando para `/assets/ordax-symbol.png` do **brand verificado**, salvo quando o source já declara favicon. Isso impede a requisição implícita a `/favicon.ico` inexistente sem replicar recursos. [CI integrado PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40048444731).
+
+## Reflow e no-JavaScript — regressões obrigatórias
+
+- A suite `scripts/browser_smoke.py` inclui 33 provas regulares, **22 reflows de CSS em modo desktop** (640/320 px) e **6 estados sem execução de JavaScript**, capturados em `out/browser-evidence`. O controle auth permanece desativado também sem scripts. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051704031).
+- **Não esconder horizontal overflow com `overflow-x:hidden` global.** O problema identificado era o seletor de idioma anexado ao `.site-nav` excedendo a largura em quatro rotas. A correção é `flex-wrap` e linha própria para `.public-locale-switcher` em largura estreita, no único `site/assets/site.css`.
+- Não declarar testado o zoom real ou WCAG completo: o reflow usa viewports CSS equivalentes a 200/400% de uma janela de 1280 px. Text-only zoom, contraste, leitores de tela e gateway real continuam pendentes.

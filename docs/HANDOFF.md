@@ -22,7 +22,7 @@
 1. Publicar pacote oficial de brand no owner Surface com proveniência/revisão e substituir o snapshot de migração por referência a esse artefato, sem depender de checkout OS.
 2. Publicar snapshot Meridian/fixture como artefato read-only compatível pelo owner Surface; não manter gerador no Site.
 3. **PARCIAL** — projeção read-only de referência/restauração de UI concluída no snapshot de migração; falta publicar sua versão oficial no owner de entitlements e substituir a dependência do snapshot. Nenhuma contratação pode ser habilitada.
-4. Rodar smoke real de browser, a11y, SEO/responsividade, login/recovery fail-closed e paridade visual em staging.
+4. **PARCIAL:** navegador Chrome isolado cobre reflow CSS, teclado/AX e estados fail-closed inclusive sem JavaScript; faltam contraste/zoom real/leitor de tela e paridade visual + Identity com gateway em staging.
 5. PR **futura de repoint/cutover** no OS distinta da documental #2196; revalidar a `main`, reconciliar Surface #2195 e remover duplicação só após prova de igualdade e CI dos consumidores.
 
 ## Recomendações operacionais
@@ -70,3 +70,10 @@
 - O Chrome agora captura `error` e `unhandledrejection` antes do primeiro script, falhas de carregamento e respostas estáticas HTTP 4xx/5xx. Fluxos auth simulados com 503 preservam o estado fail-closed, sem mascarar problemas de CSS/JS/favicon.
 - Erro de recurso na landing levou à inclusão determinística de favicon usando **o símbolo já verificado do brand**, sem copiar arquivos ou duplicar ícones. [Prova integrada PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40048444731).
 - Sem alegação de WCAG completa nem teste de identidade em staging. `ordax-surface#3` e os owners de releases/entitlements ainda precisam fornecer os pacotes oficiais antes de qualquer cutover.
+
+## Reflow desktop e modo sem JavaScript (2026-10-23)
+
+- `scripts/browser_smoke.py` agora produz **33 capturas base + 22 capturas de reflow (640/320 px em desktop) + 6 capturas sem JavaScript**. A segunda suite NÃO é equivalente a testes de zoom real ou aumento só da fonte: comprova reflow e ausência de horizontal-scroll para viewports CSS equivalentes a 200/400% de 1280 px.
+- O Chrome desativa a execução JS antes da carga das seis rotas de Identity/Conta/Web e verifica `noscript` visível, navegação de retorno, forms de credenciais fechados, nenhuma sessão validada e Web indisponível. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051439195).
+- O primeiro CI de reflow evidenciou overflow a 320 px em Download, Licenças, Privacidade e Termos. Instrumentação identificou `.public-locale-switcher` com posição à direita do viewport. A correção foi **somente no CSS Site**, permitindo flex-wrap e linha dedicada no nav dos quatro templates a `<=430px`; nenhum `overflow-x:hidden` paliativo. [CI com reflow corrigido PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051704031).
+- **Continuam pendentes:** prova da ampliação real de browser e text-only, contraste por estado, leitor de tela, e paridade/autenticação em ambiente de staging autorizado; não homologar estes gates sem executar.
