@@ -109,6 +109,35 @@ class SiteContractTests(unittest.TestCase):
                             Path(tmp) / "arbitrary-publications.json",
                             public_origin="https://ordax.com.br")
 
+    def test_bundle_publication_state_is_not_a_self_authorization_flag(self):
+        # Tiny self-contained bundle proves the verifier uses the already
+        # canonical manifest, without staging Surface or calling any backend.
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            artifact = out / "releases/catalog.json"
+            artifact.parent.mkdir()
+            artifact.write_text(json.dumps(render_catalog({"releases": []})), encoding="utf-8")
+            ledger = {
+                "$schema": build.SCHEMA, "source_commit": "1" * 40,
+                "catalog_status": "empty", "publications_sha256": None,
+                "files": [{"path": "releases/catalog.json",
+                           "size": artifact.stat().st_size,
+                           "sha256": build.digest(artifact.read_bytes())}],
+            }
+            manifest = out / "public-site-manifest.json"
+
+            def verify_with(**fields):
+                manifest.write_text(json.dumps({**ledger, **fields}), encoding="utf-8")
+                build.verify(out)
+
+            verify_with()
+            with self.assertRaisesRegex(build.SiteError, "publication state mismatch"):
+                verify_with(catalog_status="ready")
+            with self.assertRaisesRegex(build.SiteError, "empty catalog cannot have"):
+                verify_with(publications_sha256="f" * 64)
+            with self.assertRaisesRegex(build.SiteError, "publication state mismatch"):
+                verify_with(catalog_status="missing")
+
     def test_unauthorized_catalog_fails_closed(self):
         result = render_catalog({"releases": []})
         self.assertEqual(result["status"], "empty")
