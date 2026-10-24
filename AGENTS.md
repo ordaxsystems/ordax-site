@@ -125,3 +125,8 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 - `public_release_catalog.render_catalog` e `validate_catalog` devem conservar paridade dos campos de release/target/compliance, unicidade dos IDs e caminhos literais seguros; o browser `site/assets/site.js` é uma defesa adicional, não um segundo publicador. `status=empty` deve conter zero releases, e qualquer inconsistência deve **impedir todos os links**, sem renderizar parcialmente uma lista inválida.
 - Preservar os três testes negativos **dentro** de `scripts/browser_smoke.py` via resposta de catálogo sobrescrita apenas no servidor local de prova; nenhuma alteração em `out/site`, manifestos, fixtures da Surface ou catálogo real. Não tratar a projeção sintética de teste como release autorizada.
 - A política atual de `ordax-os/docs/contracts/public-site-deployment.json` não autoriza Identity em preview; obter aprovação expressa do owner antes de qualquer integração de gateway a staging. Não mudar Vercel, DNS, autenticação, assinatura ou produção nesta branch.
+
+## CI de candidato: provenance do commit real (2026-10-24)
+
+- Manter CI isolado com **um único workflow por revisão de PR**, `push` somente em `main` e checkout da revisão head real. Não restaurar o gatilho `push` na branch de migração nem trocar o SHA do checkout pelo merge sintético da PR como `source_commit`.
+- `public-site-manifest.json.source_commit` deve ser exatamente `git rev-parse HEAD` do código compilado. Publicar os identificadores `SITE_CANDIDATE_SOURCE_COMMIT` e `SITE_CANDIDATE_MANIFEST_SHA256` no log de CI confiável, sem transferir autoridade de publisher ou autorização de deployment. Consultar ADR-025 e `docs/HANDOFF.md`, sem criar outros manifestos.
