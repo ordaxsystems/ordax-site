@@ -373,7 +373,7 @@ class SiteContractTests(unittest.TestCase):
                 "status": "audited-migration-snapshot-not-official-surface-publication",
                 "immutable": True,
             }
-            encoded = (json.dumps(old_manifest, sort_keys=True) + "\\n").encode("utf-8")
+            encoded = (json.dumps(old_manifest, sort_keys=True) + "\n").encode("utf-8")
             (source_dir / "manifest.json").write_bytes(encoded)
             digest = build.digest(encoded)
             out = Path(tmp) / "site-output"
