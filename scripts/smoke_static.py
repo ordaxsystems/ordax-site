@@ -111,7 +111,7 @@ def assert_candidate(out: Path) -> dict:
             "meta description": bool(page.description.strip()),
             "viewport": "width=device-width" in page.viewport,
             "single main": page.mains == 1,
-            "primary heading": page.headings >= 1 or (relative == "conta/index.html" and 'id="account-content"' in html),
+            "primary heading": page.headings == 1,
             "skip navigation": page.skip_target in {"#" + identifier for identifier in page.ids},
         }
         for key, good in checks.items():

@@ -237,6 +237,14 @@ class SiteContractTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "import"):
                 check_css_dependencies(bundle)
 
+    def test_account_fallback_heading_is_not_a_second_runtime_heading(self):
+        markup = (ROOT / "site/conta/index.html").read_text(encoding="utf-8")
+        self.assertEqual(markup.count("<h1"), 1)
+        self.assertIn('<h1 class="sr-only">Minha Conta OrdaX</h1>', markup)
+        runtime = (ROOT / "site/assets/account-portal.js").read_text(encoding="utf-8")
+        self.assertIn('document.getElementById("account-session").innerHTML', runtime)
+        self.assertIn('document.getElementById("account-content").innerHTML', runtime)
+
     def test_site_is_not_native_web_surface(self):
         paths = (ROOT / "site").rglob("*")
         self.assertFalse(any("node_modules" in x.parts or ".env.production" in x.parts for x in paths))

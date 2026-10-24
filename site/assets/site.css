@@ -1121,3 +1121,10 @@ a {
 @media(max-width:600px){
   .site-header .ordax-profile-menu{right:0;max-width:calc(100vw - 24px)}
 }
+
+/* WCAG 2.3.3: honor requested reduced motion in the shared public shell.
+   Theme-specific animation layers retain their own scoped preferences. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .skip-link, .button { transition: none; }
+}
