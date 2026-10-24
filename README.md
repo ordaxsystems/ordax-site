@@ -144,3 +144,9 @@ Para um pré-flight de staging autorizado, obter **ambos os valores na mesma exe
 O shell público faz consultas GET a `/auth/session`, `/auth/registration-policy` e demais contratos de apresentação. Essas respostas precisam vir **diretamente da URL de mesma origem requisitada**: `site/assets/site.js::loadJson` recusa redirects, respostas entregues por aliases e paths ambíguos antes de interpretar o JSON. Não existem sessões simuladas ou fluxos de autenticação próprios do Site.
 
 O navegador de CI injeta, **somente no loopback**, um 302 em `/auth/session` apontando para JSON 200 que imita uma sessão autenticada. A prova exige que a Conta permaneça indisponível, sem exibir e-mail fictício. Isso verifica a fronteira HTTP; a autenticação real, os cookies e o provisionamento continuam exclusivos do owner Identity/OS e dependem de ambiente de homologação autorizado (ADR-026).
+
+## Revisões de sessão e proteção contra respostas atrasadas
+
+Os formulários de login/cadastro/recuperação dependem exclusivamente dos contratos de Identity do mesmo origin e dos contadores compartilhados `sessionRevision` e `startRevision` de `site/assets/site.js`. Em qualquer revalidação da página, a ação e os controles são imediatamente desativados. Respostas anteriores de sessão, políticas/documentos legais ou carregamento do Turnstile não podem reativá-los: o runtime descarta conclusões e tokens fora da revisão atual.
+
+O Chrome executa uma prova de concorrência sem credenciais reais, inserindo **somente no servidor local** uma resposta de sessão antiga `200 anonymous` deliberadamente atrasada e uma nova `503` imediata. A interface deve permanecer indisponível e sem envio de formulário (`identityRace=1`). Essa prova não corresponde a login real; autorização de staging continua com o owner do Identity/OS.
