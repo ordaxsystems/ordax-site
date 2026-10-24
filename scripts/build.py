@@ -322,7 +322,7 @@ def stage_surface_dev_preview(stage: Path, directory: Path, manifest: dict,
     css = payloads["assets/surface-snapshot.css"]
     bundled_fonts = [
         name for name in payloads
-        if re.fullmatch(r"assets/inter-latin-wght-normal-[A-Za-z0-9_-]+\\.woff2", name)
+        if re.fullmatch(r"assets/inter-latin-wght-normal-[A-Za-z0-9_-]+\.woff2", name)
     ]
     if len(bundled_fonts) != 1:
         raise SiteError("expected one canonical Vite Inter font in Dev preview")
