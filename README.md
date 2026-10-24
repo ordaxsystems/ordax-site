@@ -2,7 +2,7 @@
 
 Repositório de **apresentação pública** do OrdaX. Independente dos builds do kernel, USB, Surface Web, Creator e Identity.
 
-> **Cutover de desenvolvimento integrado (2026-10-24).** O `ordax-site/main` é o owner do código e build independentes. O repoint dos builds Vercel do OS foi integrado em [ordax-os#2225](https://github.com/ordaxsystems/ordax-os/pull/2225); a apresentação histórica duplicada foi removida por [ordax-os#2229](https://github.com/ordaxsystems/ordax-os/pull/2229) (merge `c7533bc6`). Este estado **não** autoriza deploy de produção, alteração de DNS, ativação de Identity nem uso público dos artefatos temporários.
+> **Cutover de desenvolvimento integrado (2026-10-24).** O `ordax-site/main` é o owner do código e build independentes. O repoint dos builds Vercel do OS foi integrado em [ordax-os#2225](https://github.com/ordaxsystems/ordax-os/pull/2225); a apresentação histórica duplicada foi removida por [ordax-os#2229](https://github.com/ordaxsystems/ordax-os/pull/2229) (merge `c7533bc6`). Os artefatos de marca e Meridian são agora duas **prereleases Dev assinadas da Surface**. A integração não autoriza deploy de produção, DNS, Identity, billing ou downloads.
 
 ## O que pertence ao Site
 
@@ -51,7 +51,7 @@ A landing lê **um** `/assets/playground-fixture.json` de mesma origem, com falh
 
 CI de candidato: `python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence` usa ChromeDriver pré-instalado, exercita 11 rotas em 1440, 390 e 320 px, guarda capturas e relatório e mantém APIs de autenticação indisponíveis em loopback. A execução [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365) não substitui uma auditoria WCAG completa ou auth E2E em staging.
 
-Os snapshots de marca/ofertas continuam sendo **apenas materiais de migração verificados**, não autorizações de publicação ou SSOT substitutos.
+Nenhum snapshot do OS permanece no Git do Site. O brand e a demo vêm das duas prereleases Dev da Surface; planos permanecem desabilitados por falta de publicação comercial autorizada.
 
 
 ## Navegação de teclado e internacionalização verificada
@@ -60,23 +60,23 @@ O CI exercita o **skip link via Tab+Enter**, leitura de nomes pela Accessibility
 
 ## Contrato do pacote público Surface — sem espelho
 
-O source editável do Site **não contém** `surface-snapshot.css`, `playground-fixture.json` ou a cópia redundante `surface-snapshot.json`. A demonstração Meridian é materializada da **prerelease Dev assinada pela Surface**, com commit Surface/OS, archive e manifesto SHA-256 fixados em `contracts/migration-artifact-lock.json`. O build valida o download, as entradas, o grafo de origem, as 11 telas e as dependências de CSS. O snapshot histórico da demonstração do OS foi excluído. O objeto `surface` já existe dentro da fixture; o JSON independente anterior era idêntico e foi eliminado.
+O source editável do Site **não contém** `surface-snapshot.css`, `playground-fixture.json` ou a cópia redundante `surface-snapshot.json`. A demonstração Meridian é materializada da **prerelease Dev assinada pela Surface**, com commit Surface/OS, archive e manifesto SHA-256 fixados em `contracts/dev-artifact-lock.json`. O build valida o download, as entradas, o grafo de origem, as 11 telas e as dependências de CSS. O snapshot histórico da demonstração do OS foi excluído. O objeto `surface` já existe dentro da fixture; o JSON independente anterior era idêntico e foi eliminado.
 
 O CSS do renderer Meridian inclui uma fonte Inter fingerprintada. A etapa de build troca **somente no output** esse URL pelo recurso Inter existente no brand verificado e usa fingerprint dos bytes realmente publicados no CSS. Não regrava artefato de origem nem duplica a fonte no bundle.
 
-A demo Dev usa a prerelease atestada [`meridian-dev-1ab73da4…`](https://github.com/ordaxsystems/ordax-surface/releases/tag/meridian-dev-1ab73da4aae5991273a5f4ca380d5af135ffd8d5), com origem Surface e OS verificáveis. O status `candidate-not-published` impede tratá-la como autorização de produção. A marca e outras distribuições públicas permanecem em [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). Este modelo não transfere ownership de DNS, Web, OS, Account, entitlements, downloads ou deploy.
+A demo Dev usa a prerelease atestada [`meridian-dev-1ab73da4…`](https://github.com/ordaxsystems/ordax-surface/releases/tag/meridian-dev-1ab73da4aae5991273a5f4ca380d5af135ffd8d5), com origem Surface e OS verificáveis. O status `candidate-not-published` impede tratá-la como autorização de produção. A marca Dev também já foi publicada pela [Surface #14](https://github.com/ordaxsystems/ordax-surface/pull/14). Publicação pública/comercial exige um gate independente. Este modelo não transfere ownership de DNS, Web, OS, Account, entitlements, downloads ou deploy.
 
 ## Manifestos pinados e lock único de desenvolvimento
 
-`contracts/migration-artifact-lock.json` é a **única fonte de hashes de confiança** das três entradas do build Dev (`brand`, `surface_preview`, `offers`). O CI usa `--migration-lock`; o builder recusa overrides de `--brand-dir`, `--surface-preview-dir` ou `--offers-dir` quando recebe esse lock, verifica sha256 do manifesto **antes** de aceitar qualquer declaração interna de identidade, formato, integridade ou status e confirma a mesma revisão histórica do `ordax-os` somente entre marca e ofertas. A demo usa pins multi-owner Surface+OS e assinatura verificada pelo CI.
+`contracts/dev-artifact-lock.json` é a **única fonte de pins de confiança** das duas entradas de apresentação Dev: `brand` e `surface_preview`. O CI verifica separadamente a assinatura, a identidade do workflow, a revisão fonte, o SHA-256 do archive e o manifesto de cada prerelease da Surface. O builder usa `--dev-lock` e recusa overrides individuais; não existe entrada `offers` nem uma revisão OS comum de materiais de migração.
 
-O lock tem status `development-only-not-authorized-for-production`: **a assinatura do preview não concede autorização de produção, Stable ou downloads**. As releases oficiais dos owners terão contrato e política de confiança independentes. O Site permanece candidato não publicado.
+O lock tem status `development-only-not-authorized-for-production`: **a assinatura do preview não concede autorização de produção, Stable ou downloads**. As prereleases assinadas validam somente a proveniência **Dev**; a autorização de distribuição real permanece sob os owners correspondentes. O Site continua candidato sem liberação pública de produção.
 
 ## Recursos CSS e erros de navegador
 
 O build independente é verificado contra **todas as referências CSS** (`url(...)` local e `@import`) e falha quando uma fonte ou imagem distribuída está ausente, quando uma URL sai da origem autorizada ou atravessa diretórios. Testes unitários provocam essas falhas. O Chrome observa exceções JavaScript/rejeições não tratadas desde o início da navegação e confirma ausência de recursos estáticos com status de erro (o backend de Identity propositalmente isolado continua respondendo 503). O favicon padrão de cada página é o símbolo OrdaX publicado pelo **brand verificado**, sem criar outro asset ou ícones redundantes. [CI navegador+smoke PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40048444731).
 
-Os checks são regressões técnicas; não substituem staging real, auditoria completa WCAG nem publicação oficial de marca/preview/ofertas.
+Os checks são regressões técnicas; não substituem staging real, auditoria WCAG integral nem a autorização independente de produção, releases e catálogo comercial.
 
 ## Fail-closed sem JavaScript e reflow de CSS (23/10/2026)
 
