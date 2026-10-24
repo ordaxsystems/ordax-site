@@ -222,23 +222,11 @@ for (const cssPath of fs.readdirSync(path.join(ROOT, "site/assets")).filter(name
   assert(!/url\(\s*["']?https?:\/\//i.test(css), `${cssPath} introduced a remote CSS/font asset`);
 }
 
-// Surface owns this generated fixture; localization audits the pinned input artifact,
-// never a second editable source under site/assets.
-const fixture = JSON.parse(read("artifacts/surface-preview/os-migration-70b0f7eb/assets/playground-fixture.json"));
-const fixtureStrings = [];
-(function walk(value) {
-  if (typeof value === "string") {
-    fixtureStrings.push(value);
-  } else if (Array.isArray(value)) {
-    value.forEach(walk);
-  } else if (value && typeof value === "object") {
-    Object.values(value).forEach(walk);
-  }
-})({...fixture, surface: undefined});
-for (const value of fixtureStrings) {
-  if (!looksPortuguese(value)) continue;
-  assert(sourceMessages.has(normalize(value)), `playground fixture copy missing from localization owner: ${value}`);
-}
+// External Surface/OS catalog text belongs to its respective owner. This
+// localization test checks Site-owned strings, never snapshots from another
+// repository; release CI verifies the signed preview independently.
+assert(!fs.existsSync(path.join(ROOT, "site/assets/playground-fixture.json")),
+       "Site must not own a second generated playground fixture");
 
 const runtime = read("site/i18n/runtime.js");
 const localeRuntimeContext = vm.createContext({
