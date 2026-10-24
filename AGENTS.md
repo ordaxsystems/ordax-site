@@ -150,3 +150,8 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 
 - **Nunca vincular cache/retorno pessoal ao e-mail** nem ao valor `"verified-session"`: mesma string não comprova sessão igual. `OrdaXPublicAccount` publica um objeto imutável novo a cada revalidação; `account-portal.js` o utiliza como chave de geração e limpa imediatamente `mcpUsage` em mudanças, antes de novo consumo. `readMcpUsage` precisa negar payload cuja sessão de origem foi substituída enquanto o GET estava pendente. Sem subject/token na interface e sem outro gerenciador de Identity.
 - Preservar a prova Chrome **`usageSession=1` no runner já existente**, apenas em loopback: três sessões de mesmo e-mail com contagens 91/44/7 e resposta B tardia não devem exibir valores da sessão anterior. O backend continua responsável por autorizar `/account/usage/mcp` em cada request real; não criar mock em produto nem ativar staging.
+
+## Legacy URL fragments never outlive the initial login boot (2026-10-24)
+
+- `/login/` pode receber links antigos do provedor hospedado com `#access_token=`; nunca interpretar/trocar/armazenar fragmentos bearer. `site/assets/site.js::start()` remove o fragmento **sincronamente antes de `loadConfig()`, sessão, Turnstile ou outros awaits**. Não mover novamente a sanitização para depois de rede nem duplicar em outras páginas sem contrato.
+- Preservar a prova Chrome no único `scripts/browser_smoke.py` (`fragmentScrub=1`): GET de config fica preso em loopback, URL de login contém um token sintético e deve estar limpa **antes** da resposta. Nenhuma credencial real, provider falso em produção ou novo script inline de autenticação.
