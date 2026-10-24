@@ -357,6 +357,30 @@ class SiteContractTests(unittest.TestCase):
             with self.assertRaisesRegex(build.SiteError, "invalid signed Dev release lock"):
                 build.load_dev_artifact_lock(fake)
 
+    def test_retired_os_surface_preview_cannot_reenter_signed_dev_bundle(self):
+        """Even a correctly hashed OS-era manifest must not be accepted."""
+        source = (ROOT / "scripts/build.py").read_text(encoding="utf-8")
+        self.assertNotIn("ordax-public-surface-preview", source)
+        self.assertNotIn("audited-migration-snapshot-not-official-surface-publication", source)
+        with tempfile.TemporaryDirectory() as tmp:
+            source_dir = Path(tmp) / "retired-os-preview"
+            source_dir.mkdir()
+            old_manifest = {
+                "$schema": "prototype-ordax.public-surface-preview/1",
+                "artifact_class": "ordax-public-surface-preview",
+                "source_repository": "ordaxsystems/ordax-os",
+                "source_commit": "1" * 40,
+                "status": "audited-migration-snapshot-not-official-surface-publication",
+                "immutable": True,
+            }
+            encoded = (json.dumps(old_manifest, sort_keys=True) + "\\n").encode("utf-8")
+            (source_dir / "manifest.json").write_bytes(encoded)
+            digest = build.digest(encoded)
+            out = Path(tmp) / "site-output"
+            with self.assertRaisesRegex(build.SiteError, "retired OS Surface migration preview"):
+                build.stage_surface_preview(out, source_dir, digest)
+            self.assertFalse(out.exists())
+
     def test_verified_surface_images_reuse_site_bytes_without_duplicate_aliases(self):
         with tempfile.TemporaryDirectory() as tmp:
             stage = Path(tmp)
