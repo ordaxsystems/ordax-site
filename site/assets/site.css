@@ -1132,6 +1132,8 @@ a {
 /* Keep the keyboard escape hatch visibly identifiable when the OS forces its
    high-contrast palette. System colors, not authored RGB, own this outline. */
 @media (forced-colors: active) {
+  /* Reveal focused navigation immediately, without an off-screen transition. */
+  .skip-link { transition: none; }
   .skip-link:focus {
     transform: none;
     outline: 2px solid Highlight;
