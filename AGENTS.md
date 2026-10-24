@@ -49,7 +49,7 @@ O **código e o build independentes já estão integrados à `main`**, com consu
 
 ## Lock SSOT de insumos externos e segurança de releases
 
-- `contracts/migration-artifact-lock.json` é a fonte única de pins dos snapshots históricos de marca/ofertas e da prerelease Dev Surface, com dois digests e as revisões Surface/OS. O CI usa `--migration-lock` e proíbe overrides individuais; não mantenha digests copiados em workflow, código ou docs.
+- `contracts/dev-artifact-lock.json` fixa exclusivamente as duas prereleases Dev assinadas da Surface (marca + Meridian), com digests de archive/manifesto e proveniência Surface/OS. O CI verifica ambas as atestações. Use `--dev-lock`; não reintroduzir snapshots OS, geradores visuais nem arquivos duplicados.
 - Os manifestos de brand, preview e offers são validados **contra o digest pinado no lock antes de ler suas alegações internas**. Revisão OS de origem deve coincidir entre todos. Lock é estritamente **dev-only**; não autoriza produção.
 - O builder **rejeita** `--publications` mesmo que o JSON local afirme `public_authorized=true`. Downloads permanecem vazios até integração explícita de evidência oficial do publisher (mais que flags autorreferentes).
 
@@ -69,7 +69,7 @@ O **código e o build independentes já estão integrados à `main`**, com consu
 
 - O Chrome deve manter a prova `solid_surface_contrast_probe()` em páginas desktop: >=4,5:1 para texto comum, >=3:1 para texto grande quando existe **fundo sólido mensurável**; exigir amostras nas rotas não-landing.
 - Não marcar gradientes, imagens e composição com opacity/filter como aprovados. Relatório inclui itens ignorados e falhas por cor/razão. Não substituir por captura visual sem cálculo.
-- Preserve `artifacts/brand/` e o lock do preview Surface imutáveis: ajustes de contraste específicos de Conta/Identity pertencem à apresentação `site/assets/account.css`. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40053856203).
+- Marca e demonstração são obtidas de releases assinadas da Surface durante o build; não manter binários derivados rastreados no Git do Site. Identidade/Conta e CSS específico do Site permanecem sob seus respectivos owners.
 
 ## Heading de fallback e movimento reduzido (2026-10-23)
 
