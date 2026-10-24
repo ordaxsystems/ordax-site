@@ -19,7 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPSHandler, HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-from build import SCHEMA as SITE_BUNDLE_SCHEMA
+from build import SCHEMA as SITE_BUNDLE_SCHEMA, SiteError, validate_bundle_inventory
 from public_identity_state import PublicIdentityStateError, resolve_public_identity_mode
 from public_release_catalog import PublicReleaseCatalogError, validate_catalog
 
@@ -27,8 +27,6 @@ MAX_CONFIG = 32 * 1024
 MAX_SESSION = 16 * 1024
 MAX_CATALOG = 256 * 1024
 MAX_MANIFEST = 512 * 1024
-MAX_BUNDLE_BYTES = 64 * 1024 * 1024
-MAX_BUNDLE_FILES = 500
 FULL_SHA = re.compile(r"[0-9a-f]{40}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -160,30 +158,11 @@ def _fetch_asset_digest(origin: str, relative: str, expected_size: int) -> tuple
 
 
 def _manifest_files(manifest: dict) -> dict:
-    """Index trusted bundle inventory for exact output-byte spot checks."""
-    records = manifest.get("files")
-    if not isinstance(records, list) or not records or len(records) > MAX_BUNDLE_FILES:
-        raise StagingPreflightError("site-bundle-file-inventory-invalid")
-    files = {}
-    total_bytes = 0
-    for row in records:
-        if (not isinstance(row, dict) or set(row) != {"path", "size", "sha256"}
-                or not isinstance(row["path"], str)
-                or not re.fullmatch(r"[A-Za-z0-9._/-]+", row["path"])
-                or row["path"].startswith("/") or any(
-                    part in ("", ".", "..") for part in row["path"].split("/"))
-                or not isinstance(row["size"], int) or isinstance(row["size"], bool)
-                or row["size"] < 0 or not isinstance(row["sha256"], str)
-                or not SHA256.fullmatch(row["sha256"]) or row["path"] in files):
-            raise StagingPreflightError("site-bundle-file-inventory-invalid")
-        total_bytes += row["size"]
-        if total_bytes > MAX_BUNDLE_BYTES:
-            raise StagingPreflightError("site-bundle-file-inventory-too-large")
-        files[row["path"]] = row
-    for required in ("config/public-site.json", "releases/catalog.json"):
-        if required not in files:
-            raise StagingPreflightError("site-bundle-file-inventory-missing:" + required)
-    return files
+    """Translate the Site builder's single inventory contract to this gate."""
+    try:
+        return validate_bundle_inventory(manifest)
+    except SiteError as error:
+        raise StagingPreflightError(str(error)) from error
 
 
 def _verify_published_file(path: str, record: dict, digest: str, size: int) -> None:
