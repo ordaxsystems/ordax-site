@@ -222,7 +222,9 @@ for (const cssPath of fs.readdirSync(path.join(ROOT, "site/assets")).filter(name
   assert(!/url\(\s*["']?https?:\/\//i.test(css), `${cssPath} introduced a remote CSS/font asset`);
 }
 
-const fixture = JSON.parse(read("site/assets/playground-fixture.json"));
+// Surface owns this generated fixture; localization audits the pinned input artifact,
+// never a second editable source under site/assets.
+const fixture = JSON.parse(read("artifacts/surface-preview/os-migration-70b0f7eb/assets/playground-fixture.json"));
 const fixtureStrings = [];
 (function walk(value) {
   if (typeof value === "string") {
