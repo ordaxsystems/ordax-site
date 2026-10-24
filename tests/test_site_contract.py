@@ -75,6 +75,21 @@ class SiteContractTests(unittest.TestCase):
             with self.assertRaisesRegex(build.SiteError, "signed Dev release"):
                 build.load_dev_artifact_lock(path)
 
+    def test_active_operational_docs_use_only_current_signed_dev_artifacts(self):
+        """Retired migration inputs must not return via published runbooks."""
+        docs = ("README.md", "AGENTS.md", "docs/ACCESSIBILITY-GATES.md")
+        for name in docs:
+            with self.subTest(document=name):
+                content = (ROOT / name).read_text(encoding="utf-8")
+                self.assertIn("contracts/dev-artifact-lock.json", content)
+                self.assertNotIn("contracts/migration-artifact-lock.json", content)
+                self.assertNotIn("--migration-lock", content)
+        self.assertFalse((ROOT / "contracts/migration-artifact-lock.json").exists())
+        self.assertEqual(set(DEV_LOCK), {"brand", "surface_preview"})
+        deployment = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+        self.assertIn("--dev-lock contracts/dev-artifact-lock.json",
+                      deployment["buildCommand"])
+
     def test_site_inactive_plans_do_not_duplicate_os_entitlements(self):
         self.assertFalse((ROOT / "artifacts/offers/os-migration-70b0f7eb").exists())
         self.assertNotIn("offers", DEV_LOCK)
