@@ -407,6 +407,38 @@ def solid_surface_contrast_probe(driver: Driver) -> dict:
     })();""")
 
 
+def reduced_motion_probe(driver: Driver) -> dict:
+    """Exercise browser prefers-reduced-motion, not a simulated CSS class."""
+    return driver.run(r"""return (() => {
+      const active = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const html = getComputedStyle(document.documentElement);
+      const tested = [];
+      for (const selector of [
+        '.skip-link', '.button', '.laptop-device', '.phone-device',
+        '.phone-shell', '.auth-card', '.account-main', '.desktop-sidebar',
+        '.download-hero-art'
+      ]) {
+        const el = document.querySelector(selector);
+        if (!el) continue;
+        const style = getComputedStyle(el);
+        const time = value => String(value || '').split(',').some(x =>
+          Number.parseFloat(x.trim()) > 0.0001);
+        tested.push({
+          selector,
+          transition: style.transitionDuration,
+          animation: style.animationDuration,
+          animating: time(style.transitionDuration) || time(style.animationDuration),
+        });
+      }
+      return {
+        preferenceMatches: active,
+        scrollingIsInstant: html.scrollBehavior === 'auto',
+        tested,
+        activeMotion: tested.filter(x => x.animating).map(x => x.selector),
+      };
+    })();""")
+
+
 def no_script_probe(driver: Driver) -> dict:
     """Inspect the offline presentation after loading with script execution blocked."""
     return driver.run(r"""return (() => {
@@ -512,6 +544,15 @@ def run(root: Path, evidence: Path) -> dict:
                     report.update(accessibility_probe(driver))
                     report["localeSwitch"] = localization_probe(driver)
                     report["solidSurfaceContrast"] = solid_surface_contrast_probe(driver)
+                    driver.cdp("Emulation.setEmulatedMedia", {"features": [
+                        {"name": "prefers-reduced-motion", "value": "reduce"}
+                    ]})
+                    try:
+                        report["reducedMotion"] = reduced_motion_probe(driver)
+                    finally:
+                        driver.cdp("Emulation.setEmulatedMedia", {"features": [
+                            {"name": "prefers-reduced-motion", "value": "no-preference"}
+                        ]})
                 short = route.strip("/").replace("/", "-") or "home"
                 filename = f"{short}-{width}x{height}.png"
                 driver.shot(evidence / filename)
@@ -541,6 +582,9 @@ def run(root: Path, evidence: Path) -> dict:
                         "localeSwitcherLocalizedAndPersistent": all(report["localeSwitch"].values()),
                         "measuredFlatSurfaceTextContrast": report["solidSurfaceContrast"]["failedCount"] == 0,
                         "flatSurfaceCoverage": route == "/" or report["solidSurfaceContrast"]["measured"] > 0,
+                        "reducedMotionBrowserPreferenceHonored": report["reducedMotion"]["preferenceMatches"]
+                          and report["reducedMotion"]["scrollingIsInstant"]
+                          and not report["reducedMotion"]["activeMotion"],
                     })
                 if route in ("/login/", "/cadastro/", "/recuperar/", "/recuperar/nova-senha/"):
                     check.update({"formsFailClosed": not report["exposedAuthForms"] and not report["enabledCredentials"]})
@@ -553,7 +597,9 @@ def run(root: Path, evidence: Path) -> dict:
                     if not success:
                         failures.append({"route": route, "viewport": width, "rule": name,
                                          "summary": ({"contrast": report["solidSurfaceContrast"]}
-                                                     if name == "measuredFlatSurfaceTextContrast" else report)})
+                                                     if name == "measuredFlatSurfaceTextContrast"
+                                                     else {"reducedMotion": report["reducedMotion"]}
+                                                     if name == "reducedMotionBrowserPreferenceHonored" else report)})
         # Simulate the CSS layout viewport available when a 1280px desktop
         # is viewed at 200% and 400% scale. Keep mobile=False so responsive
         # rules are exercised in desktop emulation, distinct from the 320px
@@ -637,6 +683,8 @@ def run(root: Path, evidence: Path) -> dict:
                                          if r["rule"] == "reflowsWithoutPageHorizontalScroll" else "")
                                       + (":" + json.dumps(r["summary"].get("contrast", {}).get("failed", [])[:4], ensure_ascii=False)
                                          if r["rule"] == "measuredFlatSurfaceTextContrast" else "")
+                                      + (":" + json.dumps(r["summary"].get("reducedMotion", {}), ensure_ascii=False)
+                                         if r["rule"] == "reducedMotionBrowserPreferenceHonored" else "")
                                       for r in failures[:15]))
         return output
     finally:
