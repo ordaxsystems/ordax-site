@@ -54,6 +54,25 @@ def _allowed_final_url(value: str) -> bool:
             and (host == "github.com" or host.endswith(".githubusercontent.com")))
 
 
+def download_pinned_archive(url: str, expected_sha256: str, *,
+                            max_bytes: int = MAX_ARCHIVE, open_url=None) -> bytes:
+    """Single trusted HTTP(S) download path for Surface-owned Dev releases."""
+    if not SHA256.fullmatch(str(expected_sha256)) or not _allowed_final_url(url):
+        raise SurfaceReleaseError("invalid pinned Surface release origin/digest")
+    if open_url is None:
+        open_url = urllib.request.urlopen
+    request = urllib.request.Request(url, headers={"User-Agent": "OrdaX-Site-Dev-Builder/1"})
+    with open_url(request, timeout=60) as response:
+        if not _allowed_final_url(response.geturl()) or getattr(response, "status", 200) != 200:
+            raise SurfaceReleaseError("untrusted Surface Dev redirect")
+        archive = response.read(max_bytes + 1)
+    if len(archive) > max_bytes:
+        raise SurfaceReleaseError("Surface Dev release too large")
+    if hashlib.sha256(archive).hexdigest() != expected_sha256:
+        raise SurfaceReleaseError("Surface Dev release archive pin mismatch")
+    return archive
+
+
 def materialize(pin: dict, destination: Path, *, open_url=None) -> Path:
     """Bounded download, external SHA pin, then safe non-executable TAR read.
 
@@ -63,22 +82,9 @@ def materialize(pin: dict, destination: Path, *, open_url=None) -> Path:
     validate_pin(pin)
     if destination.exists() or destination.is_symlink():
         raise SurfaceReleaseError("Surface Dev destination already exists")
-    if open_url is None:
-        open_url = urllib.request.urlopen
     name = "meridian-dev-" + pin["source_commit"] + ".tar.gz"
     url = "https://github.com/" + OWNER + "/releases/download/" + pin["release_tag"] + "/" + name
-    if not _allowed_final_url(url):
-        raise SurfaceReleaseError("invalid Surface Dev release origin")
-    request = urllib.request.Request(url, headers={"User-Agent": "OrdaX-Site-Dev-Builder/1"})
-    with open_url(request, timeout=60) as response:
-        final = response.geturl()
-        if not _allowed_final_url(final) or getattr(response, "status", 200) != 200:
-            raise SurfaceReleaseError("untrusted Surface Dev redirect")
-        archive = response.read(MAX_ARCHIVE + 1)
-    if len(archive) > MAX_ARCHIVE:
-        raise SurfaceReleaseError("Surface Dev release too large")
-    if hashlib.sha256(archive).hexdigest() != pin["archive_sha256"]:
-        raise SurfaceReleaseError("Surface Dev release archive pin mismatch")
+    archive = download_pinned_archive(url, pin["archive_sha256"], open_url=open_url)
     records = {}
     total = 0
     try:
