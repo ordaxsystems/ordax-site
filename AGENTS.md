@@ -130,3 +130,8 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 
 - Manter CI isolado com **um único workflow por revisão de PR**, `push` somente em `main` e checkout da revisão head real. Não restaurar o gatilho `push` na branch de migração nem trocar o SHA do checkout pelo merge sintético da PR como `source_commit`.
 - `public-site-manifest.json.source_commit` deve ser exatamente `git rev-parse HEAD` do código compilado. Publicar os identificadores `SITE_CANDIDATE_SOURCE_COMMIT` e `SITE_CANDIDATE_MANIFEST_SHA256` no log de CI confiável, sem transferir autoridade de publisher ou autorização de deployment. Consultar ADR-025 e `docs/HANDOFF.md`, sem criar outros manifestos.
+
+## Respostas Identity devem vir do endpoint original (2026-10-24)
+
+- O consumidor `site/assets/site.js::loadJson` protege sessão, política legal, configuração e manifesto recusando `fetch` redirecionado e URL-resposta diferente da rota requisitada. Preservar `redirect: "error"` e a igualdade de `response.url` (mais schema), sem exceções para proxies ou links externos do Identity.
+- A prova Chrome local injeta um **302** de `/auth/session` para uma resposta sintética autenticada 200, verifica que a Conta continua indisponível e não renderiza dados fictícios. Não usar essa fixture para ativar formulários, Conta, auth real ou preview Vercel.
