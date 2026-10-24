@@ -170,6 +170,43 @@ class SiteContractTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(build.SiteError):
                 build.validate_bundle_inventory(bad)
 
+    def test_self_attested_ready_catalog_is_rejected_even_if_bundle_bytes_match(self):
+        # Do not mistake manifest integrity for publisher authority. Simulate
+        # a valid release and a matching altered manifest entirely offline.
+        asset = lambda href: {"href": href, "sha256": "a" * 64, "size": 123}
+        commit = "1" * 40
+        published = render_catalog({"releases": [{
+            "release_id": commit, "source_commit": commit,
+            "version": "offline-test", "channel": "test",
+            "published_at": "2026-10-24", "public_authorized": True,
+            "targets": [{"id": "test-image", "label": "Test", **asset("/test.img"),
+                         "public_download_authorized": True}],
+            "compliance": {"public_compliance_authorized": True,
+                           "sbom": asset("/test-sbom.json"),
+                           "third_party_notices": asset("/test-notices.txt"),
+                           "source_bundle": asset("/test-source.tar.gz")},
+        }]})
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            catalog = out / "releases/catalog.json"
+            catalog.parent.mkdir(parents=True)
+            catalog.write_text(json.dumps(published), encoding="utf-8")
+            config = out / "config/public-site.json"
+            config.parent.mkdir(parents=True)
+            config.write_text('{"$schema":"prototype-ordax.public-site-runtime/1"}',
+                              encoding="utf-8")
+            manifest = {
+                "$schema": build.SCHEMA, "artifact_class": "public-site",
+                "source_commit": commit,
+                "catalog_status": "ready", "publications_sha256": "a" * 64,
+                "files": [{"path": p.relative_to(out).as_posix(),
+                           "sha256": build.digest(p.read_bytes()),
+                           "size": p.stat().st_size} for p in (config, catalog)],
+            }
+            (out / "public-site-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(build.SiteError, "independently attested publisher"):
+                build.verify(out)
+
     def test_unauthorized_catalog_fails_closed(self):
         result = render_catalog({"releases": []})
         self.assertEqual(result["status"], "empty")
