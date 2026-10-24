@@ -140,3 +140,8 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 
 - `site/assets/site.js` já possui `startRevision` e `sessionRevision`, os contadores **únicos** da verificação de formulário e sessão. Qualquer resposta tardia de sessão/política legal/Turnstile deve ser descartada antes de manipular formulários. `start()` desativa o formulário sincronamente ao revalidar; callbacks de Turnstile só liberam submissão quando pertencem à revisão atual.
 - Preservar no mesmo `scripts/browser_smoke.py` a regressão `identityRace=1`: GET inicial de sessão 200 atrasado e refresh posterior com 503 não podem ressuscitar o form de login. Não criar testes de autenticação falsos em staging/produto nem um provider local; o teste usa exclusivamente um servidor loopback sem credenciais.
+
+## JSON HTTP do Site: transporte único limitado (2026-10-24)
+
+- `site/assets/site.js::readJsonBytes` é a implementação **canônica** de consumo JSON de primeira parte. Exigir MIME JSON, tamanho e leitura real limitados a 256 KiB; ao exceder cancelar o reader, sem `response.json()` sem limite. `loadJson` preserva a URL exata, redirect proibido e credentials same-origin. Catálogo exige limite adicional do inventário e SHA-256 dos bytes; não duplicar um novo leitor para releases.
+- O painel de uso MCP usa `OrdaXPublicAccount.readMcpUsage`, apoiado em `loadJson`, para obter dados read-only do endpoint owner; autorização, limites e billing não pertencem ao frontend. A validação observacional de domínio fica em `account-portal.js`. Chrome injeta JSON acima do limite **sem header de tamanho** e JSON com MIME `text/plain`, exigindo indisponibilidade. Não criar segundo HTTP client na Conta, cópias de schema ou valores fictícios em produção.
