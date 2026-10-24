@@ -83,3 +83,9 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 - O Chrome deve emular `forced-colors: active` por CDP nas 11 rotas desktop e inspecionar que o skip link focado está **dentro da viewport**, não só semanticamente focado. Exigir outline calculado de pelo menos 2 px, sem overflow horizontal; preservar capturas no artefato CI.
 - O shell `site/assets/site.css` mantém transição desativada **somente sob forced-colors** para evitar foco animando fora da tela, com `Highlight` do sistema para o contorno. O teste inicial demonstrou o defeito e a [revisão corrigida passou](https://github.com/ordaxsystems/ordax-site/actions/runs/40055957424).
 - Isso **não** equivale a certificação de contraste WCAG completo, zoom somente texto ou leitores de tela; os gates oficiais de Surface/Identity e produção seguem bloqueados.
+
+
+## Ampliação simulada de texto a 200% (2026-10-24)
+
+- O `scripts/browser_smoke.py::text_enlargement_probe` usa o Chrome na viewport 390 CSS px e duplica os tamanhos computados da apresentação própria do Site, sem mudar arquivos CSS nem artefatos externos da Surface. Exigir alteração real, ausência de clipping `hidden/clip`, ausência de overflow horizontal de página e scripts sem exceções. Capturas `text-200pct-*.png` em `out/browser-evidence`. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40056870866).
+- Não rotular isto como zoom nativo ou prova integral de WCAG: a avaliação de zoom real somente texto, leitores de tela e fundos complexos continua pendente, bem como os bloqueios oficiais de Surface/Identity e produção.
