@@ -1,0 +1,72 @@
+name: Site Candidate — isolated
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # PR merge refs are synthetic. Candidate receipts must identify the
+          # exact real Git commit compiled, not an ephemeral merge revision.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Assert exact candidate source revision
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Compile Python tools
+        run: python3 -m compileall -q scripts tests
+      - name: Audit independent presentation and assets
+        run: python3 scripts/build.py check
+      - name: Localization parity and accessible copy
+        run: node tests/test_localization.mjs
+      - name: Verify live legal-document integrity contracts
+        run: node tests/test_legal_documents.mjs
+      - name: Fail-closed architecture and catalog tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Build standalone static candidate
+        run: |
+          python3 scripts/build.py build \
+            --source-commit "$(git rev-parse HEAD)" \
+            --migration-lock contracts/migration-artifact-lock.json \
+            --public-origin https://ordax.com.br \
+            --out out/site
+          python3 scripts/build.py verify --out out/site
+          test "$(python3 -c 'import json; print(json.load(open("out/site/public-site-manifest.json"))["source_commit"])')" = "$(git rev-parse HEAD)"
+          echo "SITE_CANDIDATE_SOURCE_COMMIT=$(git rev-parse HEAD)"
+          echo "SITE_CANDIDATE_MANIFEST_SHA256=$(sha256sum out/site/public-site-manifest.json | cut -d ' ' -f1)"
+      - name: Verify all built routes and fail-closed default states
+        run: python3 scripts/smoke_static.py --out out/site
+      - name: Browser proof on Chrome (local-only, offline APIs)
+        run: python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence
+      - name: Upload browser evidence including any failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ordax-site-browser-evidence
+          path: out/browser-evidence/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload non-production candidate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ordax-site-candidate
+          path: out/site/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Assert no production deployment
+        run: |
+          test ! -e .vercel/project.json
+          test ! -e .env.production
+          echo "SITE_PRODUCTION_DEPLOYMENT=DISABLED"

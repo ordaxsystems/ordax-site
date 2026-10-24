@@ -1,0 +1,13 @@
+{
+  "artifact_class": "ordax-public-reference-offers",
+  "commercial_capacity_allocation_enabled": false,
+  "html_path": "reference-offers.html",
+  "html_sha256": "afb1d555c90eec4cbe6070bd3060b38e19f43d9ad87fe9ef1f5662d1cff964fb",
+  "html_size": 5678,
+  "paid_purchases_enabled": false,
+  "source_commit": "70b0f7eb5d5085be0d4f176f5232def37c7a2a24",
+  "source_contract_path": "docs/contracts/entitlements.json",
+  "source_contract_sha256": "8ce0731a9ed1f32e092f5c69af15850f9bc318347040d0cbfdfd06609ee79eda",
+  "source_repository": "ordaxsystems/ordax-os",
+  "status": "reference-not-purchasable"
+}

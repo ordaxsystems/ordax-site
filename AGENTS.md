@@ -1,0 +1,162 @@
+# OrdaX Site — instruções para agentes
+
+Este repositório é o **owner do código de apresentação do site público** após cutover aprovado, não do OS, Surface Web, Identity, cobranças ou publicação de releases.
+
+## Ordem de leitura
+1. `README.md`
+2. `docs/AUDIT.md`
+3. `docs/DECISIONS.md`
+4. `docs/HANDOFF.md`
+5. `scripts/build.py`
+6. `site/config/public-site.json`
+
+## Autoridades e limites
+- `ordax-site/main` é a autoridade do site **somente após conclusão de migração validada**; até lá, o site atual em `ordax-os/main` não deve ser removido.
+- Nunca importar `system/surface`, `tools/surface-web` ou código de kernel, USB, Creator ou apps.
+- Marca e demos da Surface são **artefatos publicados, imutáveis e verificáveis**, nunca cópias de código para compilar no site.
+- Backend de Identity, sessão, autorização, pagamentos e banco pertence a seus respectivos owners (`ordax-platform` / serviços canônicos). Browser só consome APIs autorizadas de mesma origem.
+- Não versionar secrets, chaves ou tokens. Não fabricar Conta, sincronização, assinatura, download, release ou produtos publicados.
+- Não alterar domínio, deploy de produção nem credenciais sem aprovação específica.
+- Recuperação e Conta continuam fail-closed enquanto seus gates reais não estiverem aprovados.
+- O catálogo público vem exclusivamente de projeção autorizada do publicador de releases; sem publicação, catálogo vazio.
+- Não alterar API/comportamento de `ordax-os` sem reconciliação das PRs da Surface.
+- Preservar commits da `main`; não usar force-push/rebase da main.
+
+## Fluxo
+Branch -> auditoria de diffs e conflitos -> testes de rotas/i18n/segurança -> pacote com provenance SHA-256 -> CI -> PR review -> cutover OS só depois de prova de paridade -> publicação sob autorização separada. Registrar atualizações em `docs/HANDOFF.md`.
+
+## Status
+Extração é **candidata em draft**; todos os assets originais, incluindo dois PNGs grandes, foram preservados. Build CI independente, smoke estático e snapshot de ofertas/brand de migração aprovados. Há E2E **local isolado** em navegador. Faltam a publicação **oficial** desses insumos pelo owner Surface/Platform, testes completos de acessibilidade e Identity em staging, e cutover no OS. Nenhum build de produção autorizado.
+
+
+## Gates de implementação atualmente verificados
+- Testes ChromeDriver: 11 rotas × 3 viewports; screenshots no artefato CI [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365).
+- Landing: somente `site/assets/playground-fixture.json`; proibido recolocar fixture inline como segundo estado.
+- `contracts/site-routes.json`: único catálogo de rotas do Site; robots, sitemap e testes o consomem.
+- `--public-origin` deve ser fornecido pelo owner de deployment (OS/Platform); nunca mover DNS ou aceitar origem definida pelo browser.
+- A PR concorrente [ordax-os#2198](https://github.com/ordaxsystems/ordax-os/pull/2198) envolve remoção de fonte visual. O Site ainda requer material oficial versionado e não autoriza o cutover por essa PR.
+
+
+- A prova Chrome deve manter `main#conteudo` programaticamente focável, skip link acionável por teclado, nomes na árvore AX, `img[alt]` e troca real PT/EN. [Teclado+AX PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042024846), [locale E2E PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40042154013).
+- Não declarar conformidade WCAG completa: contrastes, leitor de tela, zoom e fluxos autenticados de staging ainda exigem provas específicas.
+
+## Publicação Surface — contrato de consumo
+
+- Fixture e CSS gerados **não** pertencem a `site/assets`; sua única entrada é `--surface-preview-dir`, acompanhada de `--surface-preview-manifest-sha256` pinado. O bundle materializa os arquivos após verificar proveniência e integridade.
+- Sem arquivo `surface-snapshot.json` distribuído duplicando `fixture.surface`. O preview source é imutável e a eventual correção de URL de fonte ocorre **apenas na saída de build** com fingerprint recalculado.
+- `artifacts/surface-preview/os-migration-70b0f7eb` é um pacote de migração **não oficial**, vindo do OS, e não uma release/assinatura da Surface. Não alterar o status para `official` sem verificação real do publisher.
+- A obrigação de publicação oficial de brand/demo pertence à [ordax-surface#3](https://github.com/ordaxsystems/ordax-surface/issues/3). Até essa entrega, o Site permanece em draft, sem cutover nem deploy.
+
+## Lock SSOT de insumos externos e segurança de releases
+
+- `contracts/migration-artifact-lock.json` é a única lista de caminhos e pins SHA-256 dos três insumos de migração. O CI usa `--migration-lock` e proíbe overrides individuais; não mantenha digests copiados em workflow, código ou docs.
+- Os manifestos de brand, preview e offers são validados **contra o digest pinado no lock antes de ler suas alegações internas**. Revisão OS de origem deve coincidir entre todos. Lock é estritamente **dev-only**; não autoriza produção.
+- O builder **rejeita** `--publications` mesmo que o JSON local afirme `public_authorized=true`. Downloads permanecem vazios até integração explícita de evidência oficial do publisher (mais que flags autorreferentes).
+
+## Prova de integridade visual entregue (2026-10-23)
+
+- O smoke estático varre o **CSS realmente distribuído**, não os artefatos-fonte, e rejeita `url(...)` externos, com travessia de diretório, que referenciem arquivos ausentes, e `@import` não controlado. `data:image/` e referências fragmento permanecem permitidas. Os recursos externos/gerados da Surface também estão cobertos.
+- O Chrome instala um observador **antes** dos scripts da página para capturar erros JS, rejeições de promise e carregamento de imagem/script/stylesheet com erro, além de HTTP 4xx/5xx para recursos estáticos. Erros esperados nos serviços `/auth/`, `/account/`, `/api/`, `/sync/` não são confundidos com falhas de asset.
+- O SEO projection injeta `rel="icon"` apontando para `/assets/ordax-symbol.png` do **brand verificado**, salvo quando o source já declara favicon. Isso impede a requisição implícita a `/favicon.ico` inexistente sem replicar recursos. [CI integrado PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40048444731).
+
+## Reflow e no-JavaScript — regressões obrigatórias
+
+- A suite `scripts/browser_smoke.py` inclui 33 provas regulares, **22 reflows de CSS em modo desktop** (640/320 px) e **6 estados sem execução de JavaScript**, capturados em `out/browser-evidence`. O controle auth permanece desativado também sem scripts. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051704031).
+- **Não esconder horizontal overflow com `overflow-x:hidden` global.** O problema identificado era o seletor de idioma anexado ao `.site-nav` excedendo a largura em quatro rotas. A correção é `flex-wrap` e linha própria para `.public-locale-switcher` em largura estreita, no único `site/assets/site.css`.
+- Não declarar testado o zoom real ou WCAG completo: o reflow usa viewports CSS equivalentes a 200/400% de uma janela de 1280 px. Text-only zoom, contraste, leitores de tela e gateway real continuam pendentes.
+
+## Contraste técnico — gate parcial, sem prometer WCAG total
+
+- O Chrome deve manter a prova `solid_surface_contrast_probe()` em páginas desktop: >=4,5:1 para texto comum, >=3:1 para texto grande quando existe **fundo sólido mensurável**; exigir amostras nas rotas não-landing.
+- Não marcar gradientes, imagens e composição com opacity/filter como aprovados. Relatório inclui itens ignorados e falhas por cor/razão. Não substituir por captura visual sem cálculo.
+- Preserve `artifacts/brand/` e `artifacts/surface-preview/` imutáveis: ajustes de contraste específicos de Conta/Identity pertencem à apresentação `site/assets/account.css`. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40053856203).
+
+## Heading de fallback e movimento reduzido (2026-10-23)
+
+- Conta deve ter `h1` **estático de fallback** em `#account-session`, com `.sr-only`, visível para tecnologia assistiva quando JS desativado/indisponível. O runtime existente atualiza `#account-session` e gera `h1` de `#account-content` ao montar, evitando duplicação de heading durante uso.
+- A prova do heading da página exclui exclusivamente os `h1` de dentro de `.playground`, pois são conteúdo de uma **demonstração de outra UI**, não o título do documento externo.
+- Honrar `prefers-reduced-motion: reduce` no shell comum, com rolagem automática e sem transição em `.skip-link` e `.button`. O teste em Chrome aciona preferência **nativa emulada**, não classe CSS artificial, e inspeciona `animationDuration`/`transitionDuration` nos elementos-alvo. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40054611865).
+
+
+## Forced-colors: regressão real de foco (2026-10-23/24)
+
+- O Chrome deve emular `forced-colors: active` por CDP nas 11 rotas desktop e inspecionar que o skip link focado está **dentro da viewport**, não só semanticamente focado. Exigir outline calculado de pelo menos 2 px, sem overflow horizontal; preservar capturas no artefato CI.
+- O shell `site/assets/site.css` mantém transição desativada **somente sob forced-colors** para evitar foco animando fora da tela, com `Highlight` do sistema para o contorno. O teste inicial demonstrou o defeito e a [revisão corrigida passou](https://github.com/ordaxsystems/ordax-site/actions/runs/40055957424).
+- Isso **não** equivale a certificação de contraste WCAG completo, zoom somente texto ou leitores de tela; os gates oficiais de Surface/Identity e produção seguem bloqueados.
+
+
+## Ampliação simulada de texto a 200% (2026-10-24)
+
+- O `scripts/browser_smoke.py::text_enlargement_probe` usa o Chrome na viewport 390 CSS px e duplica os tamanhos computados da apresentação própria do Site, sem mudar arquivos CSS nem artefatos externos da Surface. Exigir alteração real, ausência de clipping `hidden/clip`, ausência de overflow horizontal de página e scripts sem exceções. Capturas `text-200pct-*.png` em `out/browser-evidence`. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40056870866).
+- Não rotular isto como zoom nativo ou prova integral de WCAG: a avaliação de zoom real somente texto, leitores de tela e fundos complexos continua pendente, bem como os bloqueios oficiais de Surface/Identity e produção.
+
+
+## Gate manual de zoom e leitor de tela
+
+- O procedimento reprodutível e os critérios de evidência ficam **somente** em `docs/ACCESSIBILITY-GATES.md`. Não declarar PASS de zoom nativo, zoom somente texto nem leitor de tela a partir do `text200` automatizado; preservar status pendente até validação manual por rota, com revisão/digest/capturas sem dados privados. O Site não assume autoridade sobre a Surface ou backend Identity.
+
+
+## Espaçamento de texto com evidência Chrome (2026-10-24)
+
+- Preservar `text_spacing_probe` na única suíte `scripts/browser_smoke.py`: 11 rotas × 2 idiomas efetivos, parâmetros WCAG 1.4.12 injetados **somente no browser** (linha 1.5×, margem de parágrafo 2×, letras 0.12× e palavras 0.16×). Checar estilos computados, corte de texto em overflow oculto, scroll horizontal e falhas JS; gerar screenshots `spacing-*.png` no artefato CI. [CI branch PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40057544890).
+- Nenhum CSS ou snapshot da Surface foi editado. A validação visual/manual continua definida em `docs/ACCESSIBILITY-GATES.md` e não pode ser declarada cumprida por esse gate parcial. Production/Identity/Surface permanecem bloqueados.
+
+
+## Preflight externo e catálogo sem autorização implícita (2026-10-24)
+
+- O Site **não** implementa Identity, backend de conta ou publicador de releases. `scripts/staging_preflight.py` é uma verificação opcional de staging read-only com origem HTTPS fornecida por operador, que reutiliza os validadores canônicos de sessão e catálogo. Não existe URL de staging hardcoded, login falso nem chamada remota no CI; os testes offline cobrem os bloqueios. `PASS` afirma somente contrato anônimo, sem equivaler a gate de staging autenticado.
+- Paths de downloads e compliance precisam permanecer literais, seguros, de mesma origem e livres de traversal/encodings ambíguos. Não afrouxar `public_release_catalog._same_origin_path` quando um owner publicar oficialmente artefatos. Catálogo permanece vazio até prova de autoridade independente.
+
+
+## Origem de staging deve corresponder ao Site independente (2026-10-24)
+
+- Não classificar um preview do `ordax-os` ou `ordax-web` como prova do novo Site, mesmo que `/auth/session` e `/releases/catalog.json` tenham schemas compatíveis. O staging preflight exige **SHA-256 do manifesto de build recebido do CI confiável** e `source_commit` exato; confere digest/size dos documentos públicos contra o inventário do bundle, antes de declarar PASS anônimo.
+- A conta Vercel consultada tinha apenas `ordax-os-public` e `ordax-web`, ambos sem deployment recente de produção com READY e previews históricos do OS com SSO. Não criar/desproteger projetos, habilitar prod/DNS ou contornar SSO a partir do preflight. O preview `ordax-site` próprio permanece uma dependência de owner de deployment, não evidência já obtida.
+
+
+## Integridade do conteúdo completo no staging (2026-10-24)
+
+- Para qualquer prova externa do Site, o manifesto de build verificado no CI confiável é a âncora obrigatória. O pré-flight **não** pode limitar a conferência a `config/public-site.json` e `releases/catalog.json`: deve comprovar hash SHA-256 e tamanho dos **demais arquivos inventariados**, incluindo HTML das rotas, JS, CSS e fixture pública, antes de consultar `/auth/session`. Rotas `*/index.html` são solicitadas como `*/`; rejeitar redirects, diferenças de bytes e inventário ambíguo. Não converter teste de unidade em prova de staging executado.
+- Não criar novos espelhos nem publicar o pacote de migração em produção para obter um URL de teste. O preview independente e a autoridade Identity continuam pertencendo ao owner de deployment, com a aprovação e os controles de acesso necessários.
+
+
+## Catálogo distribuído rejeitado integralmente (2026-10-24)
+
+- `public_release_catalog.render_catalog` e `validate_catalog` devem conservar paridade dos campos de release/target/compliance, unicidade dos IDs e caminhos literais seguros; o browser `site/assets/site.js` é uma defesa adicional, não um segundo publicador. `status=empty` deve conter zero releases, e qualquer inconsistência deve **impedir todos os links**, sem renderizar parcialmente uma lista inválida.
+- Preservar os três testes negativos **dentro** de `scripts/browser_smoke.py` via resposta de catálogo sobrescrita apenas no servidor local de prova; nenhuma alteração em `out/site`, manifestos, fixtures da Surface ou catálogo real. Não tratar a projeção sintética de teste como release autorizada.
+- A política atual de `ordax-os/docs/contracts/public-site-deployment.json` não autoriza Identity em preview; obter aprovação expressa do owner antes de qualquer integração de gateway a staging. Não mudar Vercel, DNS, autenticação, assinatura ou produção nesta branch.
+
+## CI de candidato: provenance do commit real (2026-10-24)
+
+- Manter CI isolado com **um único workflow por revisão de PR**, `push` somente em `main` e checkout da revisão head real. Não restaurar o gatilho `push` na branch de migração nem trocar o SHA do checkout pelo merge sintético da PR como `source_commit`.
+- `public-site-manifest.json.source_commit` deve ser exatamente `git rev-parse HEAD` do código compilado. Publicar os identificadores `SITE_CANDIDATE_SOURCE_COMMIT` e `SITE_CANDIDATE_MANIFEST_SHA256` no log de CI confiável, sem transferir autoridade de publisher ou autorização de deployment. Consultar ADR-025 e `docs/HANDOFF.md`, sem criar outros manifestos.
+
+## Respostas Identity devem vir do endpoint original (2026-10-24)
+
+- O consumidor `site/assets/site.js::loadJson` protege sessão, política legal, configuração e manifesto recusando `fetch` redirecionado e URL-resposta diferente da rota requisitada. Preservar `redirect: "error"` e a igualdade de `response.url` (mais schema), sem exceções para proxies ou links externos do Identity.
+- A prova Chrome local injeta um **302** de `/auth/session` para uma resposta sintética autenticada 200, verifica que a Conta continua indisponível e não renderiza dados fictícios. Não usar essa fixture para ativar formulários, Conta, auth real ou preview Vercel.
+
+## Identity: nenhuma resposta assíncrona obsoleta pode ativar controles (2026-10-24)
+
+- `site/assets/site.js` já possui `startRevision` e `sessionRevision`, os contadores **únicos** da verificação de formulário e sessão. Qualquer resposta tardia de sessão/política legal/Turnstile deve ser descartada antes de manipular formulários. `start()` desativa o formulário sincronamente ao revalidar; callbacks de Turnstile só liberam submissão quando pertencem à revisão atual.
+- Preservar no mesmo `scripts/browser_smoke.py` a regressão `identityRace=1`: GET inicial de sessão 200 atrasado e refresh posterior com 503 não podem ressuscitar o form de login. Não criar testes de autenticação falsos em staging/produto nem um provider local; o teste usa exclusivamente um servidor loopback sem credenciais.
+
+## JSON HTTP do Site: transporte único limitado (2026-10-24)
+
+- `site/assets/site.js::readJsonBytes` é a implementação **canônica** de consumo JSON de primeira parte. Exigir MIME JSON, tamanho e leitura real limitados a 256 KiB; ao exceder cancelar o reader, sem `response.json()` sem limite. `loadJson` preserva a URL exata, redirect proibido e credentials same-origin. Catálogo exige limite adicional do inventário e SHA-256 dos bytes; não duplicar um novo leitor para releases.
+- O painel de uso MCP usa `OrdaXPublicAccount.readMcpUsage`, apoiado em `loadJson`, para obter dados read-only do endpoint owner; autorização, limites e billing não pertencem ao frontend. A validação observacional de domínio fica em `account-portal.js`. Chrome injeta JSON acima do limite **sem header de tamanho** e JSON com MIME `text/plain`, exigindo indisponibilidade. Não criar segundo HTTP client na Conta, cópias de schema ou valores fictícios em produção.
+
+## Dados observacionais da Conta pertencem ao snapshot da sessão (2026-10-24)
+
+- **Nunca vincular cache/retorno pessoal ao e-mail** nem ao valor `"verified-session"`: mesma string não comprova sessão igual. `OrdaXPublicAccount` publica um objeto imutável novo a cada revalidação; `account-portal.js` o utiliza como chave de geração e limpa imediatamente `mcpUsage` em mudanças, antes de novo consumo. `readMcpUsage` precisa negar payload cuja sessão de origem foi substituída enquanto o GET estava pendente. Sem subject/token na interface e sem outro gerenciador de Identity.
+- Preservar a prova Chrome **`usageSession=1` no runner já existente**, apenas em loopback: três sessões de mesmo e-mail com contagens 91/44/7 e resposta B tardia não devem exibir valores da sessão anterior. O backend continua responsável por autorizar `/account/usage/mcp` em cada request real; não criar mock em produto nem ativar staging.
+
+## Legacy URL fragments never outlive the initial login boot (2026-10-24)
+
+- `/login/` pode receber links antigos do provedor hospedado com `#access_token=`; nunca interpretar/trocar/armazenar fragmentos bearer. `site/assets/site.js::start()` remove o fragmento **sincronamente antes de `loadConfig()`, sessão, Turnstile ou outros awaits**. Não mover novamente a sanitização para depois de rede nem duplicar em outras páginas sem contrato.
+- Preservar a prova Chrome no único `scripts/browser_smoke.py` (`fragmentScrub=1`): GET de config fica preso em loopback, URL de login contém um token sintético e deve estar limpa **antes** da resposta. Nenhuma credencial real, provider falso em produção ou novo script inline de autenticação.
+
+## Cadastro: provar caminhos legais válidos e inválidos (2026-10-24)
+
+- Preservar `tests/test_legal_documents.mjs` no CI: usa a função de produção `verifyPublishedRegistrationDocuments` **sem exportá-la no bundle**. Um `Content-Length` numérico é válido e deve permitir verificar SHA-256; corrupção, redirect, MIME errado, tamanho excessivo e política desativada devem continuar rejeitados. Não duplicar lógica de validação entre browser e teste.
+- A prova offline de documentos publicados não autoriza cadastro, Identity preview nem deploy; as decisões de serviço e consentimento ficam com o owner. ADR-031 documenta causa raiz e teste positivo/negativo.
