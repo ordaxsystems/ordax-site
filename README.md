@@ -122,7 +122,7 @@ Substitua o domínio do exemplo pelo host de staging autorizado. Extraia o commi
 
 **Situação verificada em 2026-10-24:** o projeto Vercel independente `ordax-site-dev` já existe; a revisão `9b8885124536f96c99273d6eacabbe4f13e75775` foi reportada como deployment `READY` (ID `dpl_FzxKetVx42d6TU96dzFYtD11HopN`), com alias `ordax-site-dev.vercel.app`. O projeto está configurado com proteção Vercel Authentication, `noindex` e sem o domínio público canônico. O status `READY` comprova o build da plataforma, **não** os bytes realmente servidos ou a integração Identity. Não desproteger o deploy nem reaproveitar os projetos OS/Web para contornar esse gate; a conferência HTTP externa permanece sem resultado enquanto não houver acesso autenticado autorizado.
 
-Os testes `tests/test_staging_preflight.py` são executados no CI **sem rede**; `SITE_STAGING_PREFLIGHT=PASS` identifica explicitamente o escopo validado (`static` ou `anonymous`) e **nunca** comprova prontidão de Identity autenticada, **não** que login, recuperação de senha, faturamento, publicação de releases ou cutover estejam prontos. Os gates completos continuam em `docs/HANDOFF.md`, `docs/ACCESSIBILITY-GATES.md` e nas PRs dos owners externos.
+Os testes `tests/test_staging_preflight.py` são executados no CI **sem rede**; `SITE_STAGING_PREFLIGHT=PASS` identifica explicitamente o escopo validado (`static` ou `anonymous`), mas **não** comprova autenticação, recuperação de senha, faturamento, publicação de releases ou autorização de produção. Os gates completos continuam em `docs/HANDOFF.md`, `docs/ACCESSIBILITY-GATES.md` e nas PRs dos owners externos.
 
 ## Regressão de segurança do catálogo público
 
