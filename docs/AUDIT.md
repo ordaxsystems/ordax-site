@@ -93,3 +93,11 @@ A prova E2E usa `solid_surface_contrast_probe()` sobre elementos de texto e nave
 O primeiro CI encontrou **cinco telas de identidade** com problemas de contraste: o link de pulo herdava cor escura sobre fundo escuro, e textos secundários em painéis claros tinham proporções de aproximadamente **4,31–4,37:1**, abaixo de 4,5. Ajustado apenas em `site/assets/account.css`, sem alterar as cores canônicas da Surface: `.account-ui .skip-link` recupera contraste e `--account-muted` faz mescla contextual com a tinta Meridian. O portal de Conta passou a incluir a topbar/breadcrumb na amostra. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40053856203).
 
 **Não atesta WCAG global.** Contraste de gradientes/fotos, pseudoelementos, estados hover/focus específicos, leitores de tela, ampliação somente de texto/zoom real e fluxos autenticados de staging continuam por validar.
+
+## Auditoria de títulos e preferência do usuário para movimento (2026-10-23)
+
+O HTML da Conta tinha `<main>` e links skip funcionais, mas **nenhum `<h1>`** quando o JS estivesse inativo ou antes da montagem de dados. Essa omissão fora tolerada pelo smoke estático porque ele abria exceção explícita para `account-content` vazio. O fallback foi implementado **no `#account-session`**, região que o controlador já substitui ao montar uma sessão, de modo que o `h1` estático não se soma ao título gerado dinamicamente. A exceção do smoke foi removida. O Chrome também passou a checar título principal nas 11 rotas; os subtítulos dentro da demonstração Surface são excluídos porque pertencem a uma UI embutida e não ao documento institucional.
+
+Na política de movimento, o CSS comum usava `scroll-behavior:smooth` e transições no link de pulo e botões sem tratar universalmente a preferência por menos animação; CSS de regiões especializadas possuía regras específicas. A folha **do Site** agora respeita `prefers-reduced-motion:reduce`. O Chrome injeta a preferência de mídia via DevTools, mede os estilos finais em componentes representativos e verifica o resultado de cada rota, sem introduzir dependência ou copiar tokens de Surface. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40054611865).
+
+**Limite honesto:** automação de headings e CSS/mídia não é substituto para leitores de tela, auditoria WCAG completa ou teste de texto ampliado.

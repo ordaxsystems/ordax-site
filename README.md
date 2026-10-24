@@ -96,3 +96,11 @@ Há capturas por cenário no artefato `ordax-site-browser-evidence` do GitHub CI
 ## Prova parcial de contraste (Chrome)
 
 Nos cenários desktop, o Chrome calcula WCAG 2.x **4,5:1 para texto comum / 3:1 para texto grande** quando texto e superfície têm cores sólidas confiáveis, com cores/razões e amostras ignoradas no `report.json`. Os problemas identificados nas telas de Identity foram corrigidos no CSS Site sem atualizar os tokens visuais de origem; [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40053856203). Não equivale a auditoria de todo o site: gradientes, imagens, pseudoelementos, estados de foco/hover e avaliação humana por leitor de tela ainda exigem trabalho.
+
+## Semântica da Conta e preferência de movimento reduzido
+
+O Chrome agora exige um **único `h1` principal da página**, excluindo apenas os títulos internos da demonstração interativa embutida na landing. O HTML estático da Conta fornece um `h1.sr-only` de fallback dentro de `#account-session`, lido mesmo quando a aplicação não carrega ou JavaScript está desativado. O controlador substitui esse conteúdo de sessão ao montar o portal, cujo `#account-content` apresenta o `h1` dinâmico existente.
+
+A prova de navegador também ativa de verdade `prefers-reduced-motion: reduce` via Chrome DevTools, mede o `scroll-behavior` e os tempos de animação/transição computados para os componentes pertinentes em cada rota e retorna ao modo normal após o teste. O CSS básico do Site elimina rolagem suave e transições do link de pulo e botões quando solicitado, preservando as políticas de movimento especializadas da landing, Identity, Download e Conta. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40054611865).
+
+Essa prova não substitui inspeção com leitor de tela nem certificação WCAG integral.

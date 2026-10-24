@@ -70,3 +70,9 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 - O Chrome deve manter a prova `solid_surface_contrast_probe()` em páginas desktop: >=4,5:1 para texto comum, >=3:1 para texto grande quando existe **fundo sólido mensurável**; exigir amostras nas rotas não-landing.
 - Não marcar gradientes, imagens e composição com opacity/filter como aprovados. Relatório inclui itens ignorados e falhas por cor/razão. Não substituir por captura visual sem cálculo.
 - Preserve `artifacts/brand/` e `artifacts/surface-preview/` imutáveis: ajustes de contraste específicos de Conta/Identity pertencem à apresentação `site/assets/account.css`. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40053856203).
+
+## Heading de fallback e movimento reduzido (2026-10-23)
+
+- Conta deve ter `h1` **estático de fallback** em `#account-session`, com `.sr-only`, visível para tecnologia assistiva quando JS desativado/indisponível. O runtime existente atualiza `#account-session` e gera `h1` de `#account-content` ao montar, evitando duplicação de heading durante uso.
+- A prova do heading da página exclui exclusivamente os `h1` de dentro de `.playground`, pois são conteúdo de uma **demonstração de outra UI**, não o título do documento externo.
+- Honrar `prefers-reduced-motion: reduce` no shell comum, com rolagem automática e sem transição em `.skip-link` e `.button`. O teste em Chrome aciona preferência **nativa emulada**, não classe CSS artificial, e inspeciona `animationDuration`/`transitionDuration` nos elementos-alvo. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40054611865).
