@@ -126,7 +126,7 @@ def _manifest_files(manifest: dict) -> dict:
                 or not re.fullmatch(r"[A-Za-z0-9._/-]+", row["path"])
                 or row["path"].startswith("/") or ".." in row["path"].split("/")
                 or not isinstance(row["size"], int) or isinstance(row["size"], bool)
-                or row["size"] <= 0 or not isinstance(row["sha256"], str)
+                or row["size"] < 0 or not isinstance(row["sha256"], str)
                 or not SHA256.fullmatch(row["sha256"]) or row["path"] in files):
             raise StagingPreflightError("site-bundle-file-inventory-invalid")
         files[row["path"]] = row
