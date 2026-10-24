@@ -13,8 +13,10 @@ from public_release_catalog import render_catalog, PublicReleaseCatalogError
 from site_routes import load_routes
 from site_seo import validate_origin, render_html
 
-BRAND_PIN = "24bb0e191f47bc68821d9493406d0b05e7a900a8872e4b9b03a3d6938521dad4"
-OFFERS_PIN = "2bb9aa89a84c27a449c4bf9c048f847fc8ecb4e928759ac47a47b47f15446dd6"
+MIGRATION_LOCK = build.load_migration_lock(ROOT / "contracts/migration-artifact-lock.json")
+BRAND_PIN = MIGRATION_LOCK["brand"]["manifest_sha256"]
+OFFERS_PIN = MIGRATION_LOCK["offers"]["manifest_sha256"]
+PREVIEW_PIN = MIGRATION_LOCK["surface_preview"]["manifest_sha256"]
 
 class SiteContractTests(unittest.TestCase):
     def test_owner_and_routes(self):
@@ -36,6 +38,25 @@ class SiteContractTests(unittest.TestCase):
             with self.assertRaises(build.SiteError):
                 build.stage_brand(Path(tmp), Path(tmp) / "nonexistent", BRAND_PIN)
         self.assertNotIn("system/surface/", (ROOT / "scripts/build.py").read_text().split("def stage_brand(")[1].split("def build(")[0])
+
+    def test_migration_lock_is_single_source_and_rejects_override(self):
+        self.assertEqual(set(MIGRATION_LOCK), {"brand", "surface_preview", "offers"})
+        self.assertEqual(MIGRATION_LOCK["brand"]["directory"],
+                         ROOT / "artifacts/brand/os-migration-70b0f7eb")
+        self.assertEqual(MIGRATION_LOCK["offers"]["directory"],
+                         ROOT / "artifacts/offers/os-migration-70b0f7eb")
+        with tempfile.TemporaryDirectory() as tmp:
+            forged_path = Path(tmp) / "migration.json"
+            original = json.loads((ROOT / "contracts/migration-artifact-lock.json").read_text("utf-8"))
+            original["status"] = "official"
+            forged_path.write_text(json.dumps(original), encoding="utf-8")
+            with self.assertRaisesRegex(build.SiteError, "lock"):
+                build.load_migration_lock(forged_path)
+            original["status"] = build.MIGRATION_STATUS
+            original["artifacts"]["brand"]["directory"] = "../../secrets"
+            forged_path.write_text(json.dumps(original), encoding="utf-8")
+            with self.assertRaisesRegex(build.SiteError, "lock"):
+                build.load_migration_lock(forged_path)
 
     def test_all_migration_inputs_need_independent_hash_pins(self):
         brand = ROOT / "artifacts/brand/os-migration-70b0f7eb"
@@ -157,7 +178,7 @@ class SiteContractTests(unittest.TestCase):
         self.assertFalse((ROOT / "site/assets/surface-snapshot.json").exists())
         self.assertEqual(
             build.digest((source / "manifest.json").read_bytes()),
-            "d7142242a5a4ff38b71cfcc952123b48a34e8bd643052b8143de9b5d36fc0cc3"
+            PREVIEW_PIN
         )
         with tempfile.TemporaryDirectory() as tmp:
             stage = Path(tmp) / "stage"
