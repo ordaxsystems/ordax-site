@@ -21,6 +21,8 @@ import urllib.request
 from pathlib import Path
 from site_routes import PATHS as ROUTES
 VIEWPORTS = ((1440, 900), (390, 844), (320, 740))
+NO_SCRIPT_ROUTES = ("/login/", "/cadastro/", "/recuperar/",
+                    "/recuperar/nova-senha/", "/conta/", "/web/")
 
 
 class BrowserProofError(RuntimeError):
@@ -305,6 +307,40 @@ def localization_probe(driver: Driver) -> dict:
     })();""")
 
 
+def no_script_probe(driver: Driver) -> dict:
+    """Inspect the offline presentation after loading with script execution blocked."""
+    return driver.run(r"""return (() => {
+      const forms = [...document.querySelectorAll('form.identity-form')];
+      const enabledCredentials = forms.flatMap(form =>
+        [...form.querySelectorAll('input,button,select,textarea')])
+        .filter(control => !control.disabled).length;
+      const exposedForms = forms.filter(form => {
+        const style = getComputedStyle(form);
+        return !form.hidden && style.display !== 'none' &&
+          style.visibility !== 'hidden';
+      }).length;
+      const notice = [...document.querySelectorAll('noscript')].some(el =>
+        el.getClientRects().length > 0 ||
+        [...el.querySelectorAll('*')].some(child => child.getClientRects().length > 0));
+      return {
+        pathname: location.pathname,
+        lang: document.documentElement.lang,
+        hasMain: document.querySelectorAll('main').length === 1,
+        noscriptGuidanceVisible: notice,
+        navigationAvailable: !!document.querySelector('a[href="/"]'),
+        authFormsExposed: exposedForms,
+        enabledAuthControls: enabledCredentials,
+        noRuntimeActivated: typeof window.OrdaXPublicI18n === 'undefined' &&
+          typeof window.__ordaxPageErrors === 'undefined',
+        accountNotVerified: !document.querySelector('[data-verified-user]') &&
+          ![...document.querySelectorAll('.verified-email')].some(x =>
+            x.textContent.includes('@')),
+        webLaunchUnavailable: !document.querySelector('[data-web-launch]') ||
+          document.querySelector('[data-web-launch]').hidden
+      };
+    })();""")
+
+
 def run(root: Path, evidence: Path) -> dict:
     if not (root / "public-site-manifest.json").is_file():
         raise BrowserProofError("build candidate missing; never browse unpackaged source")
@@ -322,6 +358,7 @@ def run(root: Path, evidence: Path) -> dict:
     child = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     driver = Driver(webdriver_port)
     results = []
+    no_script_results = []
     failures = []
     try:
         for _ in range(100):
@@ -406,9 +443,42 @@ def run(root: Path, evidence: Path) -> dict:
                     if not success:
                         failures.append({"route": route, "viewport": width, "rule": name,
                                          "summary": report})
-        output = {"schema": "ordax.site-browser-proof/1", "routeCount": len(ROUTES),
+        # Verify that disabling JavaScript at document parse time cannot
+        # expose identity forms, verified identity or the Web launch. Re-enable
+        # only after loading to inspect the inert DOM; deferred scripts must
+        # not be replayed.
+        driver.cdp("Emulation.setDeviceMetricsOverride", {
+            "width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True
+        })
+        for route in NO_SCRIPT_ROUTES:
+            driver.cdp("Emulation.setScriptExecutionDisabled", {"value": True})
+            driver.navigate(f"http://127.0.0.1:{server.server_port}{route}")
+            driver.cdp("Emulation.setScriptExecutionDisabled", {"value": False})
+            report = no_script_probe(driver)
+            name = route.strip("/").replace("/", "-")
+            shot = f"noscript-{name}.png"
+            driver.shot(evidence / shot)
+            report["screenshot"] = shot
+            no_script_results.append(report)
+            checks = {
+                "loaded": report["pathname"] == route and report["hasMain"],
+                "visibleNoScriptGuidance": report["noscriptGuidanceVisible"],
+                "navigationStillAvailable": report["navigationAvailable"],
+                "noAuthFormExposed": not report["authFormsExposed"],
+                "noCredentialEntryActivated": not report["enabledAuthControls"],
+                "noScriptRuntimeActivated": report["noRuntimeActivated"],
+                "noFabricatedAccount": report["accountNotVerified"],
+                "noWebLaunch": report["webLaunchUnavailable"],
+            }
+            for rule, good in checks.items():
+                if not good:
+                    failures.append({"route": route, "viewport": "noscript",
+                                     "rule": rule, "summary": report})
+        output = {"schema": "ordax.site-browser-proof/2", "routeCount": len(ROUTES),
                   "viewportCount": len(VIEWPORTS), "checks": len(results),
-                  "failures": failures, "results": results}
+                  "noScriptChecks": len(no_script_results),
+                  "failures": failures, "results": results,
+                  "noScriptResults": no_script_results}
         (evidence / "report.json").write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if failures:
             raise BrowserProofError(f"{len(failures)} browser checks failed; see report.json; "
@@ -431,7 +501,7 @@ def main():
     parser.add_argument("--evidence", default="out/browser-evidence")
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} noscript={output['noScriptChecks']}")
 
 
 if __name__ == "__main__":
