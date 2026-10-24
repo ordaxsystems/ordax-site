@@ -162,12 +162,12 @@ def load_migration_lock(path: Path) -> dict:
             or data["source_repository"] != MIGRATION_OWNER
             or not SHA40.fullmatch(str(data["source_commit"]))
             or not isinstance(data["artifacts"], dict)
-            or set(data["artifacts"]) != {"brand", "surface_preview", "offers"}):
+            or set(data["artifacts"]) != {"brand", "surface_preview"}):
         raise SiteError("invalid Site migration artifact trust lock")
     result = {}
-    # Brand and non-purchasable offers are separate, externally hash-locked OS
-    # historical inputs. They may not assert ownership of the Surface demo.
-    for key in ("brand", "offers"):
+    # Only the historical brand remains pending owner publication.
+    # The Surface demo has an independent signed prerelease.
+    for key in ("brand",):
         item = data["artifacts"][key]
         if not isinstance(item, dict) or set(item) != {"directory", "manifest_sha256"}:
             raise SiteError("invalid migration artifact lock item: " + key)
@@ -473,48 +473,14 @@ def stage_surface_preview(stage: Path, directory: Path, expected_manifest_sha256
             "rendered_css_sha256": digest(css), "font_url_rebased": font_rebased}
 
 
-def load_reference_offers(directory: Path | None, expected_sha256: str | None) -> tuple[str, dict | None]:
-    if directory is None:
-        if expected_sha256 is not None:
-            raise SiteError("offers manifest pin without an artifact")
-        # No official presentation projection supplied: reference offers stay unavailable.
-        return '<p class="commercial-notice">Catálogo de planos em preparação.</p>', None
-    manifest, pinned_sha256 = load_pinned_manifest(directory, expected_sha256, "offers")
-    if (manifest.get("artifact_class") != "ordax-public-reference-offers"
-            or manifest.get("source_repository") != "ordaxsystems/ordax-os"
-            or manifest.get("status") != "reference-not-purchasable"
-            or not SHA40.fullmatch(str(manifest.get("source_commit", "")))
-            or manifest.get("paid_purchases_enabled") is not False
-            or manifest.get("commercial_capacity_allocation_enabled") is not False
-            or manifest.get("html_path") != "reference-offers.html"):
-        raise SiteError("reference offers are unapproved or incorrectly identified")
-    path = directory / "reference-offers.html"
-    if not path.is_file() or path.is_symlink():
-        raise SiteError("reference offers artifact missing or linked")
-    payload = path.read_bytes()
-    if (not SHA256.fullmatch(str(manifest.get("html_sha256", "")))
-            or digest(payload) != manifest["html_sha256"]
-            or len(payload) != manifest.get("html_size")):
-        raise SiteError("reference offers integrity mismatch")
-    html = payload.decode("utf-8")
-    if (not html.startswith('<div class="commercial-catalog">')
-            or "Planos em preparação" not in html
-            or "contratação indisponível" not in html
-            or re.search(r"<\s*(?:script|form|iframe|a)\b", html, re.I)
-            or re.search(r"\b(?:href|action|on[a-z]+)\s*=", html, re.I)):
-        raise SiteError("reference offers contain interactive, unavailable or untrusted content")
-    return html, {"source_repository": manifest["source_repository"],
-                  "source_commit": manifest["source_commit"],
-                  "status": manifest["status"],
-                  "manifest_sha256": pinned_sha256}
+INACTIVE_PLANS_HTML = '<p class="commercial-notice">Planos em preparação — contratação indisponível.</p>'
 
 
 def build(out: Path, sha: str, brand: Path, publications: Path | None,
-          offers_dir: Path | None = None, public_origin: str | None = None,
+          public_origin: str | None = None,
           surface_preview_dir: Path | None = None,
           surface_preview_manifest_sha256: str | None = None,
-          brand_manifest_sha256: str | None = None,
-          offers_manifest_sha256: str | None = None) -> dict:
+          brand_manifest_sha256: str | None = None) -> dict:
     if not SHA40.fullmatch(sha):
         raise SiteError("full Git SHA required")
     origin = validate_origin(public_origin)
@@ -537,7 +503,6 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
         preview_receipt = stage_surface_preview(
             temp, surface_preview_dir, surface_preview_manifest_sha256 or ""
         )
-        offers_html, offers_receipt = load_reference_offers(offers_dir, offers_manifest_sha256)
         route_by_source = {item["source"]: item for item in ROUTE_RECORDS}
         for page in temp.rglob("*.html"):
             relative = page.relative_to(temp).as_posix()
@@ -551,7 +516,7 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
                 if marker in markup:
                     if page.relative_to(temp).as_posix() != expected or markup.count(marker) != 1:
                         raise SiteError("offers catalog marker outside its official presentation page")
-                    markup = markup.replace(marker, offers_html)
+                    markup = markup.replace(marker, INACTIVE_PLANS_HTML)
             # CSS source receipts stay immutable; the query tracks the bytes
             # actually distributed after verified font URL rebasing.
             markup = re.sub(r"(/assets/surface-snapshot\.css\?v=)[0-9a-f]{12}",
@@ -572,7 +537,7 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
         ]
         manifest = {"$schema": SCHEMA, "source_commit": sha, "artifact_class": "public-site",
                     "brand": brand_receipt, "surface_preview": preview_receipt,
-                    "offers": offers_receipt, "publications_sha256": publications_digest,
+                    "publications_sha256": publications_digest,
                     "seo_origin": origin, "indexable_routes": [row["path"] for row in ROUTE_RECORDS if row["indexable"]],
                     "catalog_status": catalog["status"], "files": records}
         (temp / "public-site-manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -631,8 +596,6 @@ def main() -> None:
     cli.add_argument("--brand-manifest-sha256")
     cli.add_argument("--publications")
     cli.add_argument("--migration-lock")
-    cli.add_argument("--offers-dir")
-    cli.add_argument("--offers-manifest-sha256")
     cli.add_argument("--public-origin")
     cli.add_argument("--surface-preview-dir")
     cli.add_argument("--surface-preview-manifest-sha256")
@@ -646,19 +609,15 @@ def main() -> None:
         brand_hash = args.brand_manifest_sha256
         preview = Path(args.surface_preview_dir) if args.surface_preview_dir else None
         preview_hash = args.surface_preview_manifest_sha256
-        offers = Path(args.offers_dir) if args.offers_dir else None
-        offers_hash = args.offers_manifest_sha256
         external_release = None
         if args.migration_lock:
-            if any(x is not None for x in (brand, brand_hash, preview, preview_hash, offers, offers_hash)):
+            if any(x is not None for x in (brand, brand_hash, preview, preview_hash)):
                 raise SiteError("migration lock and individual artifact overrides are mutually exclusive")
             pinned = load_migration_lock(Path(args.migration_lock))
             brand = pinned["brand"]["directory"]
             brand_hash = pinned["brand"]["manifest_sha256"]
             external_release = pinned["surface_preview"]["release"]
             preview_hash = pinned["surface_preview"]["manifest_sha256"]
-            offers = pinned["offers"]["directory"]
-            offers_hash = pinned["offers"]["manifest_sha256"]
         if brand is None:
             raise SiteError("brand artifact required (pinned manifest + SHA-256); no OS source fallback")
         if external_release is not None:
@@ -668,13 +627,13 @@ def main() -> None:
                 preview = download_surface_release(external_release, Path(temporary) / "preview")
                 receipt = build(Path(args.out), args.source_commit or "", brand,
                                 Path(args.publications) if args.publications else None,
-                                offers, args.public_origin, preview, preview_hash,
-                                brand_hash, offers_hash)
+                                args.public_origin, preview, preview_hash,
+                                brand_hash)
         else:
             receipt = build(Path(args.out), args.source_commit or "", brand,
                             Path(args.publications) if args.publications else None,
-                            offers, args.public_origin, preview, preview_hash,
-                            brand_hash, offers_hash)
+                            args.public_origin, preview, preview_hash,
+                            brand_hash)
         print(json.dumps(receipt, sort_keys=True))
     else:
         verify(Path(args.out))
