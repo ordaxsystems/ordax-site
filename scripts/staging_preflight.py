@@ -171,13 +171,16 @@ def _verify_published_file(path: str, record: dict, digest: str, size: int) -> N
 
 
 def evaluate_gateway_contracts(
-    fetch_json, fetch_asset, *, expected_site_commit: str, expected_manifest_sha256: str
+    fetch_json, fetch_asset, *, expected_site_commit: str, expected_manifest_sha256: str,
+    scope: str = "anonymous",
 ) -> dict:
-    """Check the pinned Site bundle before interpreting anonymous gateway APIs.
+    """Verify the complete pinned Site bundle, optionally checking anonymous Identity.
 
-    A manifest pinned from trusted CI proves only matching candidate bytes,
-    not publisher attestation or that the remote host belongs to an owner.
+    Static PASS is distinct from gateway PASS; neither authorizes deployment,
+    authentication or publishing. Both use the same bundle inventory and bytes.
     """
+    if scope not in ("static", "anonymous"):
+        raise StagingPreflightError("staging-preflight-scope-invalid")
     if not isinstance(expected_site_commit, str) or not FULL_SHA.fullmatch(expected_site_commit):
         raise StagingPreflightError("expected-site-commit-invalid")
     if not isinstance(expected_manifest_sha256, str) or not SHA256.fullmatch(expected_manifest_sha256):
@@ -215,17 +218,19 @@ def evaluate_gateway_contracts(
         raise StagingPreflightError("catalog-not-canonical-same-origin")
     if not isinstance(web, dict) or web.get("enabled") is not False:
         raise StagingPreflightError("web-product-not-gated")
-    session_status, session, _, _ = fetch_json("/auth/session", MAX_SESSION)
-    try:
-        identity_mode = resolve_public_identity_mode(
-            config, session, session_http_status=session_status
-        )
-    except PublicIdentityStateError as error:
-        raise StagingPreflightError("identity-contract:" + str(error)) from error
-    if identity_mode == "disabled-unconfigured":
-        raise StagingPreflightError("identity-gateway-not-configured")
-    if identity_mode == "gated":
-        raise StagingPreflightError("identity-gateway-still-gated")
+    identity_mode = "NOT_TESTED"
+    if scope == "anonymous":
+        session_status, session, _, _ = fetch_json("/auth/session", MAX_SESSION)
+        try:
+            identity_mode = resolve_public_identity_mode(
+                config, session, session_http_status=session_status
+            )
+        except PublicIdentityStateError as error:
+            raise StagingPreflightError("identity-contract:" + str(error)) from error
+        if identity_mode == "disabled-unconfigured":
+            raise StagingPreflightError("identity-gateway-not-configured")
+        if identity_mode == "gated":
+            raise StagingPreflightError("identity-gateway-still-gated")
     catalog_status, catalog, catalog_digest, catalog_size = fetch_json(
         "/releases/catalog.json", MAX_CATALOG
     )
@@ -247,7 +252,8 @@ def evaluate_gateway_contracts(
         raise StagingPreflightError("catalog-unattested-publications")
     return {
         "result": "PASS",
-        "scope": "anonymous-staging-contracts-only",
+        "scope": ("static-bundle-integrity-only" if scope == "static"
+                  else "anonymous-staging-contracts-only"),
         "identity_mode": identity_mode,
         "catalog_status": checked["status"],
         "candidate_source_commit": expected_site_commit,
@@ -258,13 +264,15 @@ def evaluate_gateway_contracts(
     }
 
 
-def run(staging_origin: str, expected_site_commit: str, expected_manifest_sha256: str) -> dict:
+def run(staging_origin: str, expected_site_commit: str, expected_manifest_sha256: str,
+        *, scope: str = "anonymous") -> dict:
     origin = validate_staging_origin(staging_origin)
     return evaluate_gateway_contracts(
         lambda path, maximum: _fetch_json(origin, path, maximum),
         lambda relative, size: _fetch_asset_digest(origin, relative, size),
         expected_site_commit=expected_site_commit,
         expected_manifest_sha256=expected_manifest_sha256,
+        scope=scope,
     )
 
 
@@ -272,13 +280,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--staging-origin", required=True,
                         help="Explicit HTTPS preview/staging origin, never production")
+    parser.add_argument("--scope", choices=("static", "anonymous"), default="anonymous",
+                        help="Static bundle integrity without Identity, or anonymous gateway integration")
     parser.add_argument("--expected-site-commit", required=True,
                         help="Exact build source commit from a trusted Site CI artifact")
     parser.add_argument("--expected-manifest-sha256", required=True,
                         help="SHA-256 of public-site-manifest.json from trusted Site CI")
     args = parser.parse_args()
     report = run(args.staging_origin, args.expected_site_commit,
-                 args.expected_manifest_sha256)
+                 args.expected_manifest_sha256, scope=args.scope)
     print("SITE_STAGING_PREFLIGHT=" + json.dumps(report, sort_keys=True))
 
 
