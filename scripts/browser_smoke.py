@@ -48,6 +48,33 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b'{"error":"service-unavailable"}')
 
     def do_GET(self):
+        # Redirect-based session forgery exists only in this loopback proof.
+        # Even a 200 JSON served at a different same-origin route is not the
+        # canonical /auth/session response; the browser must reject it.
+        if getattr(self.server, "auth_session_redirect_for_test", False):
+            if self.path == "/auth/session":
+                self.send_response(302)
+                self.send_header("Location", "/__test_redirected_identity.json")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
+            if self.path == "/__test_redirected_identity.json":
+                payload = {
+                    "$schema": "prototype-ordax.public-identity-session/1",
+                    "provider": "supabase",
+                    "status": "authenticated",
+                    "authenticated": True,
+                    "subject": "synthetic-test-subject",
+                    "email": "redirect-attacker@example.test",
+                }
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+                return
         # Negative download-contract responses exist only inside this loopback
         # browser proof. Never modify the verified build or publish a fixture.
         catalog_override = getattr(self.server, "catalog_override", None)
@@ -665,6 +692,7 @@ def run(root: Path, evidence: Path) -> dict:
     )
     server.catalog_override = None
     server.manifest_override = None
+    server.auth_session_redirect_for_test = False
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     webdriver_port = free_port()
@@ -677,6 +705,7 @@ def run(root: Path, evidence: Path) -> dict:
     text_spacing_results = []
     no_script_results = []
     catalog_failure_results = []
+    redirect_identity_results = []
     failures = []
     try:
         for _ in range(100):
@@ -970,6 +999,33 @@ def run(root: Path, evidence: Path) -> dict:
             finally:
                 server.catalog_override = None
                 server.manifest_override = None
+        # A redirected 200 with plausible authenticated JSON must not grant
+        # even a verified *visual* account state. Test at the existing browser
+        # entry point rather than introducing a second Identity simulator.
+        server.auth_session_redirect_for_test = True
+        try:
+            driver.navigate(f"http://127.0.0.1:{server.server_port}/conta/")
+            report = {}
+            for _ in range(45):
+                report = driver.run("""return (() => {
+                  const panel = document.getElementById('account-session');
+                  return {
+                    status: panel?.dataset?.status || null,
+                    hasAttackerEmail: document.body.textContent.includes('redirect-attacker@example.test'),
+                    hasVerifiedEmail: Boolean(document.querySelector('.verified-email')),
+                    errors: window.__ordaxPageErrors || []
+                  };
+                })();""")
+                if report["status"] === "unavailable":
+                    break
+                time.sleep(0.1)
+            report["scenario"] = "redirected-authenticated-session"
+            redirect_identity_results.append(report)
+            if report["status"] !== "unavailable" or report["hasAttackerEmail"] or report["hasVerifiedEmail"] or report["errors"]:
+                failures.append({"route": "/conta/", "viewport": "redirected-identity",
+                                 "rule": "session-cannot-follow-redirect", "summary": report})
+        finally:
+            server.auth_session_redirect_for_test = False
         # Restore the default language to keep the no-JavaScript checks independent.
         driver.run("""localStorage.setItem('ordax.public.locale', 'pt-BR'); return true;""")
         # Verify that disabling JavaScript at document parse time cannot
@@ -1010,11 +1066,13 @@ def run(root: Path, evidence: Path) -> dict:
                   "textSpacingChecks": len(text_spacing_results),
                   "noScriptChecks": len(no_script_results),
                   "catalogFailureChecks": len(catalog_failure_results),
+                  "redirectIdentityChecks": len(redirect_identity_results),
                   "failures": failures, "results": results,
                   "reflowResults": reflow_results, "textEnlargementResults": text_enlargement_results,
                   "textSpacingResults": text_spacing_results,
                   "noScriptResults": no_script_results,
-                  "catalogFailureResults": catalog_failure_results}
+                  "catalogFailureResults": catalog_failure_results,
+                  "redirectIdentityResults": redirect_identity_results}
         (evidence / "report.json").write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if failures:
             raise BrowserProofError(f"{len(failures)} browser checks failed; see report.json; "
@@ -1059,7 +1117,7 @@ def main():
     parser.add_argument("--evidence", default="out/browser-evidence")
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']}")
 
 
 if __name__ == "__main__":
