@@ -1021,7 +1021,7 @@ def run(root: Path, evidence: Path) -> dict:
                 time.sleep(0.1)
             report["scenario"] = "redirected-authenticated-session"
             redirect_identity_results.append(report)
-            if report["status"] !== "unavailable" or report["hasAttackerEmail"] or report["hasVerifiedEmail"] or report["errors"]:
+            if report["status"] != "unavailable" or report["hasAttackerEmail"] or report["hasVerifiedEmail"] or report["errors"]:
                 failures.append({"route": "/conta/", "viewport": "redirected-identity",
                                  "rule": "session-cannot-follow-redirect", "summary": report})
         finally:
