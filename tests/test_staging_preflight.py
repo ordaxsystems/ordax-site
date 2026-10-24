@@ -101,7 +101,9 @@ class StagingPreflightTests(unittest.TestCase):
     def test_static_client_cannot_force_web_or_catalog_authority(self):
         for config in (
             {**CONFIG, "product": {"web": {"enabled": True}}},
+            {**CONFIG, "product": {"web": None}},
             {**CONFIG, "downloads": {"catalog_url": "//malicious.example/catalog"}},
+            {**CONFIG, "downloads": None},
         ):
             with self.subTest(config=config):
                 fetch, _ = make_fetch({"/config/public-site.json": (200, config)})
