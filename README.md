@@ -77,3 +77,9 @@ O pacote da Surface **não está publicado oficialmente**: o status explicitamen
 `contracts/migration-artifact-lock.json` é a **única fonte de hashes de confiança** dos três insumos temporários de migração (`brand`, `surface_preview`, `offers`). O CI usa `--migration-lock`; o builder recusa overrides de `--brand-dir`, `--surface-preview-dir` ou `--offers-dir` quando recebe esse lock, verifica sha256 do manifesto **antes** de aceitar qualquer declaração interna de identidade, formato, integridade ou status e confirma uma mesma revisão do `ordax-os`. Os manifestos de marca e ofertas agora obedecem à mesma regra da demo.
 
 O lock tem status `development-only-not-authorized-for-production`: **não é assinatura, attestation externa nem autorização para usar artefatos de migração em produção**. As releases oficiais dos owners terão contrato e política de confiança independentes. O Site permanece candidato não publicado.
+
+## Recursos CSS e erros de navegador
+
+O build independente é verificado contra **todas as referências CSS** (`url(...)` local e `@import`) e falha quando uma fonte ou imagem distribuída está ausente, quando uma URL sai da origem autorizada ou atravessa diretórios. Testes unitários provocam essas falhas. O Chrome observa exceções JavaScript/rejeições não tratadas desde o início da navegação e confirma ausência de recursos estáticos com status de erro (o backend de Identity propositalmente isolado continua respondendo 503). O favicon padrão de cada página é o símbolo OrdaX publicado pelo **brand verificado**, sem criar outro asset ou ícones redundantes. [CI navegador+smoke PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40048444731).
+
+Os checks são regressões técnicas; não substituem staging real, auditoria completa WCAG nem publicação oficial de marca/preview/ofertas.

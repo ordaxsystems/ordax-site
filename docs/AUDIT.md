@@ -69,3 +69,11 @@ Auditoria identificou inconsistência: o Surface preview exigia hash externo do 
 Outra lacuna: o parâmetro `--publications` aceitava flags como `public_authorized=true` em um JSON escolhido localmente, insuficientes para estabelecer autorização do publicador. Entrada **desabilitada em build** até contrato oficial com origem autenticada, release imutável e integridade verificável. O gerador puro permanece para testes offline de formato, mas nenhuma entrada arbitrária pode ativar downloads no artefato distribuído.
 
 Esses controles asseguram consistência contra alteração acidental ou adulteração sem atualizar o lock; **não** constituem atestação criptográfica de publisher nem validação de um ambiente externo de produção.
+
+## Auditoria de assets realmente servidos e exceções JS (2026-10-23/24)
+
+O CSS distribuído não estava sendo analisado de ponta a ponta: um bundler legado já havia deixado um caminho de fonte órfã dentro da demo. Foi adicionada inspeção de `url(...)` em **todos os CSS empacotados** — tokens/brand, Surface preview e estilos Site — exigindo arquivo existente e same-origin, com tratamento correto para imagens SVG em `data:image/` que contêm aspas internas. São proibidos CSS `@import`, URLs remotas e travessias. O smoke informa a quantidade de dependências válidas verificadas. Testes negativos rejeitam imagem ausente, URL remota e caminhos com `../`.
+
+No navegador, a prova antiga verificava layout e presença de recursos, mas não capturava exceções JS nem status 4xx/5xx de assets após carregamento. Agora é instalado observador antes de executar qualquer script (`Page.addScriptToEvaluateOnNewDocument`), cobrindo `error`, `unhandledrejection`, erro de carregamento e Resource Timing HTTP. O endpoint de autenticação intencionalmente 503 é excluído da classe de recursos estáticos.
+
+A primeira rodada rigorosa encontrou erro HTTP na visita inicial da landing; páginas sem favicon explícito deixavam o Chrome consultar `/favicon.ico` inexistente. O gerador HTML passou a associar `/assets/ordax-symbol.png` do mesmo brand verificado (sem duplicar tags). A prova integrada passou em [CI](https://github.com/ordaxsystems/ordax-site/actions/runs/40048444731), com as 11 rotas e 3 resoluções. Não foi alterada nenhuma publicação em produção.

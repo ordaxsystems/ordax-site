@@ -52,3 +52,9 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 - `contracts/migration-artifact-lock.json` é a única lista de caminhos e pins SHA-256 dos três insumos de migração. O CI usa `--migration-lock` e proíbe overrides individuais; não mantenha digests copiados em workflow, código ou docs.
 - Os manifestos de brand, preview e offers são validados **contra o digest pinado no lock antes de ler suas alegações internas**. Revisão OS de origem deve coincidir entre todos. Lock é estritamente **dev-only**; não autoriza produção.
 - O builder **rejeita** `--publications` mesmo que o JSON local afirme `public_authorized=true`. Downloads permanecem vazios até integração explícita de evidência oficial do publisher (mais que flags autorreferentes).
+
+## Prova de integridade visual entregue (2026-10-23)
+
+- O smoke estático varre o **CSS realmente distribuído**, não os artefatos-fonte, e rejeita `url(...)` externos, com travessia de diretório, que referenciem arquivos ausentes, e `@import` não controlado. `data:image/` e referências fragmento permanecem permitidas. Os recursos externos/gerados da Surface também estão cobertos.
+- O Chrome instala um observador **antes** dos scripts da página para capturar erros JS, rejeições de promise e carregamento de imagem/script/stylesheet com erro, além de HTTP 4xx/5xx para recursos estáticos. Erros esperados nos serviços `/auth/`, `/account/`, `/api/`, `/sync/` não são confundidos com falhas de asset.
+- O SEO projection injeta `rel="icon"` apontando para `/assets/ordax-symbol.png` do **brand verificado**, salvo quando o source já declara favicon. Isso impede a requisição implícita a `/favicon.ico` inexistente sem replicar recursos. [CI integrado PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40048444731).

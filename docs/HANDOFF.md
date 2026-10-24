@@ -63,3 +63,10 @@
 - `stage_brand`, `stage_surface_preview` e `load_reference_offers` rejeitam digests ausentes, adulterados e status não permitidos; regressões no `tests/test_site_contract.py` verificam falsificação de manifesto e entradas inválidas.
 - Sem publicação oficial e atestada pelo owner de releases, `--publications` **não pode ativar downloads**; catálogo gerado é somente `empty`. `public_authorized=true` declarado por JSON local isolado não é autorização confiável.
 - CI desta etapa confirma build independente, smoke estático, prova de 33 cenários em Chrome e nenhum deployment. Atestação de owner para brand/preview/ofertas ainda pendente; não promover PR à main antes dos gates documentados.
+
+## CSS e runtime/browser errors — prova acrescentada (2026-10-23/24)
+
+- Os 12 arquivos CSS (incluindo material brand/preview do build) passam pelo novo `scripts/smoke_static.py::check_css_dependencies`: toda URL local deve resolver para um arquivo existente no **bundle**, independentemente do source. `data:image/` e âncoras SVG são tratados como recursos embutidos; CSS `@import` remoto e travessia são bloqueados. Testes negativos foram adicionados em `tests/test_site_contract.py`.
+- O Chrome agora captura `error` e `unhandledrejection` antes do primeiro script, falhas de carregamento e respostas estáticas HTTP 4xx/5xx. Fluxos auth simulados com 503 preservam o estado fail-closed, sem mascarar problemas de CSS/JS/favicon.
+- Erro de recurso na landing levou à inclusão determinística de favicon usando **o símbolo já verificado do brand**, sem copiar arquivos ou duplicar ícones. [Prova integrada PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40048444731).
+- Sem alegação de WCAG completa nem teste de identidade em staging. `ordax-surface#3` e os owners de releases/entitlements ainda precisam fornecer os pacotes oficiais antes de qualquer cutover.

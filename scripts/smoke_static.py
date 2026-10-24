@@ -186,7 +186,8 @@ def assert_candidate(out: Path) -> dict:
     catalog = json.loads((out / "releases/catalog.json").read_text("utf-8"))
     if catalog != {"$schema": "prototype-ordax.public-release-catalog/1", "status": "empty", "releases": []}:
         raise AssertionError("CI candidate must fail closed on absent authorized publications")
-    return {"result": "PASS", "routes": inspected, "default_public_releases": 0, "sitemap_entries": len(indexed)}
+    return {"result": "PASS", "routes": inspected, "default_public_releases": 0,
+            "sitemap_entries": len(indexed), "css_dependencies_checked": css_dependencies_checked}
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
