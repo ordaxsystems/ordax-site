@@ -155,3 +155,8 @@ Extração é **candidata em draft**; todos os assets originais, incluindo dois 
 
 - `/login/` pode receber links antigos do provedor hospedado com `#access_token=`; nunca interpretar/trocar/armazenar fragmentos bearer. `site/assets/site.js::start()` remove o fragmento **sincronamente antes de `loadConfig()`, sessão, Turnstile ou outros awaits**. Não mover novamente a sanitização para depois de rede nem duplicar em outras páginas sem contrato.
 - Preservar a prova Chrome no único `scripts/browser_smoke.py` (`fragmentScrub=1`): GET de config fica preso em loopback, URL de login contém um token sintético e deve estar limpa **antes** da resposta. Nenhuma credencial real, provider falso em produção ou novo script inline de autenticação.
+
+## Cadastro: provar caminhos legais válidos e inválidos (2026-10-24)
+
+- Preservar `tests/test_legal_documents.mjs` no CI: usa a função de produção `verifyPublishedRegistrationDocuments` **sem exportá-la no bundle**. Um `Content-Length` numérico é válido e deve permitir verificar SHA-256; corrupção, redirect, MIME errado, tamanho excessivo e política desativada devem continuar rejeitados. Não duplicar lógica de validação entre browser e teste.
+- A prova offline de documentos publicados não autoriza cadastro, Identity preview nem deploy; as decisões de serviço e consentimento ficam com o owner. ADR-031 documenta causa raiz e teste positivo/negativo.
