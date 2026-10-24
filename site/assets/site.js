@@ -1192,6 +1192,12 @@
   let startRevision = 0;
   async function start() {
     const generation = ++startRevision;
+    // Legacy hosted-auth redirects can put bearer tokens in the URL hash.
+    // Discard the entire fragment before any fetch or external challenge:
+    // waiting for the runtime config would keep those tokens addressable.
+    if (document.body?.dataset?.page === "login" && window.location.hash) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
     // A second locale/session check revokes any previous form or challenge
     // synchronously, before waiting for the config or the Identity gateway.
     const identityForm = document.querySelector("[data-identity-form]");
@@ -1225,11 +1231,6 @@
     if (generation !== startRevision) return;
 
     const page = document.body?.dataset?.page;
-    if (page === "login" && window.location.hash) {
-      // Old hosted Supabase links can return bearer tokens in the URL fragment.
-      // Never parse, exchange or persist them in the public portal.
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    }
     if (page === "conta") {
       await readPublicSession();
     } else if (page === "web") {
