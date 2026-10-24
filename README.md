@@ -110,6 +110,20 @@ python3 scripts/staging_preflight.py \
   --expected-manifest-sha256 <trusted-ci-bundle-manifest-sha256>
 ```
 
+**Staging Vercel protegido (sem desabilitar autenticação):** use o transporte oficial da Vercel, com sessão local já autorizada, para provar os **bytes exatos** de todos os arquivos (inclusive PNG/JPG/WOFF2). O validador de manifesto e os gates de identidade continuam os mesmos:
+
+```sh
+vercel whoami
+python3 scripts/staging_preflight.py \
+  --staging-origin https://SEU-DEPLOYMENT-DEV.vercel.app \
+  --transport vercel-cli \
+  --scope static \
+  --expected-site-commit <SHA40_DO_MESMO_CI> \
+  --expected-manifest-sha256 <SHA256_DO_MANIFESTO_DO_MESMO_CI>
+```
+
+O transporte usa somente GET via `vercel curl`, não segue redirects, não imprime segredos, impõe o limite de tamanho do inventário e destrói arquivos temporários. Requer sessão da Vercel CLI **com acesso ao deployment exato**; não cria deploy, bypass público, usuário de teste, DNS ou configuração de produção. Se a CLI não tiver autorização, a prova fica **BLOCKED**. O escopo `anonymous` só passa quando `/auth/session` retorna um contrato JSON real; ele não estava disponível na primeira auditoria HTTP Dev.
+
 Para verificar **somente os bytes do Site estático**, antes de existir gateway Identity autorizado, acrescente `--scope static` ao mesmo comando. Esta opção conserva a validação de manifesto, commit, **todo o inventário de HTML/CSS/JS/imagens**, configuração pública, catálogo vazio e hashes; pula exclusivamente `/auth/session`. O relatório distingue `scope=static-bundle-integrity-only` e `identity_mode=NOT_TESTED`. Sem a opção, o modo `anonymous` padrão continua exigindo Identity anônima real e não é afrouxado. Nenhum dos modos autoriza produção.
 
 Substitua o domínio do exemplo pelo host de staging autorizado. Extraia o commit de `source_commit` e calcule o SHA-256 **do arquivo `public-site-manifest.json` do artefato CI confiável**, por exemplo com `sha256sum out/site/public-site-manifest.json`. Nunca obtenha esses valores apenas do próprio endpoint a ser testado, pois ele poderia falsificar a identidade. A prova lê primeiro esse manifesto publicado e exige coincidência dos bytes e do commit; percorre **todos os arquivos inventariados** e confere o SHA-256 e tamanho exatos de cada resposta. Páginas `index.html` são solicitadas pela rota de navegação pública (`/`, `/login/` etc.). Isso inclui HTML, scripts, estilos e imagens, não apenas os JSON de configuração e catálogo; o conteúdo é processado em streaming, sem armazenamento de arquivos ou dados de usuário. O comando executa **somente GET sem credenciais**, sem seguir redirecionamentos. O catálogo deve continuar vazio enquanto não houver atestação oficial. Domínios de produção, localhost e IPs diretos são rejeitados. Sem host, digest e commit confiáveis, não há prova de staging concluída.
