@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
 import json
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +18,9 @@ from staging_preflight import (
     StagingPreflightError,
     evaluate_gateway_contracts,
     validate_staging_origin,
+    _fetch_asset_digest,
+    _manifest_files,
+    _public_file_url,
 )
 
 SITE_COMMIT = "1" * 40
@@ -203,6 +208,80 @@ class StagingPreflightTests(unittest.TestCase):
             raise StagingPreflightError("site-bundle-file-http-mismatch:" + name)
         with self.assertRaisesRegex(StagingPreflightError, "site-bundle-file-http-mismatch"):
             prove(fetch, pin, asset=unavailable)
+
+    def test_static_transfer_checks_real_response_bytes_and_size_without_network(self):
+        class Response(io.BytesIO):
+            def __init__(self, raw, *, status=200, url, advertised=None):
+                super().__init__(raw)
+                self.status = status
+                self.url = url
+                self.headers = {"Content-Length": str(advertised)} if advertised is not None else {}
+            def geturl(self):
+                return self.url
+
+        class FakeOpener:
+            def __init__(self, response):
+                self.response = response
+            def open(self, request, timeout):
+                self.request = request
+                return self.response
+
+        origin = "https://ordax-site-staging.vercel.app"
+        raw = b"published <html>."
+        self.assertEqual(_public_file_url("index.html"), "/")
+        self.assertEqual(_public_file_url("conta/index.html"), "/conta/")
+        self.assertEqual(_public_file_url("assets/site.js"), "/assets/site.js")
+
+        response = Response(raw, url=origin + "/conta/", advertised=len(raw))
+        opener = FakeOpener(response)
+        with patch("staging_preflight.build_opener", return_value=opener):
+            sha, size = _fetch_asset_digest(origin, "conta/index.html", len(raw))
+        self.assertEqual(size, len(raw))
+        self.assertEqual(sha, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(opener.request.get_method(), "GET")
+        self.assertIsNone(opener.request.get_header("Cookie"))
+        self.assertEqual(opener.request.get_header("Accept-encoding"), "identity")
+
+        bad = [
+            Response(raw, status=302, url=origin + "/conta/"),
+            Response(raw, url=origin + "/login/", advertised=len(raw)),
+            Response(raw, url=origin + "/conta/", advertised=len(raw) + 1),
+            Response(raw + b"x", url=origin + "/conta/"),
+        ]
+        for reply in bad:
+            with self.subTest(reply=reply.status, url=reply.url, headers=reply.headers):
+                with patch("staging_preflight.build_opener",
+                           return_value=FakeOpener(reply)):
+                    with self.assertRaisesRegex(
+                        StagingPreflightError,
+                        "site-bundle-file-(http|size)-mismatch",
+                    ):
+                        _fetch_asset_digest(origin, "conta/index.html", len(raw))
+
+    def test_bundle_inventory_rejects_ambiguous_paths_and_oversized_total(self):
+        good = [{"path": p, "sha256": hashlib.sha256(raw).hexdigest(),
+                 "size": len(raw)} for p, raw in ASSETS.items()]
+        good += [{"path": p, "sha256": digest(data), "size": len(encoded(data))}
+                 for p, data in (("config/public-site.json", CONFIG),
+                                 ("releases/catalog.json", CATALOG))]
+        self.assertEqual(len(_manifest_files({"files": good})), len(good))
+        for bad_path in (
+            "/index.html", "conta//index.html", "conta/../index.html",
+            "conta/./index.html", "conta/index.html/", "foo/%2e%2e/bar",
+            "assets\\site.js",
+        ):
+            bad = copy.deepcopy(good)
+            bad[0]["path"] = bad_path
+            with self.subTest(path=bad_path), self.assertRaisesRegex(
+                StagingPreflightError, "site-bundle-file-inventory-invalid"
+            ):
+                _manifest_files({"files": bad})
+        oversized = copy.deepcopy(good)
+        oversized[0]["size"] = 65 * 1024 * 1024
+        with self.assertRaisesRegex(
+            StagingPreflightError, "site-bundle-file-inventory-too-large"
+        ):
+            _manifest_files({"files": oversized})
 
     def test_unavailable_active_gateway_is_never_reported_ready(self):
         bad = {"$schema": "prototype-ordax.public-site-proxy-error/1",
