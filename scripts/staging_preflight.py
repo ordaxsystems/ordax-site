@@ -8,7 +8,9 @@ not authenticated Identity, publishing authority, or production readiness.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import ipaddress
+import re
 import json
 import ssl
 import tempfile
@@ -17,12 +19,16 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPSHandler, HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
+from build import SCHEMA as SITE_BUNDLE_SCHEMA
 from public_identity_state import PublicIdentityStateError, resolve_public_identity_mode
 from public_release_catalog import PublicReleaseCatalogError, validate_catalog
 
 MAX_CONFIG = 32 * 1024
 MAX_SESSION = 16 * 1024
 MAX_CATALOG = 256 * 1024
+MAX_MANIFEST = 512 * 1024
+FULL_SHA = re.compile(r"[0-9a-f]{40}")
+SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 class StagingPreflightError(ValueError):
@@ -69,7 +75,7 @@ def validate_staging_origin(value: str) -> str:
     return "https://" + hostname
 
 
-def _fetch_json(origin: str, path: str, maximum: int) -> tuple[int, dict]:
+def _fetch_json(origin: str, path: str, maximum: int) -> tuple[int, dict, str, int]:
     opener = build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()), NoRedirect())
     req = Request(origin + path, headers={
         "Accept": "application/json",
@@ -105,12 +111,64 @@ def _fetch_json(origin: str, path: str, maximum: int) -> tuple[int, dict]:
             raise StagingPreflightError("invalid-json:" + path) from error
         if not isinstance(result, dict):
             raise StagingPreflightError("json-object-required:" + path)
-        return status, result
+        return status, result, hashlib.sha256(raw).hexdigest(), len(raw)
 
 
-def evaluate_gateway_contracts(fetch_json) -> dict:
-    """Check existing canonical contracts; accepts an injectable read-only fetch."""
-    config_status, config = fetch_json("/config/public-site.json", MAX_CONFIG)
+def _manifest_files(manifest: dict) -> dict:
+    """Index trusted bundle inventory for exact output-byte spot checks."""
+    records = manifest.get("files")
+    if not isinstance(records, list) or len(records) > 10000:
+        raise StagingPreflightError("site-bundle-file-inventory-invalid")
+    files = {}
+    for row in records:
+        if (not isinstance(row, dict) or set(row) != {"path", "size", "sha256"}
+                or not isinstance(row["path"], str)
+                or not re.fullmatch(r"[A-Za-z0-9._/-]+", row["path"])
+                or row["path"].startswith("/") or ".." in row["path"].split("/")
+                or not isinstance(row["size"], int) or isinstance(row["size"], bool)
+                or row["size"] <= 0 or not isinstance(row["sha256"], str)
+                or not SHA256.fullmatch(row["sha256"]) or row["path"] in files):
+            raise StagingPreflightError("site-bundle-file-inventory-invalid")
+        files[row["path"]] = row
+    for required in ("config/public-site.json", "releases/catalog.json"):
+        if required not in files:
+            raise StagingPreflightError("site-bundle-file-inventory-missing:" + required)
+    return files
+
+
+def _verify_published_file(path: str, record: dict, digest: str, size: int) -> None:
+    if digest != record["sha256"] or size != record["size"]:
+        raise StagingPreflightError("site-bundle-file-mismatch:" + path)
+
+
+def evaluate_gateway_contracts(
+    fetch_json, *, expected_site_commit: str, expected_manifest_sha256: str
+) -> dict:
+    """Check the pinned Site bundle before interpreting anonymous gateway APIs.
+
+    A manifest pinned from trusted CI proves only matching candidate bytes,
+    not publisher attestation or that the remote host belongs to an owner.
+    """
+    if not isinstance(expected_site_commit, str) or not FULL_SHA.fullmatch(expected_site_commit):
+        raise StagingPreflightError("expected-site-commit-invalid")
+    if not isinstance(expected_manifest_sha256, str) or not SHA256.fullmatch(expected_manifest_sha256):
+        raise StagingPreflightError("expected-site-manifest-sha256-invalid")
+
+    manifest_status, manifest, manifest_digest, _ = fetch_json(
+        "/public-site-manifest.json", MAX_MANIFEST
+    )
+    if manifest_status != 200 or manifest_digest != expected_manifest_sha256:
+        raise StagingPreflightError("site-bundle-manifest-digest-mismatch")
+    if (manifest.get("$schema") != SITE_BUNDLE_SCHEMA
+            or manifest.get("artifact_class") != "public-site"
+            or manifest.get("source_commit") != expected_site_commit
+            or manifest.get("catalog_status") != "empty"
+            or manifest.get("publications_sha256") is not None):
+        raise StagingPreflightError("site-bundle-manifest-identity-invalid")
+    files = _manifest_files(manifest)
+    config_status, config, config_digest, config_size = fetch_json("/config/public-site.json", MAX_CONFIG)
+    _verify_published_file("config/public-site.json", files["config/public-site.json"],
+                           config_digest, config_size)
     if config_status != 200 or config.get("$schema") != "prototype-ordax.public-site-runtime/1":
         raise StagingPreflightError("site-runtime-contract-invalid")
     downloads = config.get("downloads")
@@ -120,7 +178,7 @@ def evaluate_gateway_contracts(fetch_json) -> dict:
         raise StagingPreflightError("catalog-not-canonical-same-origin")
     if not isinstance(web, dict) or web.get("enabled") is not False:
         raise StagingPreflightError("web-product-not-gated")
-    session_status, session = fetch_json("/auth/session", MAX_SESSION)
+    session_status, session, _, _ = fetch_json("/auth/session", MAX_SESSION)
     try:
         identity_mode = resolve_public_identity_mode(
             config, session, session_http_status=session_status
@@ -131,7 +189,11 @@ def evaluate_gateway_contracts(fetch_json) -> dict:
         raise StagingPreflightError("identity-gateway-not-configured")
     if identity_mode == "gated":
         raise StagingPreflightError("identity-gateway-still-gated")
-    catalog_status, catalog = fetch_json("/releases/catalog.json", MAX_CATALOG)
+    catalog_status, catalog, catalog_digest, catalog_size = fetch_json(
+        "/releases/catalog.json", MAX_CATALOG
+    )
+    _verify_published_file("releases/catalog.json", files["releases/catalog.json"],
+                           catalog_digest, catalog_size)
     if catalog_status != 200:
         raise StagingPreflightError("catalog-http-status-invalid")
     # Reuse the Site's canonical catalog validator, not a second schema.
@@ -151,23 +213,33 @@ def evaluate_gateway_contracts(fetch_json) -> dict:
         "scope": "anonymous-staging-contracts-only",
         "identity_mode": identity_mode,
         "catalog_status": checked["status"],
+        "candidate_source_commit": expected_site_commit,
         "authenticated_e2e": "NOT_TESTED",
         "publisher_attestation": "NOT_TESTED",
         "production_approval": False,
     }
 
 
-def run(staging_origin: str) -> dict:
+def run(staging_origin: str, expected_site_commit: str, expected_manifest_sha256: str) -> dict:
     origin = validate_staging_origin(staging_origin)
-    return evaluate_gateway_contracts(lambda path, maximum: _fetch_json(origin, path, maximum))
+    return evaluate_gateway_contracts(
+        lambda path, maximum: _fetch_json(origin, path, maximum),
+        expected_site_commit=expected_site_commit,
+        expected_manifest_sha256=expected_manifest_sha256,
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--staging-origin", required=True,
                         help="Explicit HTTPS preview/staging origin, never production")
+    parser.add_argument("--expected-site-commit", required=True,
+                        help="Exact build source commit from a trusted Site CI artifact")
+    parser.add_argument("--expected-manifest-sha256", required=True,
+                        help="SHA-256 of public-site-manifest.json from trusted Site CI")
     args = parser.parse_args()
-    report = run(args.staging_origin)
+    report = run(args.staging_origin, args.expected_site_commit,
+                 args.expected_manifest_sha256)
     print("SITE_STAGING_PREFLIGHT=" + json.dumps(report, sort_keys=True))
 
 
