@@ -322,6 +322,89 @@ def localization_probe(driver: Driver) -> dict:
     })();""")
 
 
+def solid_surface_contrast_probe(driver: Driver) -> dict:
+    """Measure WCAG 2.x text contrast only when the visible backing is a flat color.
+
+    Gradients, images, alpha effects, decorative demo, and pseudo elements are
+    out of scope; never treat an unverifiable surface as a passing measurement.
+    """
+    return driver.run(r"""return (() => {
+      const parse = raw => {
+        const m = String(raw).match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s\/]+([\d.]+))?\s*\)$/i);
+        return m ? [+m[1], +m[2], +m[3], m[4] == null ? 1 : +m[4]] : null;
+      };
+      const blend = (front, back) => {
+        const a = front[3];
+        return [front[0]*a + back[0]*(1-a),
+                front[1]*a + back[1]*(1-a),
+                front[2]*a + back[2]*(1-a), 1];
+      };
+      const luminance = rgb => {
+        const linear = rgb.slice(0,3).map(v => {
+          const c=v/255; return c <= 0.04045 ? c/12.92 : ((c+0.055)/1.055)**2.4;
+        });
+        return 0.2126*linear[0] + 0.7152*linear[1] + 0.0722*linear[2];
+      };
+      const ratio = (a,b) => {
+        const [high,low]=[luminance(a),luminance(b)].sort((x,y)=>y-x);
+        return (high+0.05)/(low+0.05);
+      };
+      const selectors = [
+        '.site-header a', '.site-header button',
+        '.site-header select', '.page-shell h1', '.page-shell h2',
+        '.page-shell p', '.page-shell a', '.download-container h2',
+        '.download-container p', '.download-container a',
+        '.account-ui h1', '.account-ui h2', '.account-ui a',
+        '.account-ui p', '.account-ui label'
+      ];
+      const nodes = [...new Set(selectors.flatMap(s => [...document.querySelectorAll(s)]))];
+      const failed = [], unchecked = {};
+      let measured = 0;
+      const skip = why => {unchecked[why] = (unchecked[why] || 0) + 1};
+      for (const el of nodes) {
+        if (!Array.from(el.childNodes).some(n => n.nodeType===Node.TEXT_NODE && n.textContent.trim())) continue;
+        const style=getComputedStyle(el);
+        const rect=el.getBoundingClientRect();
+        if (el.closest('[hidden], [aria-hidden="true"], .demo-native, .playground') ||
+            rect.width<1 || rect.height<1 || style.visibility!=='visible' ||
+            style.display==='none' || Number(style.opacity)<1) continue;
+        const chain=[];
+        for(let p=el; p; p=p.parentElement) chain.unshift(p);
+        let background=[255,255,255,1], unmeasurable=false;
+        for (const n of chain) {
+          const css=getComputedStyle(n);
+          if (css.backgroundImage!=='none') {skip('image-or-gradient');unmeasurable=true;break}
+          if (Number(css.opacity)<1 || css.mixBlendMode!=='normal' || css.filter!=='none') {
+            skip('layer-compositing');unmeasurable=true;break;
+          }
+          const bg=parse(css.backgroundColor);
+          if (!bg){skip('unknown-background');unmeasurable=true;break}
+          background=blend(bg,background);
+        }
+        if (unmeasurable) continue;
+        const text=parse(style.color);
+        if (!text) {skip('unknown-foreground');continue}
+        const foreground=blend(text,background);
+        const px=parseFloat(style.fontSize)||0;
+        const weight=parseInt(style.fontWeight,10)||400;
+        const threshold=(px>=24 || (px>=18.66 && weight>=700)) ? 3 : 4.5;
+        const value=ratio(foreground,background);
+        measured++;
+        if (value+0.0001<threshold) failed.push({
+          tag:el.tagName.toLowerCase(),
+          selector:el.className && typeof el.className==='string' ? el.className.slice(0,70) : '',
+          text:el.textContent.trim().slice(0,65),
+          foreground:style.color,
+          backing:background.slice(0,3).map(Math.round),
+          ratio:+value.toFixed(2),
+          minimum:threshold,
+        });
+      }
+      return {measured, failed:failed.slice(0,16), failedCount:failed.length,
+              unchecked, scope:'flat-color foreground/background with no image or compositing'};
+    })();""")
+
+
 def no_script_probe(driver: Driver) -> dict:
     """Inspect the offline presentation after loading with script execution blocked."""
     return driver.run(r"""return (() => {
@@ -425,6 +508,7 @@ def run(root: Path, evidence: Path) -> dict:
                 if width == VIEWPORTS[0][0]:
                     report.update(accessibility_probe(driver))
                     report["localeSwitch"] = localization_probe(driver)
+                    report["solidSurfaceContrast"] = solid_surface_contrast_probe(driver)
                 short = route.strip("/").replace("/", "-") or "home"
                 filename = f"{short}-{width}x{height}.png"
                 driver.shot(evidence / filename)
@@ -451,6 +535,7 @@ def run(root: Path, evidence: Path) -> dict:
                         "skipLinkKeyboardNavigates": report["skipLinkDestination"],
                         "skipLinkKeyboardFocus": report["skipLinkFocusLandsOnMain"],
                         "localeSwitcherLocalizedAndPersistent": all(report["localeSwitch"].values()),
+                        "measuredFlatSurfaceTextContrast": report["solidSurfaceContrast"]["failedCount"] == 0,
                     })
                 if route in ("/login/", "/cadastro/", "/recuperar/", "/recuperar/nova-senha/"):
                     check.update({"formsFailClosed": not report["exposedAuthForms"] and not report["enabledCredentials"]})
@@ -462,7 +547,8 @@ def run(root: Path, evidence: Path) -> dict:
                 for name, success in check.items():
                     if not success:
                         failures.append({"route": route, "viewport": width, "rule": name,
-                                         "summary": report})
+                                         "summary": ({"contrast": report["solidSurfaceContrast"]}
+                                                     if name == "measuredFlatSurfaceTextContrast" else report)})
         # Simulate the CSS layout viewport available when a 1280px desktop
         # is viewed at 200% and 400% scale. Keep mobile=False so responsive
         # rules are exercised in desktop emulation, distinct from the 320px
@@ -543,6 +629,8 @@ def run(root: Path, evidence: Path) -> dict:
                                     + "; ".join(f"{r['route']}@{r['viewport']}:{r['rule']}"
                                       + (":" + json.dumps(r["summary"].get("overflowElements", [])[:6], ensure_ascii=False)
                                          if r["rule"] == "reflowsWithoutPageHorizontalScroll" else "")
+                                      + (":" + json.dumps(r["summary"].get("contrast", {}).get("failed", [])[:4], ensure_ascii=False)
+                                         if r["rule"] == "measuredFlatSurfaceTextContrast" else "")
                                       for r in failures[:15]))
         return output
     finally:
