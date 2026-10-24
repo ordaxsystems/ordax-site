@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import build
-from public_release_catalog import render_catalog, PublicReleaseCatalogError
+from public_release_catalog import render_catalog, PublicReleaseCatalogError, _same_origin_path
 from site_routes import load_routes
 from site_seo import validate_origin, render_html
 from smoke_static import check_css_dependencies
@@ -115,6 +115,20 @@ class SiteContractTests(unittest.TestCase):
         self.assertEqual(result["releases"], [])
         with self.assertRaises(PublicReleaseCatalogError):
             render_catalog({"releases": [{"release_id": "0" * 40, "public_authorized": False}]})
+
+    def test_published_release_links_have_unambiguous_root_paths(self):
+        for value in ("/releases/ordax-1.0.img", "/downloads/x86_64/stable.iso",
+                      "/compliance/source_bundle-1.0.tar.gz"):
+            with self.subTest(value=value):
+                self.assertTrue(_same_origin_path(value))
+        for value in ("/", "//remote/path", "/../account/export",
+                      "/releases/../account/export", "/releases/./x",
+                      "/releases//x", r"/releases\\x",
+                      "/releases/%2e%2e/secret", "/releases/%2fadmin",
+                      "/releases/secret?key=1", "/releases/file#fragment",
+                      "https://example.org/file", "/releases/white space"):
+            with self.subTest(value=value):
+                self.assertFalse(_same_origin_path(value))
 
     def test_path_boundaries(self):
         for value in ("/auth/login", "/download/release.bin", "/terms/"):
