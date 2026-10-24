@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import http.server
 import json
 import os
@@ -50,8 +51,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # Negative download-contract responses exist only inside this loopback
         # browser proof. Never modify the verified build or publish a fixture.
         catalog_override = getattr(self.server, "catalog_override", None)
-        if self.path == "/releases/catalog.json" and catalog_override is not None:
-            content = json.dumps(catalog_override, separators=(",", ":")).encode("utf-8")
+        manifest_override = getattr(self.server, "manifest_override", None)
+        payload = (catalog_override if self.path == "/releases/catalog.json"
+                   else manifest_override if self.path == "/public-site-manifest.json"
+                   else None)
+        if payload is not None:
+            content = json.dumps(payload, separators=(",", ":")).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(content)))
@@ -659,6 +664,7 @@ def run(root: Path, evidence: Path) -> dict:
         lambda *a, **k: Handler(*a, root=root, **k),
     )
     server.catalog_override = None
+    server.manifest_override = None
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     webdriver_port = free_port()
@@ -919,8 +925,26 @@ def run(root: Path, evidence: Path) -> dict:
                 "status": "empty", "releases": [], "injected": True,
             }),
         ]
+        # A forged ready catalog AND a matching, self-authored manifest are
+        # still unauthorized. Both responses come only from this loopback
+        # test handler: a matching digest is not a publisher signature.
+        actual_manifest = json.loads((root / "public-site-manifest.json").read_text("utf-8"))
+        valid_ready = {"$schema": "prototype-ordax.public-release-catalog/1",
+                       "status": "ready", "releases": [demo_release]}
+        ready_bytes = json.dumps(valid_ready, separators=(",", ":")).encode("utf-8")
+        self_attested = json.loads(json.dumps(actual_manifest))
+        self_attested["catalog_status"] = "ready"
+        self_attested["publications_sha256"] = "a" * 64
+        for record in self_attested["files"]:
+            if record["path"] == "releases/catalog.json":
+                record["size"] = len(ready_bytes)
+                record["sha256"] = hashlib.sha256(ready_bytes).hexdigest()
+        invalid_catalogs.append(("forged-catalog-and-manifest", valid_ready))
         for scenario, payload in invalid_catalogs:
             server.catalog_override = payload
+            server.manifest_override = (
+                self_attested if scenario == "forged-catalog-and-manifest" else None
+            )
             try:
                 driver.cdp("Emulation.setDeviceMetricsOverride", {
                     "width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True
@@ -945,6 +969,7 @@ def run(root: Path, evidence: Path) -> dict:
                                      "rule": scenario, "summary": state})
             finally:
                 server.catalog_override = None
+                server.manifest_override = None
         # Restore the default language to keep the no-JavaScript checks independent.
         driver.run("""localStorage.setItem('ordax.public.locale', 'pt-BR'); return true;""")
         # Verify that disabling JavaScript at document parse time cannot
