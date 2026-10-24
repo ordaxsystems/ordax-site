@@ -45,7 +45,7 @@
     const length = response.headers.get("Content-Length");
     if (mime !== "application/json" ||
         !Number.isSafeInteger(maxBytes) || maxBytes < 0 ||
-        (length !== null && (!/^\\d+$/.test(length) || Number(length) > maxBytes)) ||
+        (length !== null && (!/^\d+$/.test(length) || Number(length) > maxBytes)) ||
         !response.body?.getReader) {
       throw new Error("invalid-public-json-response");
     }
