@@ -186,7 +186,7 @@
           || response.headers.get("Content-Type")?.split(";", 1)[0].trim().toLowerCase() !== "text/html"
           || !response.body) return false;
       const advertisedSize = response.headers.get("Content-Length");
-      if (advertisedSize !== null && (!/^\\d+$/.test(advertisedSize) || Number(advertisedSize) > maxBytes)) {
+      if (advertisedSize !== null && (!/^\d+$/.test(advertisedSize) || Number(advertisedSize) > maxBytes)) {
         return false;
       }
       const reader = response.body.getReader();
