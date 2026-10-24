@@ -237,6 +237,49 @@ def stage_brand(stage: Path, brand_dir: Path, expected_sha256: str | None) -> di
             "source_commit": ledger["source_commit"], "status": ledger["status"],
             "manifest_sha256": pinned_sha256}
 
+def coalesce_verified_site_images(stage: Path, payloads: dict[str, bytes]) -> int:
+    """Reuse identical authored Site images in a verified Surface Dev output.
+
+    Surface release bytes and signatures were verified before this operation.
+    Only the disposable bundle is rewritten; no canonical source is changed.
+    """
+    images = {}
+    for source in sorted((stage / "assets").glob("*")):
+        if (not source.is_file() or source.is_symlink()
+                or source.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}):
+            continue
+        data = source.read_bytes()
+        images.setdefault(digest(data), []).append(
+            (source.relative_to(stage).as_posix(), data)
+        )
+    reused = 0
+    for name, raw in list(payloads.items()):
+        if Path(name).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            continue
+        # Require full byte equality, not only a digest collision or image name.
+        target = next((path for path, data in images.get(digest(raw), [])
+                       if path != name and data == raw), None)
+        if target is None:
+            continue
+        if name != "assets/" + Path(name).name or target != "assets/" + Path(target).name:
+            raise SiteError("shared Surface image requires flat Site asset paths")
+        old_url = b"/" + name.encode("ascii")
+        new_url = b"/" + target.encode("ascii")
+        old_relative = b"./" + Path(name).name.encode("ascii")
+        new_relative = b"./" + Path(target).name.encode("ascii")
+        for filename, content in list(payloads.items()):
+            if filename == name or Path(filename).suffix.lower() not in {".css", ".json", ".svg"}:
+                continue
+            updated = content.replace(old_url, new_url).replace(old_relative, new_relative)
+            # Unknown URL spellings are never silently orphaned by deduplication.
+            if Path(name).name.encode("ascii") in updated:
+                raise SiteError("unmapped Surface image reference: " + name)
+            payloads[filename] = updated
+        del payloads[name]
+        reused += 1
+    return reused
+
+
 def stage_surface_dev_preview(stage: Path, directory: Path, manifest: dict,
                               manifest_sha256: str) -> dict:
     """Consume the Surface-owned read-only Dev bundle, not source code.
@@ -346,6 +389,7 @@ def stage_surface_dev_preview(stage: Path, directory: Path, manifest: dict,
     css = css.replace(source_font_url, b"/assets/fonts/inter-latin-wght-normal.woff2")
     payloads["assets/surface-snapshot.css"] = css
     del payloads[bundled_fonts[0]]
+    reused_images = coalesce_verified_site_images(stage, payloads)
     for name, raw in payloads.items():
         dst = stage / name
         if dst.exists():
@@ -361,7 +405,7 @@ def stage_surface_dev_preview(stage: Path, directory: Path, manifest: dict,
             "manifest_sha256": manifest_sha256,
             "file_count": len(files),
             "rendered_css_sha256": digest(payloads["assets/surface-snapshot.css"]),
-            "font_url_rebased": True}
+            "font_url_rebased": True, "reused_site_images": reused_images}
 
 
 def stage_surface_preview(stage: Path, directory: Path, expected_manifest_sha256: str) -> dict:
@@ -546,6 +590,16 @@ def verify(out: Path) -> None:
     if ledger.get("artifact_class") != "public-site":
         raise SiteError("bundle identity invalid")
     expected = validate_bundle_inventory(ledger)
+    # The signed Surface package may repeat Site-owned binaries under hashed
+    # names, but the distributed output must retain only one byte-identical
+    # image/font. This runs in Vercel's build verify, not only in browser CI.
+    binary_digest_paths = {}
+    for relative, row in expected.items():
+        if Path(relative).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".woff2"}:
+            continue
+        previous = binary_digest_paths.setdefault(row["sha256"], relative)
+        if previous != relative:
+            raise SiteError("duplicate distributed binary assets: " + previous + " / " + relative)
     paths = list(out.rglob("*"))
     if any(p.is_symlink() for p in paths):
         raise SiteError("bundle contains symbolic links")

@@ -377,6 +377,70 @@ class SiteContractTests(unittest.TestCase):
             with self.assertRaisesRegex(build.SiteError, "Surface Dev release lock"):
                 build.load_migration_lock(fake)
 
+    def test_verified_surface_images_reuse_site_bytes_without_duplicate_aliases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stage = Path(tmp)
+            assets = stage / "assets"
+            assets.mkdir()
+            day, night = b"same-signed-image-day", b"same-signed-image-night"
+            (assets / "public-surface-day.jpg").write_bytes(day)
+            (assets / "public-surface-night.jpg").write_bytes(night)
+            original_fixture = (b'{"html":"<img src=\\"/assets/alpine-day-Hash.jpg\\">",'
+                                b'"alt":"/assets/alpine-night-Hash.jpg"}')
+            payloads = {
+                "assets/alpine-day-Hash.jpg": day,
+                "assets/alpine-night-Hash.jpg": night,
+                "assets/surface-snapshot.css": b"body{background:url(./alpine-night-Hash.jpg)}",
+                "assets/playground-fixture.json": original_fixture,
+            }
+            self.assertEqual(build.coalesce_verified_site_images(stage, payloads), 2)
+            self.assertNotIn("assets/alpine-day-Hash.jpg", payloads)
+            self.assertNotIn("assets/alpine-night-Hash.jpg", payloads)
+            self.assertIn(b"/assets/public-surface-day.jpg",
+                          payloads["assets/playground-fixture.json"])
+            self.assertIn(b"/assets/public-surface-night.jpg",
+                          payloads["assets/playground-fixture.json"])
+            self.assertIn(b"./public-surface-night.jpg",
+                          payloads["assets/surface-snapshot.css"])
+            self.assertEqual((assets / "public-surface-day.jpg").read_bytes(), day)
+            self.assertEqual((assets / "public-surface-night.jpg").read_bytes(), night)
+            # Same name / similar size alone cannot authorize deduplication.
+            different = {"assets/alpine-day-Hash.jpg": b"changed-image"}
+            self.assertEqual(build.coalesce_verified_site_images(stage, different), 0)
+            self.assertIn("assets/alpine-day-Hash.jpg", different)
+            # Do not remove a file when any source reference could become orphaned.
+            unsafe = {"assets/alpine-day-Hash.jpg": day,
+                      "assets/playground-fixture.json": b"url(alpine-day-Hash.jpg)"}
+            with self.assertRaisesRegex(build.SiteError, "unmapped Surface image"):
+                build.coalesce_verified_site_images(stage, unsafe)
+
+    def test_bundle_verify_rejects_duplicate_binary_digest_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            (out / "assets").mkdir()
+            (out / "config").mkdir()
+            (out / "releases").mkdir()
+            (out / "assets/one.jpg").write_bytes(b"duplicate-bytes")
+            (out / "assets/two.jpg").write_bytes(b"duplicate-bytes")
+            (out / "config/public-site.json").write_text("{}", encoding="utf-8")
+            (out / "releases/catalog.json").write_text("{}", encoding="utf-8")
+            manifest = {
+                "$schema": build.SCHEMA, "source_commit": "1" * 40,
+                "artifact_class": "public-site",
+                "files": [
+                    {"path": path.relative_to(out).as_posix(),
+                     "sha256": build.digest(path.read_bytes()),
+                     "size": path.stat().st_size}
+                    for path in sorted(out.rglob("*")) if path.is_file()
+                ],
+            }
+            (out / "public-site-manifest.json").write_text(
+                json.dumps(manifest), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(build.SiteError,
+                                        "duplicate distributed binary assets"):
+                build.verify(out)
+
     def test_delivered_css_dependencies_must_be_local_and_exist(self):
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp)
