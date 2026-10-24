@@ -617,11 +617,18 @@
     refreshSession: refreshPublicSession,
     // Read-only account data uses the same bounded same-origin transport.
     // Authorization remains entirely server-side; no client-side quota claim.
-    readMcpUsage(signal) {
-      if (sessionView.status !== "authenticated") {
-        return Promise.reject(new Error("public-account-session-required"));
+    async readMcpUsage(signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated") {
+        throw new Error("public-account-session-required");
       }
-      return loadJson("/account/usage/mcp", signal);
+      const payload = await loadJson("/account/usage/mcp", signal);
+      // A successful HTTP response from a previous session is not current
+      // account data, even when the new session has the same display email.
+      if (owner !== sessionView || sessionView.status !== "authenticated") {
+        throw new Error("public-account-session-changed");
+      }
+      return payload;
     },
     subscribe(observer) {
       if (typeof observer !== "function") throw new TypeError("account-observer-required");
