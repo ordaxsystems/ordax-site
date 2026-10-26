@@ -1,0 +1,54 @@
+{
+  "$schema": "ordax.site-staging-readonly-observation/1",
+  "observed_date": "2026-10-26",
+  "purpose": "Authenticated-access boundary and byte-exact public Site candidate validation only; not public Account, commercial, or release approval",
+  "source": {
+    "repository": "ordaxsystems/ordax-site",
+    "branch": "main",
+    "commit": "8ad8037ce2a2d600e621dec5aba2e50f878c3de9",
+    "ci_workflow": "https://github.com/ordaxsystems/ordax-site/actions/runs/40141425475",
+    "ci_result": "success",
+    "ci_pinned_manifest_sha256": "ad36e5eff985a2729aabec46f5a2a8af173713f767308ed59356903f41abeefc"
+  },
+  "vercel": {
+    "team": "ordaxsystems",
+    "project": "ordax-site-dev",
+    "project_id": "prj_rEZck0dLNrLlSX9UhjifUzGiFpts",
+    "deployment_id": "dpl_HJoCnwHZU4eguLTNPAAvhcKY1JMB",
+    "deployment_state": "READY",
+    "production_public_domain_attached": false
+  },
+  "static_http_proof_before_sso_hardening": {
+    "host": "ordax-site-dev.vercel.app",
+    "protocol": "HTTPS",
+    "certificate_validation": "enabled",
+    "redirects_followed": false,
+    "cookies_used": false,
+    "ci_manifest_digest_matches": true,
+    "manifest_bytes": 7897,
+    "files_declared": 43,
+    "files_hash_and_size_matched": 43,
+    "total_file_bytes_verified": 8791643,
+    "failures": 0,
+    "verification_method": "Authorized Windows Desktop, read-only HTTP GET; SHA-256 of response bytes compared to trusted CI manifest and per-file signed inventory",
+    "scope": "static-bundle-integrity-only"
+  },
+  "protection_hardening_after_static_proof": {
+    "project_sso_mode_before": "all_except_custom_domains",
+    "project_sso_mode_after": "all",
+    "unauthenticated_alias_http_status": 302,
+    "unauthenticated_unique_deployment_http_status": 302,
+    "expected_behavior": "redirect to Vercel Authentication; do not disclose protected content",
+    "automation_bypass_created": false,
+    "dns_changed": false,
+    "public_domain_moved": false
+  },
+  "remaining_gates": {
+    "authenticated_vercel_cli_replay": "NOT_TESTED",
+    "anonymous_identity_staging_real_gateway": "NOT_TESTED",
+    "real_login_and_account_e2e": "NOT_TESTED",
+    "manual_wcag": "NOT_TESTED",
+    "production_promotion_authorized": false
+  },
+  "notes": "The static HTTP proof preceded ssoProtection=all; after protection hardening, a new unauthenticated request must not read assets. No credential, token, cookie or bypass link is included in this observation."
+}
