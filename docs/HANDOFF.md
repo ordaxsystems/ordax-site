@@ -26,6 +26,12 @@ Nenhum dos três snapshots antigos do OS (brand, preview ou ofertas) permanece e
 
 A revisão do Site integrada no OS nesta entrega é `8f8e0b33d9418a2ca6d256630d440ca43e4abe47`. Para revisões futuras, **não copie esse hash**: leia o contrato canônico do OS e o lock atual do Site.
 
+## Prova externa do Site Dev — 26/10/2026
+
+O Site Dev `ordax-site-dev` recebeu o **mesmo commit aprovado no CI**: `8ad8037ce2a2d600e621dec5aba2e50f878c3de9` (GitHub Actions `40141425475`). Foi realizada prova HTTPS de leitura do manifesto contra o SHA-256 **obtido do CI independente**, seguida de comparação de bytes/SHA-256 e tamanho de **43/43 arquivos** distribuídos, sem divergências. Em seguida, a Vercel passou a exigir autenticação também no alias do projeto (`ssoProtection=all`); os dois hosts de Dev foram testados novamente sem credenciais e agora retornam `302` para autenticação.
+
+Os dados imutáveis da prova e as ressalvas estão em [`docs/evidence/site-vercel-staging-2026-10-26.json`](evidence/site-vercel-staging-2026-10-26.json). **PASS somente para integridade estática e proteção Dev.** Ainda faltam execução do verificador canônico com CLI autenticado, prova de gateway real em staging, acessibilidade manual e aprovação de identidade/produção; nenhum desses critérios foi marcado como concluído.
+
 ## O que continua fora do escopo Dev concluído
 
 1. **Staging externo autorizado:** verificar bytes e commit do bundle real com `scripts/staging_preflight.py`, usando SHA de manifesto proveniente do CI, e testar Identity/Conta com gateway real quando houver autorização.
