@@ -1,0 +1,48 @@
+{
+  "$schema": "ordax.site-canonical-gateway-source/1",
+  "status": "staging-only-not-authorized-for-production",
+  "repository": "ordaxsystems/ordax-os",
+  "commit": "a0cd6dbc6a3e6c0ffa19b2d7874f85fbdc1c2be2",
+  "files": [
+    {
+      "path": "api/account-proxy.mjs",
+      "git_blob_sha1": "1600ca676943ac417c88197a5e0aa651d169142a",
+      "size": 104
+    },
+    {
+      "path": "lib/account-proxy-core.mjs",
+      "git_blob_sha1": "5bf52e66d2ba7d8a659ff9df7197e1983a66b1b5",
+      "size": 19354
+    },
+    {
+      "path": "infra/supabase/functions/ordax-public-account-gateway/public_request_context.mjs",
+      "git_blob_sha1": "959670ae190e8843d4d31649a60936cfabb5ab0b",
+      "size": 3005
+    },
+    {
+      "path": "infra/supabase/functions/_shared/bounded_body.mjs",
+      "git_blob_sha1": "fc8e5e7b94edd29070750384e493efe5ab8cc7b0",
+      "size": 1804
+    },
+    {
+      "path": "infra/supabase/functions/_shared/account_transport_admission.mjs",
+      "git_blob_sha1": "a79a8482ae9b42ccd57ebbc150b6937590828350",
+      "size": 5149
+    },
+    {
+      "path": "infra/supabase/functions/_shared/account_email_confirmation.mjs",
+      "git_blob_sha1": "fa977e9b507819adf8175542c18f5a67761277a9",
+      "size": 2706
+    },
+    {
+      "path": "infra/supabase/functions/_shared/account_cookie_policy.mjs",
+      "git_blob_sha1": "b697062e6c9652289cd8c9a20d64fca0aca4d29d",
+      "size": 3749
+    },
+    {
+      "path": "infra/supabase/functions/_shared/account_service_bridge.mjs",
+      "git_blob_sha1": "06fd91d33250bfb88e81c4c07ffd5224b2309541",
+      "size": 2056
+    }
+  ]
+}
