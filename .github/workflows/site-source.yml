@@ -36,6 +36,12 @@ jobs:
         run: node tests/test_legal_documents.mjs
       - name: Fail-closed architecture and catalog tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Verify Vercel gateway host against immutable OS source (staging only)
+        run: |
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+          python3 scripts/stage_canonical_gateway.py --out .gateway-source
+          node --check api/account-proxy.mjs
+          node --test tests/test_gateway_host.mjs
       - name: Verify owner-signed brand and Meridian releases on every CI build
         shell: bash
         env:

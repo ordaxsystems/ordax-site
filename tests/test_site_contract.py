@@ -479,7 +479,7 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn('document.getElementById("account-session").innerHTML', runtime)
         self.assertIn('document.getElementById("account-content").innerHTML', runtime)
 
-    def test_independent_vercel_dev_has_no_legacy_os_runtime_or_identity_activation(self):
+    def test_independent_vercel_host_preserves_owner_and_publication_gates(self):
         config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
         self.assertEqual(config["outputDirectory"], "out/site")
         self.assertEqual(config["framework"], None)
@@ -490,7 +490,24 @@ class SiteContractTests(unittest.TestCase):
         self.assertNotIn("tools/public-site", config["buildCommand"])
         self.assertNotIn("ordax-os", config["buildCommand"])
         self.assertEqual(config["git"]["deploymentEnabled"], {"**": False, "main": True})
-        self.assertNotIn("rewrites", config)
+        # The only auth routes are same-origin transport into one pinned OS
+        # gateway; no Site-owned Identity logic, bypass or public activation.
+        self.assertEqual(config["rewrites"], [
+            {"source": f"/{prefix}/:path*",
+             "destination": f"/api/account-proxy?ordax_path=/{prefix}/:path*"}
+            for prefix in ("auth", "sync", "account")
+        ])
+        self.assertIn("npm ci --omit=dev --ignore-scripts", config["installCommand"])
+        self.assertIn("stage_canonical_gateway.py --out .gateway-source", config["installCommand"])
+        adapter = (ROOT / "api/account-proxy.mjs").read_text(encoding="utf-8")
+        self.assertIn('../.gateway-source/api/account-proxy.mjs', adapter)
+        self.assertNotIn("jwtVerify", adapter)
+        self.assertNotIn("createClient", adapter)
+        self.assertEqual(
+            json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["dependencies"],
+            {"@vercel/oidc": "4.0.0"},
+        )
+        self.assertFalse((ROOT / ".env.production").exists())
         headers = config["headers"][0]["headers"]
         self.assertIn({"key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive"}, headers)
         self.assertTrue(any(row["key"] == "Content-Security-Policy" for row in headers))
