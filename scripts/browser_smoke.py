@@ -554,6 +554,24 @@ def accessibility_probe(driver: Driver) -> dict:
     }
 
 
+def restore_capture_state(driver: Driver, route: str) -> dict:
+    """Remove keyboard-test focus and fragment before saving the normal screenshot."""
+    return driver.run(r"""const expectedRoute = '""" + route + r"""';
+      const skipLink = document.querySelector('.skip-link');
+      const main = document.querySelector('main#conteudo');
+      document.activeElement?.blur();
+      if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+      window.scrollTo({left: 0, top: 0, behavior: 'instant'});
+      return {
+        route: location.pathname,
+        expectedRoute,
+        noSkipLinkFocus: !skipLink || !skipLink.matches(':focus'),
+        mainExists: !!main,
+        noTestFragment: location.hash === '',
+        atTop: window.scrollY === 0
+      };""")
+
+
 def localization_probe(driver: Driver) -> dict:
     """Exercise the actual language selector, including DOM and locale persistence."""
     return driver.run(r"""return (() => {
@@ -1037,6 +1055,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                         driver.cdp("Emulation.setEmulatedMedia", {"features": [
                             {"name": "forced-colors", "value": "none"}
                         ]})
+                    report["captureStateRestored"] = restore_capture_state(driver, route)
                 short = route.strip("/").replace("/", "-") or "home"
                 filename = f"{short}-{width}x{height}.png"
                 driver.shot(evidence / filename)
@@ -1089,6 +1108,14 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                                 "preferenceMatches", "skipFocused", "skipPerceivable",
                                 "skipFocusIndicator", "noHorizontalOverflow"
                             )
+                        ),
+                        "visualScreenshotRestoredAfterKeyboardProbe": (
+                            report["captureStateRestored"]["route"] == route
+                            and report["captureStateRestored"]["expectedRoute"] == route
+                            and report["captureStateRestored"]["noSkipLinkFocus"]
+                            and report["captureStateRestored"]["mainExists"]
+                            and report["captureStateRestored"]["noTestFragment"]
+                            and report["captureStateRestored"]["atTop"]
                         ),
                     })
                 if route in ("/login/", "/cadastro/", "/recuperar/", "/recuperar/nova-senha/"):
