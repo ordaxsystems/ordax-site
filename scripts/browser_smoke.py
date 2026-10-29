@@ -141,6 +141,7 @@ def responsive_shell_checks(report: dict, width: int, route: str,
         "mobileTargetsRemainComfortable": width > 640
             or not report["undersizedInteractiveTargets"],
         "publicHeaderRegionsReady": report["publicHeaderRegionsReady"],
+        "publicHeaderRegionsVisible": report["publicHeaderRegionsVisible"],
         "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
         "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
         "sharedFooterContract": report["sharedFooterContract"],
@@ -503,6 +504,22 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const localeBox = localeSelect?.getBoundingClientRect();
       const navToggleBox = navToggle?.getBoundingClientRect();
       const mobileHeader = innerWidth <= 760;
+      const renderedInsideViewport = element => {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.display !== 'none' &&
+          style.visibility === 'visible' && Number(style.opacity) > 0 &&
+          rect.left >= -2 && rect.right <= innerWidth + 2 &&
+          rect.top >= -2 && rect.bottom <= innerHeight + 2;
+      };
+      const headerBrandText = headerBrand?.querySelector('.brand-name');
+      const publicHeaderRegionsVisible = route === '/conta/' || !header ||
+        (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerBrandText) &&
+          !!headerBrandText.textContent.trim() && renderedInsideViewport(headerActions) &&
+          renderedInsideViewport(headerNav) && renderedInsideViewport(localeSelect) &&
+          (mobileHeader ? renderedInsideViewport(navToggle)
+            : renderedInsideViewport(navLinksContainer)));
       const box = element => {
         if (!element) return null;
         const rect = element.getBoundingClientRect();
@@ -515,16 +532,17 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         };
       };
       const localeSharesNavigationLine = route === '/conta/' || !header ||
-        (!!localeBox && (mobileHeader
-          ? !!navToggleBox && navToggleBox.width > 0 &&
+        (renderedInsideViewport(localeSelect) && (mobileHeader
+          ? renderedInsideViewport(navToggle) && !!navToggleBox && navToggleBox.width > 0 &&
             Math.abs((navToggleBox.top + navToggleBox.height / 2) -
               (localeBox.top + localeBox.height / 2)) <= 4
-          : [...navLinksContainer.querySelectorAll(':scope > a')].some(link => {
+          : renderedInsideViewport(navLinksContainer) &&
+            [...navLinksContainer.querySelectorAll(':scope > a')].some(link => {
           const box = link.getBoundingClientRect();
           return Math.abs((box.top + box.height / 2) - (localeBox.top + localeBox.height / 2)) <= 4;
         })));
       const mobileNavigationDisclosureReady = route === '/conta/' || !header || !mobileHeader ||
-        (!!navToggle && navLinksContainer &&
+        (renderedInsideViewport(navToggle) && navLinksContainer &&
           navToggle.getAttribute('aria-controls') === navLinksContainer.id &&
           navToggle.getAttribute('aria-expanded') === 'false' &&
           headerNav.dataset.expanded === 'false' &&
@@ -622,9 +640,11 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         skip: !!$('.skip-link[href^="#"]'),
         publicHeaderRegionsReady: route === '/conta/' || !header ||
           (!!headerBrand && !!headerActions && !!headerNav && !!navLinksContainer && !!localeSelect),
+        publicHeaderRegionsVisible,
         accountTopbarFitsViewport,
         publicHeaderBrandActionsShareRow: route === '/conta/' || !header ||
-          (!!headerBrandBox && !!headerActionsBox &&
+          (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerActions) &&
+            !!headerBrandBox && !!headerActionsBox &&
             Math.abs((headerBrandBox.top + headerBrandBox.height / 2) -
               (headerActionsBox.top + headerActionsBox.height / 2)) <= 6),
         publicHeaderLocaleSharesNavigationLine: localeSharesNavigationLine,
@@ -1263,6 +1283,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "mainHasSinglePrimaryHeading": report["mainH1Count"] == 1,
                     "skipNavigation": report["skip"],
                     "publicHeaderRegionsReady": report["publicHeaderRegionsReady"],
+                    "publicHeaderRegionsVisible": report["publicHeaderRegionsVisible"],
                     "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
                     "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
                     "publicMobileNavigationDisclosureReady": report["publicMobileNavigationDisclosureReady"],
