@@ -23,6 +23,9 @@ from pathlib import Path
 from site_routes import PATHS as ROUTES
 VIEWPORTS = ((1440, 900), (1024, 900), (768, 900), (760, 900),
              (390, 844), (320, 740))
+# Touch-first tablets retain a desktop CSS viewport while using coarse input.
+# Sample both sides of shared-shell and account-app layout boundaries.
+TOUCH_VIEWPORTS = (641, 760, 761, 1100, 1101, 1180, 1181)
 NO_SCRIPT_ROUTES = ("/login/", "/cadastro/", "/recuperar/",
                     "/recuperar/nova-senha/", "/conta/", "/web/")
 # 1280px layout viewed through 200% and 400% effective CSS viewports.
@@ -936,6 +939,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
     child = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     driver = Driver(webdriver_port)
     results = []
+    touch_results = []
     reflow_results = []
     text_enlargement_results = []
     text_spacing_results = []
@@ -1070,6 +1074,46 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                                                      if name == "reducedMotionBrowserPreferenceHonored"
                                                      else {"forcedColors": report["forcedColors"]}
                                                      if name == "nativeForcedColorsAndSkipFocus" else report)})
+        # Verify the desktop-CSS layouts used by tablets and hybrid touch
+        # devices. This exercises any-pointer: coarse independently from the
+        # narrow mobile viewport matrix above.
+        driver.cdp("Emulation.setTouchEmulationEnabled", {
+            "enabled": True, "maxTouchPoints": 1,
+        })
+        for route in ROUTES:
+            for width in TOUCH_VIEWPORTS:
+                driver.cdp("Emulation.setDeviceMetricsOverride", {
+                    "width": width, "height": 900, "deviceScaleFactor": 1,
+                    "mobile": False,
+                })
+                driver.navigate(f"http://127.0.0.1:{server.server_port}{route}")
+                wait_for_route(driver, route)
+                report = probe(driver, route, width, 900)
+                report["coarsePointer"] = driver.run(
+                    "return matchMedia('(any-pointer: coarse)').matches"
+                )
+                touch_results.append(report)
+                checks = {
+                    "coarsePointerProfileActive": report["coarsePointer"],
+                    "routeRendered": report["complete"] and report["pathname"] == route
+                        and report["mainCount"] == 1,
+                    "noHorizontalOverflow": report["noOverflow"],
+                    "headerBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
+                    "localeSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
+                    "footerFitsViewport": report["sharedFooterFitsViewport"],
+                    "footerLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
+                    "interactiveTargetsHaveComfortableSize": not report["undersizedInteractiveTargets"],
+                }
+                if width <= 760 and route != "/conta/":
+                    checks["mobileDisclosureReady"] = report["publicMobileNavigationDisclosureReady"]
+                if route == "/conta/":
+                    checks["accountShellPresent"] = report["accountPortal"]
+                    checks["noInventedVerifiedUser"] = not report["accountHasVerifiedUser"]
+                for name, success in checks.items():
+                    if not success:
+                        failures.append({"route": route, "viewport": f"touch-{width}",
+                                         "rule": name, "summary": report})
+        driver.cdp("Emulation.setTouchEmulationEnabled", {"enabled": False})
         # Simulate the CSS layout viewport available when a 1280px desktop
         # is viewed at 200% and 400% scale. Keep mobile=False so responsive
         # rules are exercised in desktop emulation, distinct from the 320px
@@ -1464,6 +1508,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                                      "rule": rule, "summary": report})
         output = {"schema": "ordax.site-browser-proof/2", "routeCount": len(ROUTES),
                   "viewportCount": len(VIEWPORTS), "checks": len(results),
+                  "touchResponsiveChecks": len(touch_results),
                   "reflowChecks": len(reflow_results), "textEnlargementChecks": len(text_enlargement_results),
                   "textSpacingChecks": len(text_spacing_results),
                   "noScriptChecks": len(no_script_results),
@@ -1474,6 +1519,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                   "sameEmailUsageChecks": len(same_email_usage_results),
                   "legacyFragmentChecks": len(legacy_fragment_results),
                   "failures": failures, "results": results,
+                  "touchResults": touch_results,
                   "reflowResults": reflow_results, "textEnlargementResults": text_enlargement_results,
                   "textSpacingResults": text_spacing_results,
                   "noScriptResults": no_script_results,
@@ -1531,7 +1577,7 @@ def main():
     )
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve(), args.chrome_binary)
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} touch={output['touchResponsiveChecks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
 
 
 if __name__ == "__main__":
