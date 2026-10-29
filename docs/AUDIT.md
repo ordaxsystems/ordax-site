@@ -31,6 +31,7 @@ Gates remanescentes e owner de cada integração: [HANDOFF.md](HANDOFF.md). Coma
 - [x] `site/assets/site.css` é o owner da geometria e dos breakpoints; `site/i18n/catalog.js`/`runtime.js` são os owners de idioma e traduções.
 - [x] O mobile mantém marca e ações de identidade na mesma linha; o seletor é inserido junto aos links da navegação, sem fila de idioma separada.
 - [x] Exceções são declaradas no contrato: `/conta/` usa shell de aplicação próprio; Privacidade/Termos preservam seus bytes por hash de Identity e o runtime normaliza a apresentação.
+- [x] O runtime reaproveita a marca do cabeçalho para padronizar também o rodapé legal; os documentos de origem continuam byte-idênticos aos hashes de Identity.
 - [x] Testes de contrato cobrem HTML gerado, separação de CSS, conteúdo localizado e preservação dos HTML legais.
 - [x] Build do candidato, verificação do bundle, smoke estático nas 11 rotas, 74 testes Python, localização PT-BR/en-US e contrato legal.
 - [x] Playwright local com navegação nova por amostra: 11 rotas × 13 larguras (320, 360, 390, 430, 600, 641, 768, 980, 1024, 1100, 1180, 1280 e 1440 px). Os 143 cenários não apresentaram overflow horizontal nem shell fora da viewport. Até 600 px, marca e ações ficam na mesma linha; até 430 px, o idioma divide a linha da navegação com ao menos um link. Links estruturais dos rodapés público e da Conta, mais atalhos de perfil/retorno visíveis em dispositivos coarse, respeitam 44×44 px. Links inline em texto continuam fora da regra de alvo do rodapé.

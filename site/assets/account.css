@@ -67,7 +67,7 @@
 }
 .account-ui .account-story { grid-area: story; min-width: 0; padding: 0; display: flex; flex-direction: column; gap: 24px; }
 .account-ui .eyebrow { margin: 0 0 14px; font: 600 10px/1.5 var(--account-font); letter-spacing: .13em; color: var(--account-muted); }
-.account-ui .account-story :is(h1, h2) { margin: 0 0 18px; font: 520 clamp(32px, 3.7vw, 46px)/1.14 var(--account-font); letter-spacing: -.04em; text-wrap: balance; }
+.account-ui .account-story :is(h1, h2) { margin: 0 0 18px; font: 520 clamp(32px, 3.7vw, 46px)/1.14 var(--account-font); letter-spacing: -.04em; text-wrap: balance; overflow-wrap: break-word; }
 .account-ui .account-story :is(h1, h2) span { color: var(--account-sage); }
 .account-ui .story-lead { max-width: 44ch; margin: 0; color: var(--account-muted); font-size: 14px; line-height: 1.75; }
 .account-ui .account-benefits { display: grid; gap: 0; padding: 0; margin: 24px 0 0; list-style: none; }
