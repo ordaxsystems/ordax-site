@@ -571,8 +571,14 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         return [...headerActions.children].filter(child => getComputedStyle(child).display !== 'none')
           .every(child => {
             const rect = child.getBoundingClientRect();
+            const children = child.matches('.site-auth-actions') ? [...child.children] : [];
+            const groupBox = child.getBoundingClientRect();
             return rect.left >= actionsBox.left - 1 && rect.right <= actionsBox.right + 1 &&
-              child.scrollWidth <= child.clientWidth + 1;
+              child.scrollWidth <= child.clientWidth + 1 && children.every(link => {
+                const linkBox = link.getBoundingClientRect();
+                return linkBox.left >= groupBox.left - 1 && linkBox.right <= groupBox.right + 1 &&
+                  link.scrollWidth <= link.clientWidth + 1;
+              });
           });
       })();
       const mobileNavigationDisclosureReady = route === '/conta/' || !header || !mobileHeader ||

@@ -220,8 +220,21 @@
       }
     }
 
-    const addCompactRegisterLabel = () => {
-      const register = header.querySelector(':scope > .site-actions > [data-auth-nav="register"]');
+    const ensureAuthActionsGroup = actions => {
+      let group = actions.querySelector(":scope > .site-auth-actions");
+      if (group) return group;
+
+      const links = Array.from(actions.querySelectorAll(":scope > [data-auth-nav]"));
+      if (!links.length) return null;
+      group = document.createElement("div");
+      group.className = "site-auth-actions";
+      actions.insertBefore(group, links[0]);
+      links.forEach(link => group.append(link));
+      return group;
+    };
+
+    const addCompactRegisterLabel = actions => {
+      const register = actions?.querySelector(':scope > [data-auth-nav="register"]');
       const desktopLabel = register?.querySelector("[data-auth-nav-label]");
       if (!register || !desktopLabel || register.querySelector('[data-shell-label="mobile"]')) return;
 
@@ -237,8 +250,9 @@
       desktopLabel.after(mobileLabel);
     };
 
-    if (header.querySelector(":scope > .site-actions")) {
-      addCompactRegisterLabel();
+    const existingActions = header.querySelector(":scope > .site-actions");
+    if (existingActions) {
+      addCompactRegisterLabel(ensureAuthActionsGroup(existingActions));
       return;
     }
 
@@ -249,7 +263,7 @@
     actions.className = "site-actions";
     header.insertBefore(actions, navigation);
     authLinks.forEach(link => actions.append(link));
-    addCompactRegisterLabel();
+    addCompactRegisterLabel(ensureAuthActionsGroup(actions));
   }
 
   function normalizePublicFooter() {

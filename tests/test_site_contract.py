@@ -116,7 +116,9 @@ class SiteContractTests(unittest.TestCase):
 
         locale = (ROOT / "site/i18n/runtime.js").read_text(encoding="utf-8")
         self.assertIn("function normalizePublicHeader()", locale)
-        self.assertIn("const addCompactRegisterLabel = () =>", locale)
+        self.assertIn("const ensureAuthActionsGroup = actions =>", locale)
+        self.assertIn('group.className = "site-auth-actions"', locale)
+        self.assertIn("const addCompactRegisterLabel = actions =>", locale)
         self.assertIn('catalog.messages[SOURCE_LOCALE]?.["site.action.signup.compact"]', locale)
         self.assertIn('mobileLabel.dataset.shellLabel = "mobile"', locale)
         self.assertIn("function normalizePublicFooter()", locale)
@@ -141,10 +143,11 @@ class SiteContractTests(unittest.TestCase):
         )
         self.assertIn('.site-header[data-nav-enhanced="true"] > .site-nav {\n    display: none;', shared_css)
         self.assertIn('.site-header > .site-actions > .site-nav-toggle', shared_css)
+        self.assertIn('.site-header > .site-actions > .site-auth-actions', shared_css)
         self.assertIn('.site-header > .site-actions [data-shell-label="desktop"]', shared_css)
         self.assertIn('.site-header > .site-actions [data-shell-label="mobile"]', shared_css)
         self.assertIn(
-            '.site-header > .site-actions > .nav-cta [data-shell-label] {\n  margin: 0;',
+            '.site-header > .site-actions > .site-auth-actions > .nav-cta [data-shell-label] {\n  margin: 0;',
             shared_css,
         )
         self.assertIn('.site-header > .site-actions > .site-nav-toggle > span {\n    display: none;', shared_css)
@@ -160,7 +163,7 @@ class SiteContractTests(unittest.TestCase):
             source = sheet.read_text(encoding="utf-8")
             for selector, block in re.findall(r"([^{}]+)\{([^{}]*)\}", source):
                 if not any(component in selector for component in (
-                        ".site-header", ".site-actions", ".site-nav", ".site-nav-tools",
+                        ".site-header", ".site-actions", ".site-auth-actions", ".site-nav", ".site-nav-tools",
                         ".site-nav-links", ".brand", ".brand-mark", ".site-nav-toggle",
                         ".public-locale-switcher", ".public-locale-select")):
                     continue
@@ -256,6 +259,7 @@ class SiteContractTests(unittest.TestCase):
                 self.assertIsNotNone(footer)
                 self.assertEqual(header.group(1).count('class="brand"'), 1)
                 self.assertEqual(header.group(1).count('class="site-actions"'), 1)
+                self.assertEqual(header.group(1).count('class="site-auth-actions"'), 1)
                 self.assertEqual(header.group(1).count('class="site-nav"'), 1)
                 self.assertEqual(header.group(1).count('class="site-nav-tools"'), 1)
                 self.assertEqual(header.group(1).count('class="site-nav-links"'), 1)

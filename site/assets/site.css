@@ -120,7 +120,20 @@ html body[data-page] footer.site-footer nav > a {
   overflow-wrap: anywhere;
 }
 
-.site-actions > a {
+.site-auth-actions {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.site-actions > a,
+.site-auth-actions > a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -136,7 +149,7 @@ html body[data-page] footer.site-footer nav > a {
 }
 
 /* Keep broad product-demo typography rules from changing public header labels. */
-html body[data-page] .site-header > .site-actions > .nav-cta [data-shell-label] {
+html body[data-page] .site-header > .site-actions > .site-auth-actions > .nav-cta [data-shell-label] {
   margin: 0;
 }
 
@@ -297,6 +310,11 @@ html body[data-page] .site-header > .site-actions {
   max-width: 100%;
   margin: 0;
   font-size: 13px;
+}
+
+html body[data-page] .site-header > .site-actions > .site-auth-actions > [data-auth-nav="login"] {
+  padding-inline: clamp(8px, 1vw, 12px);
+  border-radius: 999px;
 }
 
 html body[data-page] .site-header > .site-nav {
@@ -1441,6 +1459,11 @@ html body[data-page] footer.site-footer nav {
     font-size: 12px;
   }
 
+  html body[data-page] .site-header > .site-actions > .site-auth-actions {
+    gap: 0;
+    padding: 1px;
+  }
+
   html body[data-page] .site-header > .site-actions [data-shell-label="desktop"] {
     display: none;
   }
@@ -1563,6 +1586,10 @@ html body[data-page] footer.site-footer nav {
 @media (max-width: 320px) {
   html body[data-page] .site-header > .site-actions {
     gap: 4px;
+  }
+
+  html body[data-page] .site-header > .site-actions > .site-auth-actions {
+    gap: 0;
   }
 
   html body[data-page] .site-header > .brand {
