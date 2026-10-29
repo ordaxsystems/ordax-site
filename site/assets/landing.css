@@ -256,6 +256,11 @@ body[data-page="landing"] .site-footer p { font-size: 12px; line-height: 1.8; }
   body[data-page="landing"] .brand-name { font-size: 22px; }
   body[data-page="landing"] .landing-studio-flow { letter-spacing: 0; font-size: 9px; }
 }
+@media (max-width: 360px) {
+  body[data-page="landing"] .site-nav { column-gap: 10px; }
+  body[data-page="landing"] .site-actions { gap: 6px; }
+  body[data-page="landing"] .site-actions .nav-cta { padding-inline: 8px; }
+}
 @media (prefers-reduced-motion: reduce) {
   html:has(body[data-page="landing"]) { scroll-behavior: auto; }
   body[data-page="landing"] *, body[data-page="landing"] *::before, body[data-page="landing"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
