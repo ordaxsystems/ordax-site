@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import build
+from browser_smoke import responsive_breakpoint_audit
 from public_release_catalog import render_catalog, validate_catalog, PublicReleaseCatalogError, _same_origin_path
 from public_shell import PublicShellError, load_contract as load_public_shell, render_public_shell
 from site_routes import load_routes
@@ -30,6 +31,40 @@ PUBLIC_SHELL_LAYOUT_PROPERTIES = {
 }
 
 class SiteContractTests(unittest.TestCase):
+    def test_responsive_breakpoint_coverage_comes_from_route_css(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp)
+            (candidate / "assets").mkdir()
+            (candidate / "index.html").write_text(
+                '<link href="/assets/site.css?v=1" rel="preload stylesheet">'
+                '<link rel="stylesheet" href="/assets/playground.css">',
+                encoding="utf-8",
+            )
+            (candidate / "assets/site.css").write_text(
+                "/* @media (max-width: 333px) {} */\n"
+                "@media (max-width: 640px) { .item { max-width: 100px; } }\n"
+                "@import url('./shared.css');\n",
+                encoding="utf-8",
+            )
+            (candidate / "assets/shared.css").write_text(
+                "@media (max-width: 760px) { .item { display: block; } }\n"
+                "@media (min-width: 900px) { .item { display: grid; } }\n",
+                encoding="utf-8",
+            )
+            (candidate / "assets/playground.css").write_text(
+                "@media (max-width: 980px) { .demo { display: block; } }\n",
+                encoding="utf-8",
+            )
+
+            audit = responsive_breakpoint_audit(candidate, "/")
+
+        self.assertEqual(audit["thresholdsPx"], [640, 760, 900, 980])
+        self.assertEqual(
+            audit["testedWidths"],
+            [639, 640, 641, 759, 761, 899, 900, 901, 979, 980, 981],
+        )
+        self.assertIn("/assets/playground.css", audit["ownerStylesheets"])
+
     def test_owner_and_routes(self):
         report = build.check_source(strict_assets=False)
         self.assertGreater(report["source_files"], 25)

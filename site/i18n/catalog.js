@@ -1154,7 +1154,7 @@
     "playground.changeOnDevice": ["Alteração no {device} refletida nas duas telas. Simulação local.", "Change on {device} reflected on both screens. Local simulation."],
     "locale.selector.label": ["Idioma", "Language"],
     "locale.selector.pt-BR": ["Português", "Português"],
-    "locale.selector.en-US": ["Inglês", "English"],
+    "locale.selector.en-US": ["English", "English"],
     "site.navigation.menu": ["Menu", "Menu"],
     "site.navigation.toggle": ["Alternar navegação principal", "Toggle primary navigation"],
     "identity.login.ready.title": ["Acesso disponível", "Sign-in available"],

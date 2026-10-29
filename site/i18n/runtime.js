@@ -178,6 +178,7 @@
       select.value = activeLocale;
       select.setAttribute("aria-label", t("locale.selector.label"));
       for (const option of select.options) {
+        option.lang = option.value;
         option.textContent = t(`locale.selector.${option.value}`);
       }
     }

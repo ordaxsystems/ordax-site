@@ -11,30 +11,170 @@ import base64
 import hashlib
 import http.server
 import json
+import math
 import os
+import posixpath
+import re
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
 import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import unquote, urljoin, urlsplit
+
 from site_routes import PATHS as ROUTES
 VIEWPORTS = ((1440, 900), (1024, 900), (768, 900), (760, 900),
              (430, 900), (390, 844), (360, 800), (320, 740))
 # Touch-first tablets retain a desktop CSS viewport while using coarse input.
 # Sample both sides of shared-shell and account-app layout boundaries.
 TOUCH_VIEWPORTS = (641, 760, 761, 1100, 1101, 1180, 1181)
+LOCALIZATION_VIEWPORTS = (320, 360, 390, 430, 600, 641, 768, 980, 1024, 1100, 1180, 1280, 1440)
 NO_SCRIPT_ROUTES = ("/login/", "/cadastro/", "/recuperar/",
                     "/recuperar/nova-senha/", "/conta/", "/web/")
 # 1280px layout viewed through 200% and 400% effective CSS viewports.
 # This checks responsive reflow, not real browser zoom or text magnification.
 REFLOW_WIDTHS = ((640, 200), (320, 400))
+BREAKPOINT_WIDTH_RANGE = (320, 2560)
+SURFACE_OWNED_STYLESHEETS = frozenset({"playground.css", "surface-snapshot.css"})
+
+
+class StylesheetLinkCollector(HTMLParser):
+    """Collect stylesheet links from the built route, including rel token lists."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.hrefs = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() != "link":
+            return
+        attributes = {name.lower(): value for name, value in attrs}
+        rel = set((attributes.get("rel") or "").lower().split())
+        href = attributes.get("href")
+        if "stylesheet" in rel and href:
+            self.hrefs.append(href)
+
+
+def responsive_breakpoint_audit(root: Path, route: str) -> dict:
+    """Derive viewport checks from CSS actually linked by one built route."""
+    route_file = root / ("index.html" if route == "/" else f"{route.strip('/')}/index.html")
+    if not route_file.is_file():
+        raise BrowserProofError(f"built route is missing while reading responsive CSS: {route}")
+
+    html = route_file.read_text(encoding="utf-8")
+    collector = StylesheetLinkCollector()
+    collector.feed(html)
+    base_url = urljoin("http://ordax.local/", route.lstrip("/"))
+    pending = [(href, base_url) for href in collector.hrefs]
+    visited: set[str] = set()
+    owner_stylesheets: set[str] = set()
+    thresholds: set[float] = set()
+    root_resolved = root.resolve()
+
+    while pending:
+        href, source_url = pending.pop()
+        stylesheet_url = urljoin(source_url, href)
+        parsed = urlsplit(stylesheet_url)
+        if (parsed.scheme not in ("http", "https") or parsed.netloc != "ordax.local"
+                or not parsed.path.lower().endswith(".css")):
+            continue
+
+        css_url_path = posixpath.normpath(unquote(parsed.path))
+        if not css_url_path.startswith("/"):
+            continue
+        css_name = Path(css_url_path).name.lower()
+        if css_name in SURFACE_OWNED_STYLESHEETS:
+            owner_stylesheets.add(css_url_path)
+        if css_url_path in visited:
+            continue
+
+        css_path = (root / Path(css_url_path.lstrip("/")).as_posix()).resolve()
+        if not css_path.is_relative_to(root_resolved):
+            raise BrowserProofError(f"stylesheet escapes built candidate: {css_url_path}")
+        if not css_path.is_file():
+            raise BrowserProofError(f"route links a missing local stylesheet: {css_url_path}")
+        visited.add(css_url_path)
+        css = re.sub(r"/\*.*?\*/", "", css_path.read_text(encoding="utf-8"), flags=re.S)
+
+        for imported in re.findall(
+                r"@import\s+(?:url\(\s*)?['\"]?([^'\"\s)]+)", css, flags=re.I):
+            pending.append((imported, stylesheet_url))
+
+        for media_query in re.findall(r"@media\s*([^{}]*)\{", css, flags=re.I):
+            for value in re.findall(
+                    r"\b(?:max|min)-width\s*:\s*(\d+(?:\.\d+)?)\s*px\b",
+                    media_query, flags=re.I):
+                thresholds.add(float(value))
+
+    lower, upper = BREAKPOINT_WIDTH_RANGE
+    centers = {center for threshold in thresholds
+               for center in (math.floor(threshold), math.ceil(threshold))
+               if lower - 1 <= center <= upper + 1}
+    candidates = {center + delta for center in centers for delta in (-1, 0, 1)}
+    candidates = {width for width in candidates if lower <= width <= upper}
+    representative_widths = {width for width, _height in VIEWPORTS}
+    return {
+        "thresholdsPx": [int(value) if value.is_integer() else value
+                         for value in sorted(thresholds)],
+        "stylesheets": sorted(visited),
+        "ownerStylesheets": sorted(owner_stylesheets),
+        "testedWidths": sorted(candidates - representative_widths),
+    }
+
+
+def responsive_shell_checks(report: dict, width: int, route: str,
+                            coarse_pointer: bool = False) -> dict:
+    """Keep the shared responsive contract identical across viewport audits."""
+    checks = {
+        "routeRendered": report["complete"] and report["pathname"] == route
+            and report["mainCount"] == 1,
+        "noHorizontalOverflow": report["noOverflow"],
+        "noUnexpectedRemoteRequests": not report["remoteResources"],
+        "noBrokenStaticAssets": not report["failedStaticAssets"],
+        "noUncaughtBrowserErrors": not report["runtimeErrors"],
+        "siteTargetsMeetMinimumSize": not report["undersizedAAInteractiveTargets"],
+        "mobileTargetsRemainComfortable": width > 640
+            or not report["undersizedInteractiveTargets"],
+        "publicHeaderRegionsReady": report["publicHeaderRegionsReady"],
+        "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
+        "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
+        "sharedFooterContract": report["sharedFooterContract"],
+        "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
+        "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
+        "sharedFooterLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
+    }
+    if width <= 760 and route != "/conta/":
+        checks["publicMobileNavigationDisclosureReady"] = (
+            report["publicMobileNavigationDisclosureReady"]
+        )
+    if coarse_pointer:
+        checks["coarsePointerTargetsRemainComfortable"] = (
+            not report["undersizedInteractiveTargets"]
+        )
+    if route == "/conta/":
+        checks["accountShellPresent"] = report["accountPortal"]
+        checks["accountTopbarFitsViewport"] = report["accountTopbarFitsViewport"]
+        checks["noInventedVerifiedUser"] = not report["accountHasVerifiedUser"]
+    return checks
 
 
 class BrowserProofError(RuntimeError):
     pass
+
+
+class LocalProofHTTPServer(http.server.ThreadingHTTPServer):
+    """Ignore expected socket closes when Chrome moves between test routes."""
+
+    def handle_error(self, request, client_address):
+        error = sys.exc_info()[1]
+        if isinstance(error, (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -603,47 +743,66 @@ def restore_capture_state(driver: Driver, route: str) -> dict:
     return state
 
 
-def localization_probe(driver: Driver) -> dict:
-    """Exercise the actual language selector, including DOM and locale persistence."""
+def apply_public_locale(driver: Driver, locale: str) -> dict:
+    """Select a supported language and report its native labels and lang tags."""
+    requested = json.dumps(locale)
     return driver.run(r"""return (() => {
+      const requested = """ + requested + r""";
       const selector = document.querySelector('[data-public-locale-select]');
       const runtime = window.OrdaXPublicI18n;
       const toggle = document.querySelector('[data-public-nav-toggle]');
-      if (!selector || !runtime) return {
-        selector: false, english: false, portuguese: false, persistence: false,
-        menuEnglish: false, menuPortuguese: false
-      };
-      const apply = value => {
-        selector.value = value;
-        selector.dispatchEvent(new Event('change', {bubbles:true}));
-        return {
-          language: document.documentElement.lang,
-          stored: localStorage.getItem('ordax.public.locale'),
-          selector: selector.value,
-          skip: document.querySelector('.skip-link')?.textContent?.trim(),
-          menu: toggle?.querySelector('span')?.textContent?.trim(),
-          toggleLabel: toggle?.getAttribute('aria-label'),
-        };
-      };
-      const english = apply('en-US');
-      const portuguese = apply('pt-BR');
+      if (!selector || !runtime) return {ready:false};
+      selector.value = requested;
+      selector.dispatchEvent(new Event('change', {bubbles:true}));
+      const options = [...selector.options].map(option => ({
+        value: option.value, lang: option.lang, label: option.textContent.trim(),
+      }));
+      const expected = [
+        {value:'pt-BR', lang:'pt-BR', label:'Português'},
+        {value:'en-US', lang:'en-US', label:'English'},
+      ];
       return {
-        selector: true,
-        english: english.language === 'en-US' &&
-          english.stored === 'en-US' &&
-          english.selector === 'en-US' &&
-          english.skip === 'Skip to content',
-        portuguese: portuguese.language === 'pt-BR' &&
-          portuguese.stored === 'pt-BR' &&
-          portuguese.selector === 'pt-BR' &&
-          portuguese.skip === 'Ir para o conteúdo',
-        persistence: localStorage.getItem('ordax.public.locale') === 'pt-BR',
-        menuEnglish: location.pathname === '/conta/' ||
-          (english.menu === 'Menu' && english.toggleLabel === 'Toggle primary navigation'),
-        menuPortuguese: location.pathname === '/conta/' ||
-          (portuguese.menu === 'Menu' && portuguese.toggleLabel === 'Alternar navegação principal')
+        ready:true,
+        language:document.documentElement.lang,
+        stored:localStorage.getItem('ordax.public.locale'),
+        selected:selector.value,
+        accessibleName:selector.getAttribute('aria-label'),
+        skip:document.querySelector('.skip-link')?.textContent?.trim(),
+        menu:toggle?.querySelector('span')?.textContent?.trim(),
+        toggleLabel:toggle?.getAttribute('aria-label'),
+        languageNamesAndTags:options.length === expected.length &&
+          expected.every(wanted => options.some(option =>
+            option.value === wanted.value && option.lang === wanted.lang &&
+            option.label === wanted.label)),
       };
     })();""")
+
+
+def localization_probe(driver: Driver) -> dict:
+    """Exercise real locale changes, self-named languages, and accessibility labels."""
+    english = apply_public_locale(driver, "en-US")
+    portuguese = apply_public_locale(driver, "pt-BR")
+    account_route = driver.run("return location.pathname === '/conta/'")
+    return {
+        "selector": english.get("ready") and portuguese.get("ready"),
+        "english": english.get("language") == "en-US"
+            and english.get("selected") == "en-US"
+            and english.get("stored") == "en-US"
+            and english.get("accessibleName") == "Language"
+            and english.get("skip") == "Skip to content",
+        "portuguese": portuguese.get("language") == "pt-BR"
+            and portuguese.get("selected") == "pt-BR"
+            and portuguese.get("stored") == "pt-BR"
+            and portuguese.get("accessibleName") == "Idioma"
+            and portuguese.get("skip") == "Ir para o conteúdo",
+        "persistence": portuguese.get("stored") == "pt-BR",
+        "languageNamesAndTags": english.get("languageNamesAndTags")
+            and portuguese.get("languageNamesAndTags"),
+        "menuEnglish": account_route or (english.get("menu") == "Menu"
+            and english.get("toggleLabel") == "Toggle primary navigation"),
+        "menuPortuguese": account_route or (portuguese.get("menu") == "Menu"
+            and portuguese.get("toggleLabel") == "Alternar navegação principal"),
+    }
 
 
 def mobile_navigation_interaction_probe(driver: Driver) -> dict:
@@ -996,7 +1155,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
         raise BrowserProofError(
             "Chrome + ChromeDriver required; pass --chrome-binary when Chrome is not on PATH")
     evidence.mkdir(parents=True, exist_ok=True)
-    server = http.server.ThreadingHTTPServer(
+    server = LocalProofHTTPServer(
         ("127.0.0.1", 0),
         lambda *a, **k: Handler(*a, root=root, **k),
     )
@@ -1021,6 +1180,9 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
     child = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     driver = Driver(webdriver_port)
     results = []
+    responsive_breakpoint_results = []
+    responsive_breakpoint_routes = {}
+    localized_responsive_results = []
     touch_results = []
     reflow_results = []
     text_enlargement_results = []
@@ -1174,6 +1336,96 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                                                      if name == "reducedMotionBrowserPreferenceHonored"
                                                      else {"forcedColors": report["forcedColors"]}
                                                      if name == "nativeForcedColorsAndSkipFocus" else report)})
+        # CSS remains the source of truth for each route's breakpoints. Read
+        # the candidate's linked stylesheets and probe immediately around
+        # every authored min/max-width boundary rather than duplicating them
+        # in a second hand-maintained viewport list.
+        for route in ROUTES:
+            route_audit = responsive_breakpoint_audit(root, route)
+            responsive_breakpoint_routes[route] = route_audit
+            for width in route_audit["testedWidths"]:
+                driver.cdp("Emulation.setDeviceMetricsOverride", {
+                    "width": width, "height": 900, "deviceScaleFactor": 1,
+                    "mobile": width <= 430,
+                })
+                driver.navigate(f"http://127.0.0.1:{server.server_port}{route}")
+                wait_for_route(driver, route)
+                report = probe(driver, route, width, 900)
+                checks = responsive_shell_checks(report, width, route)
+                report["breakpointChecks"] = checks
+                failed = [name for name, success in checks.items() if not success]
+                if failed:
+                    short = route.strip("/").replace("/", "-") or "home"
+                    screenshot = f"breakpoint-{short}-{width}px.png"
+                    driver.shot(evidence / screenshot)
+                    report["screenshot"] = screenshot
+                    for name in failed:
+                        failures.append({"route": route, "viewport": f"breakpoint-{width}",
+                                         "rule": name, "summary": report})
+                responsive_breakpoint_results.append(report)
+        # Validate language-dependent wrapping and touch targets in both real
+        # locales across every public route. The representative locale widths
+        # live here once; the route inventory still comes from the route contract.
+        driver.cdp("Emulation.setTouchEmulationEnabled", {
+            "enabled": True, "maxTouchPoints": 1,
+        })
+        for width in LOCALIZATION_VIEWPORTS:
+            driver.cdp("Emulation.setDeviceMetricsOverride", {
+                "width": width, "height": 900, "deviceScaleFactor": 1,
+                "mobile": width <= 430,
+            })
+            for route in ROUTES:
+                driver.navigate(f"http://127.0.0.1:{server.server_port}{route}")
+                wait_for_route(driver, route)
+                for locale in ("pt-BR", "en-US"):
+                    locale_state = apply_public_locale(driver, locale)
+                    report = probe(driver, route, width, 900)
+                    report["locale"] = locale
+                    report["localeState"] = locale_state
+                    report["coarsePointer"] = driver.run(
+                        "return matchMedia('(any-pointer: coarse)').matches"
+                    )
+                    checks = responsive_shell_checks(
+                        report, width, route, coarse_pointer=True
+                    )
+                    checks["coarsePointerProfileActive"] = report["coarsePointer"]
+                    checks["localeAppliedAndRemembered"] = (
+                        locale_state.get("ready")
+                        and locale_state.get("language") == locale
+                        and locale_state.get("selected") == locale
+                        and locale_state.get("stored") == locale
+                    )
+                    checks["languageNamesRemainNativeAndTagged"] = (
+                        locale_state.get("languageNamesAndTags") is True
+                    )
+                    checks["selectorAccessibleNameMatchesLocale"] = (
+                        locale_state.get("accessibleName") == {
+                            "pt-BR": "Idioma", "en-US": "Language"
+                        }[locale]
+                    )
+                    if route != "/conta/":
+                        checks["navigationLabelMatchesLocale"] = (
+                            locale_state.get("menu") == "Menu"
+                            and locale_state.get("toggleLabel") == {
+                                "pt-BR": "Alternar navegação principal",
+                                "en-US": "Toggle primary navigation",
+                            }[locale]
+                        )
+                    report["localizedResponsiveChecks"] = checks
+                    short = route.strip("/").replace("/", "-") or "home"
+                    failed = [name for name, success in checks.items() if not success]
+                    screenshot = None
+                    if failed or (width == 320 and locale == "en-US"):
+                        screenshot = f"localized-{locale}-{short}-{width}.png"
+                        driver.shot(evidence / screenshot)
+                        report["screenshot"] = screenshot
+                    for name in failed:
+                        failures.append({"route": route,
+                                         "viewport": f"{locale}-{width}-coarse",
+                                         "rule": name, "summary": report})
+                    localized_responsive_results.append(report)
+        driver.cdp("Emulation.setTouchEmulationEnabled", {"enabled": False})
+        apply_public_locale(driver, "pt-BR")
         # Verify the desktop-CSS layouts used by tablets and hybrid touch
         # devices. This exercises any-pointer: coarse independently from the
         # narrow mobile viewport matrix above.
@@ -1612,8 +1864,16 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                 if not good:
                     failures.append({"route": route, "viewport": "noscript",
                                      "rule": rule, "summary": report})
-        output = {"schema": "ordax.site-browser-proof/2", "routeCount": len(ROUTES),
+        output = {"schema": "ordax.site-browser-proof/3", "routeCount": len(ROUTES),
                   "viewportCount": len(VIEWPORTS), "checks": len(results),
+                  "breakpointResponsiveChecks": len(responsive_breakpoint_results),
+                  "breakpointResponsiveViewports": sum(
+                      len(item["testedWidths"]) for item in responsive_breakpoint_routes.values()
+                  ),
+                  "breakpointResponsiveRoutes": responsive_breakpoint_routes,
+                  "localizedResponsiveChecks": len(localized_responsive_results),
+                  "localizedResponsiveViewports": len(LOCALIZATION_VIEWPORTS),
+                  "localizedResponsiveLocales": ["pt-BR", "en-US"],
                   "touchResponsiveChecks": len(touch_results),
                   "reflowChecks": len(reflow_results), "textEnlargementChecks": len(text_enlargement_results),
                   "textSpacingChecks": len(text_spacing_results),
@@ -1625,6 +1885,8 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                   "sameEmailUsageChecks": len(same_email_usage_results),
                   "legacyFragmentChecks": len(legacy_fragment_results),
                   "failures": failures, "results": results,
+                  "breakpointResponsiveResults": responsive_breakpoint_results,
+                  "localizedResponsiveResults": localized_responsive_results,
                   "touchResults": touch_results,
                   "reflowResults": reflow_results, "textEnlargementResults": text_enlargement_results,
                   "textSpacingResults": text_spacing_results,
@@ -1683,7 +1945,7 @@ def main():
     )
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve(), args.chrome_binary)
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} touch={output['touchResponsiveChecks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} cssBreakpointViewports={output['breakpointResponsiveViewports']} cssBreakpointChecks={output['breakpointResponsiveChecks']} localeResponsive={output['localizedResponsiveChecks']} localeViewports={output['localizedResponsiveViewports']} touch={output['touchResponsiveChecks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
 
 
 if __name__ == "__main__":
