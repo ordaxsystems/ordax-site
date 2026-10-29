@@ -62,3 +62,8 @@ Esses gates **não reabrem a migração Dev**, que pode evoluir normalmente sem 
 Alterar apenas o owner correto → criar PR → comprovar CI e Chrome no Site → reconciliar `main` → atualizar o **único** pin do Site no OS se houver mudança de contrato/artefato → testar portal e login Web pela PR do OS → merge protegido. Não usar aliases para `--migration-lock`, cópias de `artifacts/`, fontes visuais no OS nem geradores alternativos.
 
 **Histórico das auditorias e fases anteriores**, preservado exclusivamente como registro e **não** como runbook: [handoff arquivado](history/SITE-CUTOVER-2026-10-24.md) e [auditoria arquivada](history/SITE-AUDIT-2026-10-24.md).
+
+## Polimento visual responsivo — 29/10/2026
+
+- Na Conta em tablets touch, cada destino de “Mais” ocupa uma linha completa dentro do diálogo; a regra também evita que folhas de estilo do portal façam links inline em grupos com vários destinos.
+- Acessibilidade manual, Identity real, catálogo oficial, staging e produção continuam nos estados descritos acima; este ajuste é somente de apresentação.
