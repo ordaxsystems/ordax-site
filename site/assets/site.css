@@ -130,13 +130,46 @@ html body[data-page] footer.site-footer nav > a {
   text-decoration: none;
 }
 
-.site-nav > a {
+.site-nav > a,
+.site-nav-links > a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
   white-space: nowrap;
+}
+
+.site-nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.site-nav-toggle svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.75;
+}
+
+.site-nav-toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .brand {
@@ -265,6 +298,24 @@ html body[data-page] .site-header > .site-nav {
   min-width: 0;
   margin: 0;
   font-size: 14px;
+}
+
+html body[data-page] .site-header > .site-nav > .site-nav-tools {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+html body[data-page] .site-header > .site-nav > .site-nav-links {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: clamp(10px, 1.8vw, 24px);
+  min-width: 0;
 }
 
 .hero {
@@ -1252,8 +1303,8 @@ html body[data-page] footer.site-footer nav {
   .public-locale-select { min-height: 44px; }
 }
 
-/* Shared public shell layout. Every public route uses the same row order and
-   wrapping rules; page styles own only their typography, color and spacing. */
+/* Shared public header geometry. Route content lives in the public shell
+   contract; this is the single layout source for generated and legal shells. */
 @media (max-width: 1100px) {
   html body[data-page] .site-header {
     display: grid;
@@ -1307,14 +1358,14 @@ html body[data-page] footer.site-footer nav {
     white-space: normal;
   }
 
-  html body[data-page] .site-header > .site-nav > [data-public-locale-slot] {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    min-width: 0;
+  html body[data-page] .site-header > .site-nav > .site-nav-links {
+    flex: 1 1 auto;
+    justify-content: center;
+    gap: 4px clamp(10px, 2vw, 22px);
   }
 
-  html body[data-page] .site-header > .site-nav > a {
+  html body[data-page] .site-header > .site-nav > a,
+  html body[data-page] .site-header > .site-nav > .site-nav-links > a {
     flex: 0 1 auto;
     justify-content: center;
     max-width: 100%;
@@ -1323,7 +1374,7 @@ html body[data-page] footer.site-footer nav {
     overflow-wrap: anywhere;
   }
 
-  html body[data-page] .site-nav > .public-locale-switcher {
+  html body[data-page] .site-header > .site-nav > .site-nav-tools > .public-locale-switcher {
     flex: 0 0 auto;
     min-width: 0;
     margin: 0;
@@ -1336,7 +1387,7 @@ html body[data-page] footer.site-footer nav {
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 760px) {
   html body[data-page] .site-header {
     grid-template-columns: minmax(0, 1fr) max-content;
     grid-template-areas: "brand actions" "nav nav";
@@ -1348,10 +1399,6 @@ html body[data-page] footer.site-footer nav {
   html body[data-page] .site-header > .brand {
     justify-self: start;
     min-width: 0;
-    gap: 6px;
-  }
-
-  html body[data-page] .site-header > a:first-child:not(.brand) {
     gap: 6px;
   }
 
@@ -1384,45 +1431,81 @@ html body[data-page] footer.site-footer nav {
   }
 
   html body[data-page] .site-header > .site-nav {
-    justify-self: stretch;
-    justify-content: flex-start;
-    gap: 2px clamp(6px, 2vw, 10px);
-    padding-top: 6px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
+    gap: 6px;
+    padding: 8px 0 0;
     font-size: 12px;
     text-align: left;
   }
 
-  html body[data-page] .site-header:not(:has(> .site-actions)) {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "brand" "nav";
-    justify-items: center;
-  }
-
-  html body[data-page] .site-header:not(:has(> .site-actions)) > .brand {
-    justify-self: center;
-  }
-
-  html body[data-page] .site-header:not(:has(> .site-actions)) > .site-nav {
-    justify-content: center;
-    text-align: center;
-  }
-
-  html body[data-page] .site-header .public-locale-select {
-    width: min(10rem, 48vw);
+  html body[data-page] .site-header > .site-nav > .site-nav-tools {
+    grid-column: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
     min-width: 0;
-    max-width: min(10rem, 48vw);
   }
 
-  html body[data-page] .site-header > .site-nav > [data-public-locale-slot] {
-    flex: 0 0 auto;
+  html body[data-page] .site-header > .site-nav > .site-nav-tools > .public-locale-switcher {
     min-height: 44px;
+  }
+
+  html body[data-page] .site-header > .site-nav > .site-nav-tools .public-locale-select {
+    width: 8rem;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 44px;
+  }
+
+  html body[data-page] .site-header[data-nav-enhanced="true"] .site-nav-toggle {
+    display: inline-flex;
+  }
+
+  html body[data-page] .site-header > .site-nav > .site-nav-links {
+    grid-column: 1;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    width: 100%;
+    min-width: 0;
+  }
+
+  html body[data-page] .site-header[data-nav-enhanced="true"] .site-nav:not([data-expanded="true"]) > .site-nav-links {
+    display: none;
+  }
+
+  html body[data-page] .site-header[data-nav-enhanced="true"] .site-nav[data-expanded="true"] > .site-nav-links {
+    display: grid;
+  }
+
+  html body[data-page] .site-header > .site-nav > a,
+  html body[data-page] .site-header > .site-nav > .site-nav-links > a {
+    grid-column: 1;
+    justify-self: stretch;
+    justify-content: flex-start;
+    width: 100%;
+    max-width: 100%;
+    min-height: 44px;
+    padding: 6px 10px;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  html body[data-page] .site-header[data-nav-enhanced="true"] .site-nav[data-expanded="true"] > .site-nav-links > a + a {
+    border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
   }
 
   html body[data-page="landing"] .site-header {
     position: relative;
     top: auto;
   }
+}
 
+@media (max-width: 600px) {
   html body[data-page] footer.site-footer {
     display: grid;
     grid-template-columns: minmax(0, 1fr);

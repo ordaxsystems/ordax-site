@@ -283,6 +283,8 @@ const localeRuntimeContext = vm.createContext({
 vm.runInContext(runtime, localeRuntimeContext, { filename: "site/i18n/runtime.js" });
 const localeRuntime = localeRuntimeContext.window.OrdaXPublicI18n;
 assert(localeRuntime.getLocale() === "en-US", "locale regression must exercise the real runtime in en-US");
+assert(localeRuntime.t("site.navigation.menu") === "Menu", "mobile navigation label must use the English catalog");
+assert(localeRuntime.t("site.navigation.toggle") === "Toggle primary navigation", "mobile navigation accessible name must use the English catalog");
 for (const [source, translated] of [
   ["Armazenamento", "Storage"],
   ["Central de ajuda", "Help center"],
@@ -293,6 +295,8 @@ for (const [source, translated] of [
   assert(localeRuntime.fromSource(source) === translated, `account resource translation regression: ${source}`);
 }
 localeRuntime.setLocale("pt-BR");
+assert(localeRuntime.t("site.navigation.menu") === "Menu", "mobile navigation label must use the Portuguese catalog");
+assert(localeRuntime.t("site.navigation.toggle") === "Alternar navegação principal", "mobile navigation accessible name must use the Portuguese catalog");
 assert(localeRuntime.fromSource("Armazenamento") === "Armazenamento", "resource label must restore pt-BR through the same runtime");
 for (const anchor of [
   'const STORAGE_KEY = "ordax.public.locale"',

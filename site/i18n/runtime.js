@@ -182,6 +182,12 @@
       }
     }
     if (label) label.textContent = t("locale.selector.label");
+    const toggle = document.querySelector("[data-public-nav-toggle]");
+    if (toggle) {
+      toggle.setAttribute("aria-label", t("site.navigation.toggle"));
+      const text = toggle.querySelector("span");
+      if (text) text.textContent = t("site.navigation.menu");
+    }
   }
 
   function normalizePublicHeader() {
@@ -252,38 +258,107 @@
     brand.replaceChildren(mark, wordmark);
   }
 
+  function normalizePublicNavigation(nav) {
+    if (!nav) return null;
+
+    let tools = nav.querySelector(":scope > .site-nav-tools");
+    if (!tools) {
+      tools = document.createElement("div");
+      tools.className = "site-nav-tools";
+      nav.prepend(tools);
+    }
+
+    let links = nav.querySelector(":scope > .site-nav-links");
+    if (!links) {
+      links = document.createElement("div");
+      links.className = "site-nav-links";
+      for (const anchor of Array.from(nav.querySelectorAll(":scope > a"))) {
+        links.append(anchor);
+      }
+      nav.append(links);
+    }
+
+    const selector = nav.querySelector(":scope > .public-locale-switcher");
+    if (selector && selector.parentElement !== tools) tools.prepend(selector);
+    return {tools, links};
+  }
+
+  function installResponsiveNavigation(nav, linksContainer) {
+    const header = nav?.closest(".site-header");
+    const tools = nav?.querySelector(":scope > .site-nav-tools");
+    const links = linksContainer
+      ? Array.from(linksContainer.querySelectorAll(":scope > a"))
+      : [];
+    if (!header || !tools || !linksContainer || !links.length ||
+        tools.querySelector(":scope > [data-public-nav-toggle]")) return;
+
+    if (!nav.id) nav.id = "public-primary-navigation";
+    if (!linksContainer.id) linksContainer.id = "public-primary-links";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "site-nav-toggle";
+    toggle.dataset.publicNavToggle = "";
+    toggle.setAttribute("aria-controls", linksContainer.id);
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", t("site.navigation.toggle"));
+    toggle.innerHTML = '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">' +
+      '<path d="M4 7h16M4 12h16M4 17h16"></path></svg><span></span>';
+    toggle.querySelector("span").textContent = t("site.navigation.menu");
+    tools.append(toggle);
+
+    const setExpanded = expanded => {
+      toggle.setAttribute("aria-expanded", String(expanded));
+      nav.dataset.expanded = String(expanded);
+    };
+    setExpanded(false);
+    header.dataset.navEnhanced = "true";
+
+    toggle.addEventListener("click", () => {
+      setExpanded(toggle.getAttribute("aria-expanded") !== "true");
+    });
+    nav.addEventListener("click", event => {
+      if (event.target.closest("a")) setExpanded(false);
+    });
+    nav.addEventListener("keydown", event => {
+      if (event.key === "Escape" && nav.dataset.expanded === "true") {
+        setExpanded(false);
+        toggle.focus();
+      }
+    });
+  }
+
   function installSelector() {
     normalizePublicHeader();
     normalizePublicFooter();
-    if (document.querySelector("[data-public-locale-switcher]")) return;
-    const nav = document.querySelector("[data-public-locale-slot]") || document.querySelector(".site-nav");
-    if (!nav) return;
+    const nav = document.querySelector(".site-header > .site-nav");
+    const navigation = normalizePublicNavigation(nav);
+    const localeSlot = document.querySelector("[data-public-locale-slot]");
+    if (!document.querySelector("[data-public-locale-switcher]") && (navigation || localeSlot)) {
+      const host = document.createElement("label");
+      host.className = "public-locale-switcher";
+      host.dataset.publicLocaleSwitcher = "";
 
-    const host = document.createElement("label");
-    host.className = "public-locale-switcher";
-    host.dataset.publicLocaleSwitcher = "";
+      const text = document.createElement("span");
+      text.className = "sr-only";
+      text.dataset.publicLocaleLabel = "";
 
-    const text = document.createElement("span");
-    text.className = "sr-only";
-    text.dataset.publicLocaleLabel = "";
+      const select = document.createElement("select");
+      select.className = "public-locale-select";
+      select.dataset.publicLocaleSelect = "";
+      for (const locale of catalog.supportedLocales) {
+        const option = document.createElement("option");
+        option.value = locale;
+        select.append(option);
+      }
+      select.addEventListener("change", () => setLocale(select.value));
 
-    const select = document.createElement("select");
-    select.className = "public-locale-select";
-    select.dataset.publicLocaleSelect = "";
-    for (const locale of catalog.supportedLocales) {
-      const option = document.createElement("option");
-      option.value = locale;
-      select.append(option);
+      host.append(text, select);
+      if (navigation) navigation.tools.prepend(host);
+      else localeSlot.replaceWith(host);
+      updateSelector();
     }
-    select.addEventListener("change", () => setLocale(select.value));
-
-    host.append(text, select);
-    if (nav.matches(".site-nav")) {
-      nav.insertBefore(host, nav.querySelector(":scope > a"));
-    } else {
-      nav.append(host);
-    }
-    updateSelector();
+    installResponsiveNavigation(nav, navigation?.links);
   }
 
   function setLocale(value) {

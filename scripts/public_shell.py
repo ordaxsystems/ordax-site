@@ -208,7 +208,8 @@ def _render_header(contract: dict, data: dict) -> str:
         + _render_brand(contract, header=True)
         + f'<div class="site-actions">{actions}</div>'
         + f'<nav class="site-nav" aria-label="{html.escape(contract["header_navigation_label"], quote=True)}">'
-        + '<span data-public-locale-slot></span>' + navigation + '</nav></header>'
+        + '<div class="site-nav-tools"></div>'
+        + f'<div class="site-nav-links">{navigation}</div></nav></header>'
     )
 
 

@@ -21,7 +21,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from site_routes import PATHS as ROUTES
-VIEWPORTS = ((1440, 900), (390, 844), (320, 740))
+VIEWPORTS = ((1440, 900), (1024, 900), (768, 900), (760, 900),
+             (390, 844), (320, 740))
 NO_SCRIPT_ROUTES = ("/login/", "/cadastro/", "/recuperar/",
                     "/recuperar/nova-senha/", "/conta/", "/web/")
 # 1280px layout viewed through 200% and 400% effective CSS viewports.
@@ -322,15 +323,40 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         header?.querySelector(':scope > a:first-child');
       const headerActions = header?.querySelector(':scope > .site-actions');
       const headerNav = header?.querySelector(':scope > .site-nav');
+      const navLinksContainer = headerNav?.querySelector(':scope > .site-nav-links');
       const localeSelect = header?.querySelector('[data-public-locale-select]');
+      const navToggle = headerNav?.querySelector(':scope > .site-nav-tools > [data-public-nav-toggle]');
       const headerBrandBox = headerBrand?.getBoundingClientRect();
       const headerActionsBox = headerActions?.getBoundingClientRect();
       const localeBox = localeSelect?.getBoundingClientRect();
+      const navToggleBox = navToggle?.getBoundingClientRect();
+      const mobileHeader = innerWidth <= 760;
+      const box = element => {
+        if (!element) return null;
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return {
+          top: Math.round(rect.top), left: Math.round(rect.left),
+          width: Math.round(rect.width), height: Math.round(rect.height),
+          display: style.display, visibility: style.visibility, color: style.color,
+          background: style.backgroundColor
+        };
+      };
       const localeSharesNavigationLine = route === '/conta/' || !header ||
-        (!!localeBox && [...headerNav.querySelectorAll(':scope > a')].some(link => {
+        (!!localeBox && (mobileHeader
+          ? !!navToggleBox && navToggleBox.width > 0 &&
+            Math.abs((navToggleBox.top + navToggleBox.height / 2) -
+              (localeBox.top + localeBox.height / 2)) <= 4
+          : [...navLinksContainer.querySelectorAll(':scope > a')].some(link => {
           const box = link.getBoundingClientRect();
           return Math.abs((box.top + box.height / 2) - (localeBox.top + localeBox.height / 2)) <= 4;
-        }));
+        })));
+      const mobileNavigationDisclosureReady = route === '/conta/' || !header || !mobileHeader ||
+        (!!navToggle && navLinksContainer &&
+          navToggle.getAttribute('aria-controls') === navLinksContainer.id &&
+          navToggle.getAttribute('aria-expanded') === 'false' &&
+          headerNav.dataset.expanded === 'false' &&
+          getComputedStyle(navLinksContainer).display === 'none');
       const footer = $('footer.site-footer');
       const footerLinks = footer ? [...footer.querySelectorAll('a')] : [];
       const footerBox = footer?.getBoundingClientRect();
@@ -398,18 +424,25 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         mainH1Count: [...document.querySelectorAll('main h1')].filter(h => !h.closest('.playground, [aria-hidden="true"]')).length,
         skip: !!$('.skip-link[href^="#"]'),
         publicHeaderRegionsReady: route === '/conta/' || !header ||
-          (!!headerBrand && !!headerActions && !!headerNav && !!localeSelect),
+          (!!headerBrand && !!headerActions && !!headerNav && !!navLinksContainer && !!localeSelect),
         publicHeaderBrandActionsShareRow: route === '/conta/' || !header ||
           (!!headerBrandBox && !!headerActionsBox &&
             Math.abs((headerBrandBox.top + headerBrandBox.height / 2) -
               (headerActionsBox.top + headerActionsBox.height / 2)) <= 6),
         publicHeaderLocaleSharesNavigationLine: localeSharesNavigationLine,
+        publicMobileNavigationDisclosureReady: mobileNavigationDisclosureReady,
+        publicHeaderLayout: !header ? null : {
+          header: box(header), navigation: box(headerNav),
+          tools: box(headerNav?.querySelector(':scope > .site-nav-tools')),
+          locale: box(localeSelect), toggle: box(navToggle),
+          links: box(navLinksContainer), expanded: headerNav?.dataset.expanded
+        },
         sharedFooterContract: route === '/conta/'
           ? !footer && !!$('footer.page-footer')
           : !!footer,
         sharedFooterLayout: footer ? getComputedStyle(footer).display : null,
         sharedFooterResponsiveLayout: !footer || getComputedStyle(footer).display ===
-          (innerWidth <= 1050 ? 'grid' : 'flex'),
+          (innerWidth <= 600 ? 'grid' : 'flex'),
         sharedFooterFitsViewport: !footer || (footerBox.left >= -2 && footerBox.right <= innerWidth + 2
           && footer.scrollWidth <= footer.clientWidth + 2),
         sharedFooterLinksHaveComfortableTargets: !footer || footerLinks.every(link =>
@@ -490,8 +523,10 @@ def localization_probe(driver: Driver) -> dict:
     return driver.run(r"""return (() => {
       const selector = document.querySelector('[data-public-locale-select]');
       const runtime = window.OrdaXPublicI18n;
+      const toggle = document.querySelector('[data-public-nav-toggle]');
       if (!selector || !runtime) return {
-        selector: false, english: false, portuguese: false, persistence: false
+        selector: false, english: false, portuguese: false, persistence: false,
+        menuEnglish: false, menuPortuguese: false
       };
       const apply = value => {
         selector.value = value;
@@ -501,6 +536,8 @@ def localization_probe(driver: Driver) -> dict:
           stored: localStorage.getItem('ordax.public.locale'),
           selector: selector.value,
           skip: document.querySelector('.skip-link')?.textContent?.trim(),
+          menu: toggle?.querySelector('span')?.textContent?.trim(),
+          toggleLabel: toggle?.getAttribute('aria-label'),
         };
       };
       const english = apply('en-US');
@@ -515,8 +552,39 @@ def localization_probe(driver: Driver) -> dict:
           portuguese.stored === 'pt-BR' &&
           portuguese.selector === 'pt-BR' &&
           portuguese.skip === 'Ir para o conteúdo',
-        persistence: localStorage.getItem('ordax.public.locale') === 'pt-BR'
+        persistence: localStorage.getItem('ordax.public.locale') === 'pt-BR',
+        menuEnglish: location.pathname === '/conta/' ||
+          (english.menu === 'Menu' && english.toggleLabel === 'Toggle primary navigation'),
+        menuPortuguese: location.pathname === '/conta/' ||
+          (portuguese.menu === 'Menu' && portuguese.toggleLabel === 'Alternar navegação principal')
       };
+    })();""")
+
+
+def mobile_navigation_interaction_probe(driver: Driver) -> dict:
+    """Exercise the mobile disclosure, including Escape and focus restoration."""
+    return driver.run(r"""return (() => {
+      const nav = document.querySelector('.site-header > .site-nav');
+      const linksContainer = nav?.querySelector(':scope > .site-nav-links');
+      const button = nav?.querySelector(':scope > .site-nav-tools > [data-public-nav-toggle]');
+      const links = linksContainer ? [...linksContainer.querySelectorAll(':scope > a')] : [];
+      if (!nav || !linksContainer || !button || !links.length) return {
+        buttonPresent: false, startsCollapsed: false, opensLinks: false,
+        escapeClosesAndRestoresFocus: false
+      };
+      const startsCollapsed = button.getAttribute('aria-expanded') === 'false' &&
+        nav.dataset.expanded === 'false' && getComputedStyle(linksContainer).display === 'none';
+      button.focus();
+      button.click();
+      const opensLinks = button.getAttribute('aria-expanded') === 'true' &&
+        nav.dataset.expanded === 'true' && getComputedStyle(linksContainer).display !== 'none' &&
+        links.every(link => getComputedStyle(link).display !== 'none');
+      links[0].focus();
+      links[0].dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+      const escapeClosesAndRestoresFocus = button.getAttribute('aria-expanded') === 'false' &&
+        nav.dataset.expanded === 'false' && document.activeElement === button &&
+        getComputedStyle(linksContainer).display === 'none';
+      return {buttonPresent: true, startsCollapsed, opensLinks, escapeClosesAndRestoresFocus};
     })();""")
 
 
@@ -936,6 +1004,8 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                 filename = f"{short}-{width}x{height}.png"
                 driver.shot(evidence / filename)
                 report.update({"expectedRoute": route, "screenshot": filename})
+                if width == 390 and route != "/conta/":
+                    report["mobileNavigationInteraction"] = mobile_navigation_interaction_probe(driver)
                 results.append(report)
                 check = {
                     "loaded": report["complete"] and report["pathname"] == route and report["mainCount"] == 1,
@@ -946,6 +1016,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "publicHeaderRegionsReady": report["publicHeaderRegionsReady"],
                     "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
                     "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
+                    "publicMobileNavigationDisclosureReady": report["publicMobileNavigationDisclosureReady"],
                     "sharedFooterContract": report["sharedFooterContract"],
                     "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
                     "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
@@ -959,6 +1030,10 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "noBrokenStaticNetworkAssets": not report["failedStaticAssets"],
                     "noUncaughtBrowserErrors": not report["runtimeErrors"],
                 }
+                if width == 390 and route != "/conta/":
+                    check["publicMobileNavigationOpensAndEscapes"] = all(
+                        report["mobileNavigationInteraction"].values()
+                    )
                 if width == VIEWPORTS[0][0]:
                     check.update({
                         "accessibilityTreeNames": not report["accessibilityTreeUnnamedControls"],

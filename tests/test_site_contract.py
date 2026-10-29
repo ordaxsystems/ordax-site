@@ -62,10 +62,10 @@ class SiteContractTests(unittest.TestCase):
                     self.assertLess(actions_at, nav_at)
                     nav_match = re.search(r'<nav class="site-nav"[^>]*>(.*?)</nav>', header, re.S)
                     self.assertIsNotNone(nav_match)
-                    slot_at = nav_match.group(1).find("data-public-locale-slot")
-                    link_at = nav_match.group(1).find("<a ")
-                    self.assertGreaterEqual(slot_at, 0, "language slot belongs to the shared navigation")
-                    self.assertLess(slot_at, link_at, "language control precedes navigation links")
+                    self.assertIn('<div class="site-nav-tools"></div>', nav_match.group(1))
+                    self.assertRegex(nav_match.group(1), r'<div class="site-nav-links">.*?<a ')
+                    self.assertNotIn("data-public-locale-slot", nav_match.group(1),
+                                     "the locale runtime inserts its control before the first link")
                 elif route["path"] in {"/privacidade/", "/termos/"}:
                     # The legal source bytes are Identity-hash protected. Their
                     # shared JS runtime normalizes the brand and actions.
@@ -82,10 +82,16 @@ class SiteContractTests(unittest.TestCase):
         locale = (ROOT / "site/i18n/runtime.js").read_text(encoding="utf-8")
         self.assertIn("function normalizePublicHeader()", locale)
         self.assertIn("function normalizePublicFooter()", locale)
-        self.assertIn("normalizePublicHeader();\n    normalizePublicFooter();\n    if (document.querySelector", locale)
+        self.assertIn("function normalizePublicNavigation(nav)", locale)
+        self.assertIn("function installResponsiveNavigation(nav, linksContainer)", locale)
+        self.assertIn('toggle.setAttribute("aria-controls", linksContainer.id)', locale)
+        self.assertIn('toggle.setAttribute("aria-expanded", "false")', locale)
+        self.assertIn('event.key === "Escape"', locale)
+        self.assertIn("normalizePublicHeader();\n    normalizePublicFooter();\n    const nav =", locale)
         self.assertIn('footer?.querySelector(\':scope > a:first-child[href="/"]\')', locale)
         self.assertIn('headerBrand?.querySelector("img.brand-mark")?.getAttribute("src")', locale)
-        self.assertIn('nav.insertBefore(host, nav.querySelector(":scope > a"))', locale)
+        self.assertIn("navigation.tools.prepend(host)", locale)
+        self.assertIn("localeSlot.replaceWith(host)", locale)
 
         shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
         self.assertEqual(
@@ -100,7 +106,8 @@ class SiteContractTests(unittest.TestCase):
             source = sheet.read_text(encoding="utf-8")
             for selector, block in re.findall(r"([^{}]+)\{([^{}]*)\}", source):
                 if not any(component in selector for component in (
-                        ".site-header", ".site-actions", ".site-nav", ".brand", ".brand-mark",
+                        ".site-header", ".site-actions", ".site-nav", ".site-nav-tools",
+                        ".site-nav-links", ".brand", ".brand-mark", ".site-nav-toggle",
                         ".public-locale-switcher", ".public-locale-select")):
                     continue
                 declarations = {
@@ -196,8 +203,10 @@ class SiteContractTests(unittest.TestCase):
                 self.assertEqual(header.group(1).count('class="brand"'), 1)
                 self.assertEqual(header.group(1).count('class="site-actions"'), 1)
                 self.assertEqual(header.group(1).count('class="site-nav"'), 1)
+                self.assertEqual(header.group(1).count('class="site-nav-tools"'), 1)
+                self.assertEqual(header.group(1).count('class="site-nav-links"'), 1)
                 self.assertEqual(footer.group(1).count('aria-label="Rodapé"'), 1)
-                self.assertIn('data-public-locale-slot', header.group(1))
+                self.assertNotIn('data-public-locale-slot', header.group(1))
                 self.assertNotIn("<!-- ORDAX_PUBLIC_HEADER -->", rendered)
                 self.assertNotIn("<!-- ORDAX_PUBLIC_FOOTER -->", rendered)
 
