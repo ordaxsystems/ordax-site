@@ -2,6 +2,12 @@
 
 **Estado em 24/10/2026: migração Dev de código, apresentação e artefatos visuais concluída.** Este documento é a referência de estado, não uma nova camada de configuração. O código e os comandos válidos estão no [README](../README.md); os hashes, commits e a origem dos dois pacotes no único [lock Dev](../contracts/dev-artifact-lock.json).
 
+## Ajuste de leitura — 2026-10-29
+
+As páginas de Privacidade e Termos agora limitam o texto corrido a 76ch e usam corpo de 15px com entrelinha 1,8; os textos do painel de licenças, dos estados informativos e das orientações de download também ganharam tamanho e entrelinha. Os hashes SHA-256 e tamanhos em bytes dos arquivos publicados aparecem em 12px, com quebra dos hashes em telas estreitas. Login, cadastro, recuperação e Conta Web receberam texto mais legível nos estados de identidade, avisos, concordância e links de suporte. Em telas estreitas, a navegação e os seletores de idioma das páginas públicas usam texto de 12px; os rodapés públicos usam 12px. Os principais links de suporte e rodapé têm alvos mínimos de 44px. A página inicial e a página de download ampliam os alvos dos links de apoio para 44px em dispositivos de toque; o botão para fechar a demonstração ampliada da página inicial também mede ao menos 44px no celular. Minha Conta mantém botões, abas, breadcrumb, links de ação e o resumo de histórico com alvo mínimo de 44px no celular; status, notas, atalhos, contagens, legendas e rótulos operacionais da Conta usam 12px. Licenças, Privacidade e Termos nomeiam a navegação do rodapé, identificam a rota atual e a destacam visualmente. O conteúdo legal e os contratos de serviço não foram alterados. Como a Conta confere o SHA-256 dos bytes HTML integrais de Privacidade e Termos, alterações de marcação nessas páginas exigem republicar a referência de documento pelo owner de Identity antes de habilitar o consentimento/cadastro; até essa atualização, a validação permanece fechada.
+
+Em dispositivos com ponteiro de toque, os links de navegação do cabeçalho e rodapé, atalhos dos formulários de identidade, controles principais da Conta e ações de integridade/download também mantêm alvo mínimo de 44px, mesmo acima dos breakpoints móveis.
+
 ## Propriedade e fronteiras
 
 - **`ordax-site`**: HTML/CSS/JS público, onze rotas, apresentação de login/Conta, SEO, i18n, build e testes independentes.

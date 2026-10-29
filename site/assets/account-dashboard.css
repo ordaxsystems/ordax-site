@@ -101,7 +101,7 @@ body.account-portal .chart-empty span{font-size:12px}
 body.account-portal .chart-empty small{color:var(--subtle);font-size:12px;max-width:340px;line-height:1.6;}
 body.account-portal .management-icon{width:37px;height:37px;display:grid;place-items:center;border:1px solid var(--border);background:var(--secondary);border-radius:var(--control-radius);color:var(--cyan);flex-shrink:0}
 body.account-portal .management-icon svg{width:20px;height:20px;stroke-width:1.5}
-body.account-portal .page-footer{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);padding:21px 0 24px;margin-top:24px;color:var(--subtle);font-size:11px;flex-wrap:wrap;gap:12px 20px;}
+body.account-portal .page-footer{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);padding:21px 0 24px;margin-top:24px;color:var(--subtle);font-size:12px;flex-wrap:wrap;gap:12px 20px;}
 body.account-portal .page-footer>span{display:flex;align-items:center;gap:6px;flex-wrap:wrap;line-height:1.6;}
 body.account-portal .page-footer img{width:18px;height:18px;object-fit:contain;opacity:.65}
 body.account-portal .page-footer>div{display:flex;align-items:center;gap:20px}
@@ -252,7 +252,7 @@ body.account-portal .topbar-actions{justify-content:flex-end}
 body.account-portal .account-main{padding-left:23px;padding-right:23px}
 body.account-portal .account-card{padding:16px}
 body.account-portal .management-icon{width:32px;height:32px}
-body.account-portal .page-footer>span{font-size:10px}
+body.account-portal .page-footer>span{font-size:12px}
 body.account-portal .page-footer>div{gap:10px}}
 @media(max-width:980px) and (min-width:641px){
 body.account-portal .chart-legend{gap:12px;font-size:10px}
@@ -294,8 +294,8 @@ body.account-portal .usage-chart{height:165px}
 body.account-portal .chart-empty span{font-size:12px}
 body.account-portal .management-icon{width:37px;height:37px}
 body.account-portal .page-footer{flex-direction:column;gap:15px;padding:22px 0 0}
-body.account-portal .page-footer>span{font-size:10px}
-body.account-portal .page-footer>div{gap:18px;font-size:11px}
+body.account-portal .page-footer>span{font-size:12px}
+body.account-portal .page-footer>div{gap:18px;font-size:12px}
 body.account-portal .mobile-nav{position:fixed;bottom:0;inset-inline:0;height:72px;z-index:40;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--sidebar);border-top:1px solid var(--border);padding:8px 8px max(8px,env(safe-area-inset-bottom))}
 body.account-portal .mobile-nav>a,body.account-portal .mobile-nav>button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:11px;color:var(--md-rail-muted);padding:0;height:51px;border-radius:4px;position:relative}
 body.account-portal .mobile-nav>.button{color:var(--md-rail-muted)}
@@ -642,7 +642,7 @@ body.account-portal summary:focus-visible{outline:2px solid var(--md-focus);outl
  body.account-portal .account-intro{gap:12px;margin-bottom:18px}
  body.account-portal .account-intro h1{font-size:28px}
  body.account-portal .account-intro p{font-size:13px}
- body.account-portal .account-intro>.button{min-height:36px;font-size:12px}
+ body.account-portal .account-intro>.button{min-height:44px;font-size:12px}
  body.account-portal .identity-card{grid-template-columns:minmax(0,1fr)}
  body.account-portal .identity-content{position:relative;z-index:1;padding:20px}
  body.account-portal .identity-art{position:absolute;inset:0;min-height:0;opacity:.09;z-index:0}
@@ -684,7 +684,7 @@ body.account-portal summary:focus-visible{outline:2px solid var(--md-focus);outl
  body.account-portal .subscription-facts dt{margin:0;font-size:12px}
  body.account-portal .subscription-facts dd{text-align:right;font-size:12px}
  body.account-portal .plan-catalog{grid-template-columns:minmax(0,1fr)}
- body.account-portal .billing-history .panel-heading>.button{min-height:40px}
+ body.account-portal .billing-history .panel-heading>.button{min-height:44px}
  body.account-portal .records-table thead th{padding-inline:4px;font-size:11px}
  body.account-portal .chart-heading{grid-template-columns:minmax(0,1fr)}
  body.account-portal .chart-actions{justify-content:space-between}
@@ -694,3 +694,27 @@ body.account-portal summary:focus-visible{outline:2px solid var(--md-focus);outl
  body.account-portal .locale-field select{font-size:16px}
  body.account-portal .device-actions>.text-link{margin-left:0;flex-basis:100%}
 }
+@media(max-width:640px){body.account-portal .page-footer>div>a{display:inline-flex;align-items:center;min-height:44px}}
+@media(max-width:640px){
+ body.account-portal .segment-tabs button{min-height:44px}
+ body.account-portal .breadcrumb a{display:inline-flex;align-items:center;min-height:44px}
+ body.account-portal .text-link,
+ body.account-portal .identity-bottom .text-link,
+ body.account-portal .billing-next>.text-link,
+ body.account-portal .faq-answer>.text-link,
+ body.account-portal .consent-settings .setting-row>.text-link{min-height:44px}
+}
+
+/* Operational labels and status text should stay readable in account views. */
+body.account-portal :is(.integration-description,.integration-status,.integration-caps li,.integration-caps em,.subscription-plan>span,.subscription-facts dt,.period-filter>span:first-child,.usage-stat dt,.status-tag,.service-facts dt,.safety-facts dd,.identity-bottom dt,.appearance-current,.chart-legend,.breadcrumb,.data-note,.search-shortcuts,.unavailable-chip,.related-area small,.help-result-count,.profile-label,.device-scope>li){font-size:12px}
+body.account-portal .integration-description{line-height:1.7}
+body.account-portal .integration-caps em{color:var(--muted-foreground)}
+body.account-portal .resource-table thead th,body.account-portal .records-table thead th{font-size:12px}
+body.account-portal .usage-history>summary{min-height:44px;padding:12px 0}
+@media(any-pointer:coarse){
+ body.account-portal .button,body.account-portal .sidebar-link,body.account-portal .segment-tabs button,body.account-portal .breadcrumb a,body.account-portal .page-footer>div>a,body.account-portal .text-link,body.account-portal .mobile-nav>a,body.account-portal .mobile-nav>button,body.account-portal .usage-history>summary,body.account-portal .related-area,body.account-portal .quick-link,body.account-portal .mobile-more nav>a,body.account-portal .more-link{min-height:44px}
+ body.account-portal .public-locale-select,body.account-portal .period-filter select,body.account-portal .form-field input{min-height:44px}
+ body.account-portal .icon-button,body.account-portal .sidebar-heading .button{width:44px;height:44px}
+ body.account-portal .search-launch{min-height:44px}
+}
+@media(any-pointer:coarse) and (max-width:980px){body.account-portal .search-launch{width:44px}}

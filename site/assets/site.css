@@ -489,7 +489,7 @@ a {
 
 .release-target code {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   word-break: break-all;
 }
 
@@ -609,6 +609,12 @@ a {
   text-decoration: none;
 }
 
+.site-footer nav a[aria-current="page"] {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
 @media (max-width: 1050px) {
   .hero {
     grid-template-columns: 1fr;
@@ -659,6 +665,17 @@ a {
     gap: 14px;
     overflow-x: auto;
     padding-bottom: 6px;
+  }
+
+  .site-nav > a,
+  .site-footer nav > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .public-locale-select {
+    min-height: 44px;
   }
 
   .brand-name {
@@ -746,13 +763,13 @@ a {
 
 .compliance-artifact code {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   word-break: break-all;
 }
 
 .compliance-artifact span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 @media (max-width: 760px) {
@@ -1139,4 +1156,17 @@ a {
     outline: 2px solid Highlight;
     outline-offset: 3px;
   }
+}
+
+/* Preserve comfortable targets on touch-first tablets and hybrid devices,
+   even when their CSS viewport uses desktop breakpoints. */
+@media (any-pointer: coarse) {
+  .site-header :is(.site-nav, .site-actions, .account-nav-actions, .download-nav-actions, .login-nav-actions, .signup-nav-actions) > a,
+  .site-footer nav > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .public-locale-select { min-height: 44px; }
 }
