@@ -287,7 +287,6 @@ body.account-portal .topbar-actions .header-divider,body.account-portal .search-
 body.account-portal .topbar-actions button{width:44px;height:44px;padding:0}
 body.account-portal .topbar-actions .mini-avatar{width:28px;height:28px}
 body.account-portal .desktop-sidebar{display:none}
-body.account-portal .account-main{margin-left:0;padding:82px 18px 90px}
 body.account-portal .breadcrumb{font-size:12px;margin-bottom:12px}
 body.account-portal .eyebrow{font-size:10px;letter-spacing:1.3px}
 body.account-portal .profile-label{font-size:11px;padding:4px 8px;border-radius:var(--control-radius);}
@@ -304,7 +303,6 @@ body.account-portal .management-icon{width:37px;height:37px}
 body.account-portal .page-footer{flex-direction:column;gap:15px;padding:22px 0 0}
 body.account-portal .page-footer>span{font-size:12px}
 body.account-portal .page-footer>div{gap:18px;font-size:12px}
-body.account-portal .mobile-more[open]{display:block;position:fixed;inset:64px 0 72px;padding:20px;background:var(--background);z-index:39;overflow:auto}
 body.account-portal .mobile-more h2{font-size:22px}
 body.account-portal .mobile-more>a{display:flex;align-items:center;gap:15px;border-bottom:1px solid var(--border);padding:17px 5px;font-size:12px}
 body.account-portal .mobile-more>a>svg{width:18px;height:18px;color:var(--cyan)}
@@ -399,7 +397,7 @@ body.account-portal #more-navigation>.nav-group>a.more-link{display:flex;width:1
 
 body.account-portal .faq-list button[aria-expanded=true] svg{transform:rotate(180deg)}body.account-portal .account-main:focus{outline:0}body.account-portal .account-card{overflow-wrap:anywhere}body.account-portal .noscript-note{position:fixed;top:95px;left:260px;right:24px;padding:20px;background:var(--card);border:1px solid var(--border);z-index:45}
 @media(min-width:641px){body.account-portal .desktop-sidebar{overflow:hidden}body.account-portal .sidebar-collapsed .desktop-sidebar{overflow-x:hidden}body.account-portal .mobile-more{display:none}}
-@media(max-width:640px){body.account-portal .mobile-more[open]{display:block;inset:64px 0 calc(72px + env(safe-area-inset-bottom));height:auto;width:100%;max-width:none;max-height:none;margin:0;border:0;border-radius:0;overscroll-behavior:contain}body.account-portal .mobile-more::backdrop{background:transparent;backdrop-filter:none}body.account-portal .breadcrumb{flex-wrap:wrap;height:auto;min-height:18px}body.account-portal .account-main{padding-bottom:calc(90px + env(safe-area-inset-bottom))}body.account-portal .noscript-note{left:18px;right:18px}body.account-portal .mobile-more .icon-button{width:44px;height:44px}}
+@media(max-width:640px){body.account-portal .mobile-more[open]{display:block;position:fixed;inset:64px 0 calc(72px + env(safe-area-inset-bottom));height:auto;width:100%;max-width:none;max-height:none;margin:0;padding:20px;border:0;border-radius:0;background:var(--background);z-index:39;overflow:auto;overscroll-behavior:contain}body.account-portal .mobile-more::backdrop{background:transparent;backdrop-filter:none}body.account-portal .breadcrumb{flex-wrap:wrap;height:auto;min-height:18px}body.account-portal .noscript-note{left:18px;right:18px}body.account-portal .mobile-more .icon-button{width:44px;height:44px}}
 @media(max-width:359px){body.account-portal .account-main{padding-inline:14px}body.account-portal .brand{font-size:19px}body.account-portal .chart-legend{flex-wrap:wrap;gap:8px}}
 
 /* Plan names are generated from the canonical entitlements catalog. */

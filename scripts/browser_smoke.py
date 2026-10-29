@@ -165,6 +165,10 @@ def responsive_shell_checks(report: dict, width: int, route: str,
         checks["accountTopbarFitsViewport"] = report["accountTopbarFitsViewport"]
         checks["accountMobileNavigationLabelsFit"] = report["accountMobileNavigationLabelsFit"]
         checks["noInventedVerifiedUser"] = not report["accountHasVerifiedUser"]
+        if report["accountMobileFooterClearance"]["checked"]:
+            checks["accountMobileFooterClearOfNavigation"] = (
+                report["accountMobileFooterClearance"]["clear"]
+            )
     return checks
 
 
@@ -603,6 +607,28 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
           boxes.slice(1).every((box, index) =>
             boxes[index].text.right <= box.text.left + 1);
       })();
+      const accountMobileFooterClearance = route !== '/conta/' ? null : (() => {
+        const nav = body.querySelector('.mobile-nav');
+        const footer = body.querySelector('.page-footer');
+        const expected = innerWidth <= 640 ||
+          (matchMedia('(any-pointer: coarse)').matches && innerWidth <= 1180);
+        if (!expected) return {checked:false, clear:true, clearance:null};
+        if (!nav || !footer || getComputedStyle(nav).display === 'none') {
+          return {checked:true, clear:false, clearance:null};
+        }
+        const navStyle = getComputedStyle(nav);
+        const navBox = nav.getBoundingClientRect();
+        const footerBox = footer.getBoundingClientRect();
+        const maximumScrollY = Math.max(0,
+          document.documentElement.scrollHeight - innerHeight);
+        const footerBottomAtPageEnd = footerBox.bottom + scrollY - maximumScrollY;
+        const clearance = navBox.top - footerBottomAtPageEnd;
+        return {
+          checked:true,
+          clear:navStyle.position === 'fixed' && navBox.height > 0 && clearance >= -1,
+          clearance:Math.round(clearance),
+        };
+      })();
       const footer = $('footer.site-footer');
       const footerLinks = footer ? [...footer.querySelectorAll('a')] : [];
       const footerBox = footer?.getBoundingClientRect();
@@ -689,6 +715,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         publicHeaderRegionsVisible,
         accountTopbarFitsViewport,
         accountMobileNavigationLabelsFit,
+        accountMobileFooterClearance,
         publicHeaderBrandActionsShareRow: route === '/conta/' || !header ||
           (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerActions) &&
             !!headerBrandBox && !!headerActionsBox &&
@@ -907,6 +934,55 @@ def mobile_navigation_interaction_probe(driver: Driver) -> dict:
         getComputedStyle(linksContainer).display === 'none';
       return {buttonPresent: true, startsCollapsed, opensLinks, escapeClosesAndRestoresFocus};
     })();""")
+
+
+def mobile_account_navigation_interaction_probe(driver: Driver) -> dict:
+    """Exercise the account overflow dialog with hardware keyboard input."""
+    before = driver.run("""const button=document.querySelector('#more-toggle');
+      const dialog=document.querySelector('#more-dialog');
+      return {buttonPresent:!!button, dialogPresent:!!dialog,
+        startsCollapsed:!!button && !!dialog && !dialog.open &&
+          button.getAttribute('aria-expanded')==='false',
+        controlsDialog:!!button && !!dialog && button.getAttribute('aria-controls')===dialog.id,
+        dialogNamed:!!dialog && dialog.getAttribute('aria-labelledby')==='more-title' &&
+          !!document.getElementById('more-title')?.textContent.trim()};""")
+    if not before["buttonPresent"] or not before["dialogPresent"]:
+        return {**before, "keyboardOpensDialog": False,
+                "focusMovesIntoDialog": False, "hasOverflowLinks": False,
+                "escapeClosesAndRestoresFocus": False}
+
+    driver.run("document.querySelector('#more-toggle').focus()")
+    driver.press("\uE007")
+    opened = {}
+    for _ in range(20):
+        opened = driver.run("""const button=document.querySelector('#more-toggle');
+          const dialog=document.querySelector('#more-dialog');
+          return {open:dialog.open, expanded:button.getAttribute('aria-expanded'),
+            focusInside:dialog.contains(document.activeElement),
+            links:dialog.querySelectorAll('#more-navigation a').length};""")
+        if opened["open"]:
+            break
+        time.sleep(0.05)
+
+    driver.press("\uE00C")
+    closed = {}
+    for _ in range(20):
+        closed = driver.run("""const button=document.querySelector('#more-toggle');
+          const dialog=document.querySelector('#more-dialog');
+          return {open:dialog.open, expanded:button.getAttribute('aria-expanded'),
+            focusRestored:document.activeElement===button};""")
+        if not closed["open"] and closed["expanded"] == "false":
+            break
+        time.sleep(0.05)
+
+    return {
+        **before,
+        "keyboardOpensDialog": opened.get("open") is True and opened.get("expanded") == "true",
+        "focusMovesIntoDialog": opened.get("focusInside") is True,
+        "hasOverflowLinks": opened.get("links", 0) > 0,
+        "escapeClosesAndRestoresFocus": not closed.get("open", True)
+            and closed.get("expanded") == "false" and closed.get("focusRestored") is True,
+    }
 
 
 def solid_surface_contrast_probe(driver: Driver) -> dict:
@@ -1380,8 +1456,13 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                 filename = f"{short}-{width}x{height}.png"
                 driver.shot(evidence / filename)
                 report.update({"expectedRoute": route, "screenshot": filename})
-                if width == 390 and route != "/conta/":
-                    report["mobileNavigationInteraction"] = mobile_navigation_interaction_probe(driver)
+                if width == 390:
+                    if route == "/conta/":
+                        report["accountMobileNavigationInteraction"] = (
+                            mobile_account_navigation_interaction_probe(driver)
+                        )
+                    else:
+                        report["mobileNavigationInteraction"] = mobile_navigation_interaction_probe(driver)
                 results.append(report)
                 check = {
                     "loaded": report["complete"] and report["pathname"] == route and report["mainCount"] == 1,
@@ -1456,6 +1537,14 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     check.update({"accountShellPresent": report["accountPortal"],
                                   "accountTopbarFitsViewport": report["accountTopbarFitsViewport"],
                                   "noInventedVerifiedUser": not report["accountHasVerifiedUser"]})
+                    if width == 390:
+                        check["accountMobileNavigationOpensAndEscapes"] = all(
+                            report["accountMobileNavigationInteraction"].values()
+                        )
+                    if report["accountMobileFooterClearance"]["checked"]:
+                        check["accountMobileFooterClearOfNavigation"] = (
+                            report["accountMobileFooterClearance"]["clear"]
+                        )
                 if route == "/":
                     check.update({
                         "landingFixturePresent": report["landingFixturePresent"],
@@ -1607,6 +1696,10 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "footerLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
                     "interactiveTargetsHaveComfortableSize": not report["undersizedInteractiveTargets"],
                 }
+                if route == "/conta/" and report["accountMobileFooterClearance"]["checked"]:
+                    checks["accountMobileFooterClearOfNavigation"] = (
+                        report["accountMobileFooterClearance"]["clear"]
+                    )
                 if width <= 760 and route != "/conta/":
                     checks["mobileDisclosureReady"] = report["publicMobileNavigationDisclosureReady"]
                 if route == "/conta/":

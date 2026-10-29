@@ -317,6 +317,23 @@ class SiteContractTests(unittest.TestCase):
             1,
             "mobile navigation geometry must have one responsive owner",
         )
+        self.assertEqual(
+            account_css.count(
+                "body.account-portal .account-main{padding:82px 16px calc(100px + env(safe-area-inset-bottom))}"
+            ),
+            1,
+            "phone account content spacing must have one mobile-shell owner",
+        )
+        self.assertNotIn(
+            "body.account-portal .account-main{margin-left:0;padding:82px 18px 90px}",
+            account_css,
+            "superseded phone account spacing must not return",
+        )
+        self.assertIn(
+            "body.account-portal .mobile-more[open]{display:block;position:fixed;inset:64px 0 calc(72px + env(safe-area-inset-bottom));height:auto;width:100%;max-width:none;max-height:none;margin:0;padding:20px;border:0;border-radius:0;background:var(--background);z-index:39;overflow:auto;overscroll-behavior:contain}",
+            account_css,
+            "phone overflow navigation must own its complete viewport geometry",
+        )
 
     def test_identity_and_mcp_account_data_share_bounded_json_transport(self):
         shell = (ROOT / "site/assets/site.js").read_text(encoding="utf-8")
