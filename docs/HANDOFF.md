@@ -67,4 +67,5 @@ Alterar apenas o owner correto → criar PR → comprovar CI e Chrome no Site �
 
 - Na Conta em tablets touch, cada destino de “Mais” ocupa uma linha completa dentro do diálogo; a regra também evita que folhas de estilo do portal façam links inline em grupos com vários destinos.
 - O nome acessível “Fechar diálogo” da Conta agora tem tradução inglesa no catálogo compartilhado, para que leitores de tela recebam o idioma correto após a troca para en-US.
+- Em telas touch, as marcas clicáveis de cabeçalho/rodapé e o link de pular conteúdo agora mantêm alvos de pelo menos 44 px; a Conta segue o mesmo tamanho para a marca do topbar.
 - Acessibilidade manual, Identity real, catálogo oficial, staging e produção continuam nos estados descritos acima; este ajuste é somente de apresentação.

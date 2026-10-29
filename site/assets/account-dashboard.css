@@ -714,6 +714,7 @@ body.account-portal .resource-table thead th,body.account-portal .records-table 
 body.account-portal .usage-history>summary{min-height:44px;padding:12px 0}
 @media(any-pointer:coarse){
  body.account-portal .button,body.account-portal .sidebar-link,body.account-portal .segment-tabs button,body.account-portal .breadcrumb a,body.account-portal .page-footer>div>a,body.account-portal .text-link,body.account-portal .mobile-nav>a,body.account-portal .mobile-nav>button,body.account-portal .usage-history>summary,body.account-portal .related-area,body.account-portal .quick-link,body.account-portal .mobile-more nav>a,body.account-portal .more-link{min-height:44px}
+ body.account-portal .topbar .brand{min-height:44px}
  body.account-portal .public-locale-select,body.account-portal .period-filter select,body.account-portal .form-field input{min-height:44px}
  body.account-portal .icon-button,body.account-portal .sidebar-heading .button{width:44px;height:44px}
  body.account-portal .search-launch{min-height:44px}
