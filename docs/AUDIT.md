@@ -41,3 +41,10 @@ Gates remanescentes e owner de cada integração: [HANDOFF.md](HANDOFF.md). Coma
 Referências para a decisão do seletor mobile: [NN/g — Language Switching on E-Commerce Sites](https://www.nngroup.com/articles/language-switching-ecommerce/), [WAI-ARIA APG — Disclosure](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/) e [WAI/W3C — Reflow](https://www.w3.org/WAI/WCAG21/Understanding/reflow).
 
 Esta verificação é local e não comprova Identity em staging, autorização de produção nem publicação de um deployment. O build está pronto para revisão no branch `codex/site-responsive-polish`; a publicação de produção não faz parte desta atualização.
+
+## Atualização de legibilidade mobile — Licenças (29/10/2026)
+
+- A captura de `/licencas/` a 280 px mostrava o título anterior em sete linhas. O heading foi reduzido para “Transparência por release”; a explicação sobre inventários, componentes e licenças permanece no conteúdo da página. O catálogo i18n atualiza a mesma frase em inglês.
+- Candidato `source_commit=e67923e6cf8398ad148eeaa3a64643ea0487e816`; SHA-256 do manifesto `B60F1BE92A215FE140623C6DAD4D847E52C242A60D5566F326AB328682725665`. `build.py check`, 76 testes Python, localização (1.716 mensagens, 11 rotas, 2 idiomas), `build.py verify` e smoke estático (11 rotas) passaram. A prévia em `http://127.0.0.1:4219/licencas/` respondeu HTTP 200; inspeção visual e árvore de acessibilidade confirmaram o heading novo.
+- A matriz completa de navegador ainda se refere ao candidato `c70d0b6…` acima. Nesta máquina, `scripts/browser_smoke.py` não iniciou por falta de ChromeDriver; não atribuir aquela matriz ao commit `e67923e`. O CI de navegador executa em `main` ou em pull request.
+- Não houve deploy de produção.
