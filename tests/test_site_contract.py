@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import build
 from public_release_catalog import render_catalog, validate_catalog, PublicReleaseCatalogError, _same_origin_path
+from public_shell import load_contract as load_public_shell, render_public_shell
 from site_routes import load_routes
 from site_seo import validate_origin, render_html
 from smoke_static import check_css_dependencies
@@ -25,7 +26,7 @@ PUBLIC_SHELL_LAYOUT_PROPERTIES = {
     "grid-template-columns", "grid-template-areas", "height", "justify-content",
     "margin", "margin-inline", "margin-left", "max-height", "max-width",
     "min-height", "min-width", "overflow", "padding", "padding-inline",
-    "row-gap", "width",
+    "position", "row-gap", "top", "width", "z-index",
 }
 
 class SiteContractTests(unittest.TestCase):
@@ -36,8 +37,10 @@ class SiteContractTests(unittest.TestCase):
         self.assertEqual(len(set(build.ROUTES)), len(build.ROUTES))
 
     def test_public_headers_share_one_action_and_navigation_structure(self):
+        contract = load_public_shell(load_routes())
         for route in load_routes():
             source = (ROOT / "site" / route["source"]).read_text(encoding="utf-8")
+            source = render_public_shell(source, route["path"], contract)
             header_match = re.search(
                 r'<header class="site-header[^\"]*"[^>]*>(.*?)</header>',
                 source,
@@ -51,9 +54,10 @@ class SiteContractTests(unittest.TestCase):
             actions_at = header.find('class="site-actions"')
             nav_at = header.find('class="site-nav"')
             with self.subTest(route=route["path"]):
-                self.assertGreaterEqual(brand_at, 0, "shared header needs its brand first")
                 self.assertGreaterEqual(nav_at, 0, "shared header needs one primary navigation")
-                if actions_at >= 0:
+                if route["path"] in contract["routes"]:
+                    self.assertGreaterEqual(brand_at, 0, "shared header needs its brand first")
+                    self.assertGreaterEqual(actions_at, 0)
                     self.assertLess(brand_at, actions_at)
                     self.assertLess(actions_at, nav_at)
                     nav_match = re.search(r'<nav class="site-nav"[^>]*>(.*?)</nav>', header, re.S)
@@ -62,11 +66,18 @@ class SiteContractTests(unittest.TestCase):
                     link_at = nav_match.group(1).find("<a ")
                     self.assertGreaterEqual(slot_at, 0, "language slot belongs to the shared navigation")
                     self.assertLess(slot_at, link_at, "language control precedes navigation links")
-                else:
+                elif route["path"] in {"/privacidade/", "/termos/"}:
                     # The legal source bytes are Identity-hash protected. Their
-                    # shared JS runtime moves auth links into .site-actions.
+                    # shared JS runtime normalizes the brand and actions.
+                    self.assertGreaterEqual(brand_at, 0)
                     self.assertIn('data-auth-nav="login"', header)
                     self.assertIn('data-auth-nav="register"', header)
+
+        for path in ("/privacidade/", "/termos/"):
+            route = next(item for item in load_routes() if item["path"] == path)
+            source = (ROOT / "site" / route["source"]).read_bytes()
+            self.assertNotIn(b"ORDAX_PUBLIC_HEADER", source)
+            self.assertNotIn(b"ORDAX_PUBLIC_FOOTER", source)
 
         locale = (ROOT / "site/i18n/runtime.js").read_text(encoding="utf-8")
         self.assertIn("function normalizePublicHeader()", locale)
@@ -86,7 +97,8 @@ class SiteContractTests(unittest.TestCase):
             source = sheet.read_text(encoding="utf-8")
             for selector, block in re.findall(r"([^{}]+)\{([^{}]*)\}", source):
                 if not any(component in selector for component in (
-                        ".site-header", ".site-actions", ".site-nav", ".brand", ".brand-mark")):
+                        ".site-header", ".site-actions", ".site-nav", ".brand", ".brand-mark",
+                        ".public-locale-switcher", ".public-locale-select")):
                     continue
                 declarations = {
                     declaration.split(":", 1)[0].strip().lower()
@@ -107,6 +119,7 @@ class SiteContractTests(unittest.TestCase):
         self.assertNotIn('body[data-page="landing"] .sr-only', landing_css)
 
     def test_public_footers_share_one_layout_source(self):
+        contract = load_public_shell(load_routes())
         shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
         self.assertEqual(
             len(re.findall(r"(?m)^html body\[data-page\] footer\.site-footer\s*\{", shared_css)),
@@ -135,12 +148,42 @@ class SiteContractTests(unittest.TestCase):
 
         for route in load_routes():
             source = (ROOT / "site" / route["source"]).read_text(encoding="utf-8")
+            source = render_public_shell(source, route["path"], contract)
             with self.subTest(route=route["path"]):
                 if route["path"] == "/conta/":
                     self.assertIn('<footer class="page-footer">', source)
                     self.assertNotIn('<footer class="site-footer">', source)
                 else:
                     self.assertIn('<footer class="site-footer">', source)
+
+    def test_public_shell_is_generated_from_one_contract(self):
+        contract = load_public_shell(load_routes())
+        expected_paths = {route["path"] for route in load_routes()} - {
+            item["path"] for item in contract["exceptions"]
+        }
+        self.assertEqual(set(contract["routes"]), expected_paths)
+        for route in load_routes():
+            source = (ROOT / "site" / route["source"]).read_text(encoding="utf-8")
+            rendered = render_public_shell(source, route["path"], contract)
+            with self.subTest(route=route["path"]):
+                if route["path"] not in contract["routes"]:
+                    self.assertEqual(rendered, source)
+                    continue
+                header = re.search(r'<header class="site-header">(.*?)</header>', rendered, re.S)
+                footer = re.search(r'<footer class="site-footer">(.*?)</footer>', rendered, re.S)
+                self.assertIsNotNone(header)
+                self.assertIsNotNone(footer)
+                self.assertEqual(header.group(1).count('class="brand"'), 1)
+                self.assertEqual(header.group(1).count('class="site-actions"'), 1)
+                self.assertEqual(header.group(1).count('class="site-nav"'), 1)
+                self.assertEqual(footer.group(1).count('aria-label="Rodapé"'), 1)
+                self.assertIn('data-public-locale-slot', header.group(1))
+                self.assertNotIn("<!-- ORDAX_PUBLIC_HEADER -->", rendered)
+                self.assertNotIn("<!-- ORDAX_PUBLIC_FOOTER -->", rendered)
+
+        landing = (ROOT / "site/index.html").read_text(encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "markers must each occur once"):
+            render_public_shell(landing.replace("<!-- ORDAX_PUBLIC_HEADER -->", ""), "/", contract)
 
     def test_identity_and_mcp_account_data_share_bounded_json_transport(self):
         shell = (ROOT / "site/assets/site.js").read_text(encoding="utf-8")

@@ -190,6 +190,24 @@ for (const key of ptKeys) {
 }
 
 const sourceMessages = new Set(Object.keys(catalog.sourceIndex).map(normalize));
+const publicShell = JSON.parse(read("contracts/public-shell.json"));
+const shellMessages = [
+  publicShell.brand.aria_label,
+  publicShell.brand.name,
+  publicShell.header_navigation_label,
+  publicShell.footer_navigation_label,
+  ...Object.values(publicShell.routes).flatMap(route => [
+    ...route.actions.map(item => item.label),
+    ...route.navigation.map(item => item.label),
+    route.footer_tagline,
+    ...route.footer_navigation.map(item => item.label),
+  ]),
+];
+for (const value of shellMessages) {
+  if (!looksPortuguese(value)) continue;
+  assert(sourceMessages.has(normalize(value)),
+    `public shell copy is outside localization owner: ${value}`);
+}
 const canonicalRoutes = JSON.parse(read("contracts/site-routes.json"));
 assert(canonicalRoutes.$schema === "ordax.site-routes/1", "public Site route contract mismatch");
 const routes = canonicalRoutes.routes.map(route => "site/" + route.source);

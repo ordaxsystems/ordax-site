@@ -85,3 +85,9 @@ Esta composição substitui as notas anteriores deste handoff que descreviam o s
 `site/assets/site.css` é agora a única fonte de layout responsivo do cabeçalho e do rodapé públicos. O CSS do portal deixou de redefinir largura, posição, espaçamento ou quebra do cabeçalho; folhas de página podem manter cores, bordas visuais e tipografia. O rodapé segue o mesmo grid móvel em todas as rotas que usam `.site-footer` e preserva alvos de link de 44 px. O contrato em `tests/test_site_contract.py` impede que a geometria volte a ser copiada para CSS de página; `scripts/browser_smoke.py` verifica presença, reflow, limites da viewport e tamanho dos links em todas as rotas.
 
 `/conta/` mantém `.page-footer` e seu CSS próprio por ser a barra do aplicativo Conta, sem usar o shell público. Os HTML de Privacidade e Termos seguem byte-idênticos e a validação de documento continua fechada conforme os hashes publicados por Identity.
+
+### SSOT do shell e header mobile — 29/10/2026
+
+O contrato `contracts/public-shell.json` agora concentra marca, ações, navegação e rodapé por rota. As oito rotas comuns têm somente marcadores no HTML-fonte; `scripts/public_shell.py` valida o contrato e materializa a estrutura no build. O CSS responsivo vive em `site/assets/site.css`; conteúdo traduzido continua usando `site/i18n/catalog.js` e `runtime.js`. O build mantém os recursos da marca vindos do artifact verificado da Surface.
+
+Em celular, o grid comum mantém marca + ações na primeira linha e a navegação na seguinte. O seletor de idioma entra no próprio grupo de links. Privacidade/Termos são exceções por hash de Identity: seus arquivos não são reescritos, e o runtime os normaliza para a mesma apresentação. Minha Conta mantém seu shell de aplicação. As provas de fonte/contrato e localização passaram; a captura Chrome em 1440/390/320 px ainda depende de um host com ChromeDriver.

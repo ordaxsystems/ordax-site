@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 
 from public_html_render import render_public_html
+from public_shell import load_contract as load_public_shell, render_public_shell
 from public_release_catalog import render_catalog, validate_catalog
 from site_routes import ROUTES, ROUTE_RECORDS
 from site_seo import validate_origin, render_html, write_robots_sitemap
@@ -113,6 +114,11 @@ def check_source(strict_assets: bool = False) -> dict:
         raise SiteError("generated Surface preview must come only from a pinned external artifact")
     if missing_routes:
         raise SiteError("missing routes: " + ", ".join(sorted(missing_routes)))
+    public_shell = load_public_shell(ROUTE_RECORDS)
+    for route in ROUTE_RECORDS:
+        page = SOURCE / route["source"]
+        markup = page.read_text(encoding="utf-8")
+        render_public_shell(markup, route["path"], public_shell)
     config = json.loads((SOURCE / "config/public-site.json").read_text("utf-8"))
     if config.get("$schema") != "prototype-ordax.public-site-runtime/1":
         raise SiteError("runtime config schema mismatch")
@@ -415,6 +421,7 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
     if publications is not None:
         raise SiteError("public downloads require an attested publisher artifact; local --publications is forbidden")
     check_source(strict_assets=True)
+    public_shell = load_public_shell(ROUTE_RECORDS)
     if out.exists():
         raise SiteError("refusing to replace existing build output")
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -432,7 +439,10 @@ def build(out: Path, sha: str, brand: Path, publications: Path | None,
             relative = page.relative_to(temp).as_posix()
             if relative not in route_by_source:
                 raise SiteError("HTML page has no declared route: " + relative)
-            markup = render_public_html(page.read_text("utf-8"))
+            markup = render_public_shell(
+                page.read_text("utf-8"), route_by_source[relative]["path"], public_shell
+            )
+            markup = render_public_html(markup)
             for marker, expected in (
                 ("<!-- ORDAX_PUBLIC_PLAN_CATALOG -->", "index.html"),
                 ("<!-- ORDAX_ACCOUNT_PLAN_CATALOG -->", "conta/index.html"),

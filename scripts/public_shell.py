@@ -1,0 +1,193 @@
+"""Render the public header and footer from one route-aware Site contract."""
+from __future__ import annotations
+
+import html
+import json
+import re
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+CONTRACT_PATH = ROOT / "contracts/public-shell.json"
+HEADER_MARKER = "<!-- ORDAX_PUBLIC_HEADER -->"
+FOOTER_MARKER = "<!-- ORDAX_PUBLIC_FOOTER -->"
+EXTERNAL_HREFS = {"https://web.ordax.com.br/"}
+
+
+class PublicShellError(ValueError):
+    pass
+
+
+def _is_safe_href(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    if value in EXTERNAL_HREFS:
+        return True
+    if re.fullmatch(r"#[A-Za-z][A-Za-z0-9_-]*", value):
+        return True
+    if "#" in value:
+        path, fragment = value.split("#", 1)
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", fragment):
+            return False
+    else:
+        path = value
+    if not path.startswith("/") or path.startswith("//") or "\\" in path or "?" in path:
+        return False
+    segments = path[1:].split("/")
+    if segments and segments[-1] == "":
+        segments.pop()
+    return all(re.fullmatch(r"[A-Za-z0-9._~-]+", part)
+               and part not in {".", ".."} for part in segments)
+
+
+def _validate_links(value: object, label: str, *, allow_auth: bool = False) -> None:
+    if not isinstance(value, list) or not value:
+        raise PublicShellError(label + " must contain links")
+    current_count = 0
+    for item in value:
+        allowed = {"href", "label", "current"}
+        if allow_auth:
+            allowed |= {"auth", "cta", "arrow"}
+        if not isinstance(item, dict) or set(item) - allowed:
+            raise PublicShellError(label + " has invalid link fields")
+        if not _is_safe_href(item.get("href")):
+            raise PublicShellError(label + " has an unsafe link target")
+        if not isinstance(item.get("label"), str) or not item["label"].strip():
+            raise PublicShellError(label + " has an empty label")
+        if "current" in item and type(item["current"]) is not bool:
+            raise PublicShellError(label + " has an invalid current-page marker")
+        current_count += item.get("current") is True
+        if allow_auth:
+            if any(key in item and type(item[key]) is not bool for key in ("cta", "arrow")):
+                raise PublicShellError(label + " has invalid action decoration")
+            auth = item.get("auth")
+            if auth is not None:
+                if not isinstance(auth, str):
+                    raise PublicShellError(label + " has an invalid Identity action")
+                expected_href = {"login": "/login/", "register": "/cadastro/"}.get(auth)
+                if expected_href is None or item["href"] != expected_href:
+                    raise PublicShellError(label + " has an invalid Identity action")
+    if current_count > 1:
+        raise PublicShellError(label + " marks multiple current pages")
+
+
+def load_contract(routes: list[dict], path: Path = CONTRACT_PATH) -> dict:
+    """Load the shell data and prove its route keys cover the canonical routes."""
+    if path.is_symlink() or not path.is_file():
+        raise PublicShellError("public shell contract missing or symlinked")
+    contract = json.loads(path.read_text(encoding="utf-8"))
+    if (not isinstance(contract, dict)
+            or set(contract) != {"$schema", "brand", "header_navigation_label",
+                                 "footer_navigation_label", "exceptions", "routes"}
+            or contract["$schema"] != "ordax.site-public-shell/1"):
+        raise PublicShellError("invalid public shell contract")
+    brand = contract["brand"]
+    if (not isinstance(brand, dict)
+            or set(brand) != {"href", "aria_label", "name", "symbol"}
+            or not _is_safe_href(brand["href"])
+            or not isinstance(brand["aria_label"], str) or not brand["aria_label"].strip()
+            or not isinstance(brand["name"], str) or not brand["name"].strip()
+            or not isinstance(brand["symbol"], str)
+            or not re.fullmatch(r"/assets/[A-Za-z0-9._-]+", brand["symbol"])):
+        raise PublicShellError("invalid public shell brand")
+    for field in ("header_navigation_label", "footer_navigation_label"):
+        if not isinstance(contract[field], str) or not contract[field].strip():
+            raise PublicShellError("invalid public shell navigation label")
+
+    exceptions = contract["exceptions"]
+    if not isinstance(exceptions, list):
+        raise PublicShellError("invalid public shell exceptions")
+    exception_paths: set[str] = set()
+    route_paths = {item["path"] for item in routes}
+    for exception in exceptions:
+        if (not isinstance(exception, dict)
+                or set(exception) != {"path", "owner", "reason"}
+                or exception["path"] not in route_paths
+                or exception["path"] in exception_paths
+                or exception["owner"] not in {"account-app", "identity"}
+                or not isinstance(exception["reason"], str) or not exception["reason"].strip()):
+            raise PublicShellError("invalid public shell exception")
+        exception_paths.add(exception["path"])
+    route_data = contract["routes"]
+    expected_paths = route_paths - exception_paths
+    if not isinstance(route_data, dict) or set(route_data) != expected_paths:
+        raise PublicShellError("public shell route data must match canonical Site routes")
+
+    for route_path, data in route_data.items():
+        if (not isinstance(data, dict)
+                or set(data) != {"actions", "navigation", "footer_tagline", "footer_navigation"}
+                or not isinstance(data["actions"], list) or not 1 <= len(data["actions"]) <= 2
+                or not isinstance(data["footer_tagline"], str) or not data["footer_tagline"].strip()):
+            raise PublicShellError("invalid public shell route data: " + route_path)
+        _validate_links(data["actions"], route_path + " actions", allow_auth=True)
+        _validate_links(data["navigation"], route_path + " navigation")
+        _validate_links(data["footer_navigation"], route_path + " footer")
+    return contract
+
+
+def _attribute(name: str, value: str) -> str:
+    return f' {name}="{html.escape(value, quote=True)}"'
+
+
+def _link(item: dict, *, auth_label: bool = False) -> str:
+    classes = "nav-cta" if item.get("cta") else ""
+    class_attribute = _attribute("class", classes) if classes else ""
+    auth_attribute = _attribute("data-auth-nav", item["auth"]) if item.get("auth") else ""
+    current_attribute = _attribute("aria-current", "page") if item.get("current") else ""
+    label = html.escape(item["label"])
+    if auth_label:
+        label = f'<span data-auth-nav-label>{label}</span>'
+    arrow = ' <span aria-hidden="true">↗</span>' if item.get("arrow") else ""
+    return (f'<a{class_attribute}{_attribute("href", item["href"])}'
+            f'{auth_attribute}{current_attribute}>{label}{arrow}</a>')
+
+
+def _render_brand(contract: dict, *, header: bool) -> str:
+    brand = contract["brand"]
+    size = (30, 30) if header else (48, 30)
+    return (
+        f'<a class="brand"{_attribute("href", brand["href"])}'
+        f'{_attribute("aria-label", brand["aria_label"])}>'
+        f'<img class="brand-mark" src="{html.escape(brand["symbol"], quote=True)}" '
+        f'width="{size[0]}" height="{size[1]}" alt="">'
+        f'<span class="brand-name">{html.escape(brand["name"])}</span></a>'
+    )
+
+
+def _render_header(contract: dict, data: dict) -> str:
+    actions = "".join(_link(item, auth_label=bool(item.get("auth")))
+                      for item in data["actions"])
+    navigation = "".join(_link(item) for item in data["navigation"])
+    return (
+        '<header class="site-header">'
+        + _render_brand(contract, header=True)
+        + f'<div class="site-actions">{actions}</div>'
+        + f'<nav class="site-nav" aria-label="{html.escape(contract["header_navigation_label"], quote=True)}">'
+        + '<span data-public-locale-slot></span>' + navigation + '</nav></header>'
+    )
+
+
+def _render_footer(contract: dict, data: dict) -> str:
+    navigation = "".join(_link(item) for item in data["footer_navigation"])
+    return (
+        '<footer class="site-footer"><div>'
+        + _render_brand(contract, header=False)
+        + f'<p>{html.escape(data["footer_tagline"])}</p></div>'
+        + f'<nav aria-label="{html.escape(contract["footer_navigation_label"], quote=True)}">'
+        + navigation + '</nav></footer>'
+    )
+
+
+def render_public_shell(markup: str, route_path: str, contract: dict) -> str:
+    """Replace shell markers in ordinary routes; leave locked/app shells intact."""
+    data = contract["routes"].get(route_path)
+    if data is None:
+        if HEADER_MARKER in markup or FOOTER_MARKER in markup:
+            raise PublicShellError("shell marker found on an exempt route: " + route_path)
+        return markup
+    if markup.count(HEADER_MARKER) != 1 or markup.count(FOOTER_MARKER) != 1:
+        raise PublicShellError("public shell markers must each occur once: " + route_path)
+    if re.search(r'<header class="site-header"|<footer class="site-footer"', markup):
+        raise PublicShellError("route source duplicates generated public shell: " + route_path)
+    return markup.replace(HEADER_MARKER, _render_header(contract, data)).replace(
+        FOOTER_MARKER, _render_footer(contract, data)
+    )

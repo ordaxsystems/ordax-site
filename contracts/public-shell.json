@@ -1,0 +1,166 @@
+{
+  "$schema": "ordax.site-public-shell/1",
+  "brand": {
+    "href": "/",
+    "aria_label": "OrdaX — início",
+    "name": "OrdaX",
+    "symbol": "/assets/ordax-symbol.png"
+  },
+  "header_navigation_label": "Navegação principal",
+  "footer_navigation_label": "Rodapé",
+  "exceptions": [
+    {
+      "path": "/conta/",
+      "owner": "account-app",
+      "reason": "Minha Conta owns an application shell."
+    },
+    {
+      "path": "/privacidade/",
+      "owner": "identity",
+      "reason": "Legal document bytes are hash-pinned by Identity."
+    },
+    {
+      "path": "/termos/",
+      "owner": "identity",
+      "reason": "Legal document bytes are hash-pinned by Identity."
+    }
+  ],
+  "routes": {
+    "/": {
+      "actions": [
+        { "href": "/login/", "auth": "login", "label": "Entrar" },
+        { "href": "/cadastro/", "auth": "register", "label": "Criar conta", "cta": true, "arrow": true }
+      ],
+      "navigation": [
+        { "href": "#experimente", "label": "Experiência" },
+        { "href": "#espacos", "label": "Espaços" },
+        { "href": "#intelligence", "label": "Intelligence" },
+        { "href": "#ecossistema", "label": "Aplicativos" },
+        { "href": "#dispositivos", "label": "Onde usar" }
+      ],
+      "footer_tagline": "Um universo para sua vida e seu trabalho.",
+      "footer_navigation": [
+        { "href": "#intelligence", "label": "Intelligence" },
+        { "href": "#controle", "label": "Controle e segurança" },
+        { "href": "#duvidas", "label": "Dúvidas" },
+        { "href": "https://web.ordax.com.br/", "label": "OrdaX Web" },
+        { "href": "/download/", "label": "Download" },
+        { "href": "/login/", "label": "Entrar" },
+        { "href": "/cadastro/", "label": "Criar conta" },
+        { "href": "#planos", "label": "Planos e benefícios" },
+        { "href": "/conta/", "label": "Conta" },
+        { "href": "/licencas/", "label": "Licenças" },
+        { "href": "/privacidade/", "label": "Privacidade" },
+        { "href": "/termos/", "label": "Termos" }
+      ]
+    },
+    "/download/": {
+      "actions": [
+        { "href": "/login/", "auth": "login", "label": "Entrar" },
+        { "href": "/", "label": "Conheça o OrdaX", "cta": true, "arrow": true }
+      ],
+      "navigation": [
+        { "href": "/#experimente", "label": "Experiência" },
+        { "href": "/#produto", "label": "Intelligence" },
+        { "href": "/#dispositivos", "label": "Dispositivos" }
+      ],
+      "footer_tagline": "Seu sistema. Novas possibilidades.",
+      "footer_navigation": [
+        { "href": "/", "label": "Início" },
+        { "href": "/cadastro/", "label": "Criar conta" },
+        { "href": "/licencas/", "label": "Licenças" },
+        { "href": "/privacidade/", "label": "Privacidade" },
+        { "href": "/termos/", "label": "Termos" }
+      ]
+    },
+    "/login/": {
+      "actions": [
+        { "href": "/cadastro/", "auth": "register", "label": "Criar conta", "cta": true, "arrow": true }
+      ],
+      "navigation": [{ "href": "/", "label": "Início" }],
+      "footer_tagline": "Seu sistema. Sua identidade.",
+      "footer_navigation": [
+        { "href": "/", "label": "Início" },
+        { "href": "/download/", "label": "Download" },
+        { "href": "/licencas/", "label": "Licenças" },
+        { "href": "/privacidade/", "label": "Privacidade" },
+        { "href": "/termos/", "label": "Termos" }
+      ]
+    },
+    "/cadastro/": {
+      "actions": [
+        { "href": "/login/", "auth": "login", "label": "Entrar", "cta": true, "arrow": true }
+      ],
+      "navigation": [{ "href": "/", "label": "Início" }],
+      "footer_tagline": "Seu sistema. Sua identidade.",
+      "footer_navigation": [
+        { "href": "/", "label": "Início" },
+        { "href": "/download/", "label": "Download" },
+        { "href": "/licencas/", "label": "Licenças" },
+        { "href": "/privacidade/", "label": "Privacidade" },
+        { "href": "/termos/", "label": "Termos" }
+      ]
+    },
+    "/recuperar/": {
+      "actions": [
+        { "href": "/login/", "auth": "login", "label": "Entrar", "cta": true, "arrow": true }
+      ],
+      "navigation": [{ "href": "/", "label": "Início" }],
+      "footer_tagline": "Seu sistema. Sua identidade.",
+      "footer_navigation": [
+        { "href": "/", "label": "Início" },
+        { "href": "/login/", "label": "Entrar" },
+        { "href": "/privacidade/", "label": "Privacidade" },
+        { "href": "/termos/", "label": "Termos" }
+      ]
+    },
+    "/recuperar/nova-senha/": {
+      "actions": [
+        { "href": "/login/", "auth": "login", "label": "Entrar", "cta": true, "arrow": true }
+      ],
+      "navigation": [{ "href": "/", "label": "Início" }],
+      "footer_tagline": "Seu sistema. Sua identidade.",
+      "footer_navigation": [
+        { "href": "/", "label": "Início" },
+        { "href": "/login/", "label": "Entrar" },
+        { "href": "/privacidade/", "label": "Privacidade" },
+        { "href": "/termos/", "label": "Termos" }
+      ]
+    },
+    "/licencas/": {
+      "actions": [
+        { "href": "/login/", "auth": "login", "label": "Entrar" },
+        { "href": "/cadastro/", "auth": "register", "label": "Criar conta", "cta": true }
+      ],
+      "navigation": [
+        { "href": "/", "label": "Início" },
+        { "href": "/download/", "label": "Download" },
+        { "href": "/licencas/", "label": "Licenças", "current": true }
+      ],
+      "footer_tagline": "Protótipo OrdaX · conformidade vinculada por release.",
+      "footer_navigation": [
+        { "href": "/", "label": "Início" },
+        { "href": "/download/", "label": "Download" },
+        { "href": "/licencas/", "label": "Licenças", "current": true },
+        { "href": "/privacidade/", "label": "Privacidade" },
+        { "href": "/termos/", "label": "Termos" }
+      ]
+    },
+    "/web/": {
+      "actions": [
+        { "href": "/login/", "auth": "login", "label": "Entrar", "cta": true, "arrow": true }
+      ],
+      "navigation": [
+        { "href": "/", "label": "Início" },
+        { "href": "/download/", "label": "Download" }
+      ],
+      "footer_tagline": "Uma conta. Seu espaço de trabalho.",
+      "footer_navigation": [
+        { "href": "/", "label": "Início" },
+        { "href": "/download/", "label": "Download" },
+        { "href": "/privacidade/", "label": "Privacidade" },
+        { "href": "/termos/", "label": "Termos" }
+      ]
+    }
+  }
+}

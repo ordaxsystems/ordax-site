@@ -187,7 +187,33 @@
   function normalizePublicHeader() {
     const header = document.querySelector(".site-header");
     const navigation = header?.querySelector(":scope > .site-nav");
-    if (!header || !navigation || header.querySelector(":scope > .site-actions")) return;
+    if (!header || !navigation) return;
+
+    // Privacy and terms retain their Identity-pinned source bytes. Normalize
+    // the existing text link into the same visible brand used by generated
+    // public shells, without editing either legal document.
+    const brand = header.querySelector(":scope > .brand") ||
+      Array.from(header.children).find(element => element.matches?.('a[href="/"]'));
+    if (brand && !brand.querySelector("img.brand-mark")) {
+      const name = brand.querySelector(".brand-name")?.textContent.trim() ||
+        brand.textContent.trim();
+      if (name) {
+        const mark = document.createElement("img");
+        mark.className = "brand-mark";
+        mark.src = "/assets/ordax-symbol.png";
+        mark.width = 30;
+        mark.height = 30;
+        mark.alt = "";
+        const wordmark = document.createElement("span");
+        wordmark.className = "brand-name";
+        wordmark.textContent = name;
+        brand.classList.add("brand");
+        brand.setAttribute("aria-label", "OrdaX — início");
+        brand.replaceChildren(mark, wordmark);
+      }
+    }
+
+    if (header.querySelector(":scope > .site-actions")) return;
 
     const authLinks = Array.from(navigation.querySelectorAll(":scope > [data-auth-nav]"));
     if (!authLinks.length) return;

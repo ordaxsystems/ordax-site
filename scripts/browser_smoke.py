@@ -314,6 +314,20 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const $ = s => document.querySelector(s);
       const body = document.body;
       const main = $('main');
+      const header = $('header.site-header');
+      const headerBrand = header?.querySelector(':scope > .brand') ||
+        header?.querySelector(':scope > a:first-child');
+      const headerActions = header?.querySelector(':scope > .site-actions');
+      const headerNav = header?.querySelector(':scope > .site-nav');
+      const localeSelect = header?.querySelector('[data-public-locale-select]');
+      const headerBrandBox = headerBrand?.getBoundingClientRect();
+      const headerActionsBox = headerActions?.getBoundingClientRect();
+      const localeBox = localeSelect?.getBoundingClientRect();
+      const localeSharesNavigationLine = route === '/conta/' || !header ||
+        (!!localeBox && [...headerNav.querySelectorAll(':scope > a')].some(link => {
+          const box = link.getBoundingClientRect();
+          return Math.abs((box.top + box.height / 2) - (localeBox.top + localeBox.height / 2)) <= 4;
+        }));
       const footer = $('footer.site-footer');
       const footerLinks = footer ? [...footer.querySelectorAll('a')] : [];
       const footerBox = footer?.getBoundingClientRect();
@@ -369,6 +383,13 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         mainCount: document.querySelectorAll('main').length,
         mainH1Count: [...document.querySelectorAll('main h1')].filter(h => !h.closest('.playground, [aria-hidden="true"]')).length,
         skip: !!$('.skip-link[href^="#"]'),
+        publicHeaderRegionsReady: route === '/conta/' || !header ||
+          (!!headerBrand && !!headerActions && !!headerNav && !!localeSelect),
+        publicHeaderBrandActionsShareRow: route === '/conta/' || !header ||
+          (!!headerBrandBox && !!headerActionsBox &&
+            Math.abs((headerBrandBox.top + headerBrandBox.height / 2) -
+              (headerActionsBox.top + headerActionsBox.height / 2)) <= 6),
+        publicHeaderLocaleSharesNavigationLine: localeSharesNavigationLine,
         sharedFooterContract: route === '/conta/'
           ? !footer && !!$('footer.page-footer')
           : !!footer,
@@ -903,6 +924,9 @@ def run(root: Path, evidence: Path) -> dict:
                     "namedDocument": bool(report["title"]),
                     "mainHasSinglePrimaryHeading": report["mainH1Count"] == 1,
                     "skipNavigation": report["skip"],
+                    "publicHeaderRegionsReady": report["publicHeaderRegionsReady"],
+                    "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
+                    "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
                     "sharedFooterContract": report["sharedFooterContract"],
                     "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
                     "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
