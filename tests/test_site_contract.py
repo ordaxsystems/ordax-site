@@ -246,6 +246,14 @@ class SiteContractTests(unittest.TestCase):
             with self.subTest(route=source_path):
                 self.assertEqual(actual, expected)
 
+        web_markup = (ROOT / "site/web/index.html").read_text(encoding="utf-8")
+        self.assertLess(web_markup.index('class="account-story"'),
+                        web_markup.index('class="account-access"'))
+        self.assertLess(web_markup.index('class="account-access"'),
+                        web_markup.index('class="web-details"'))
+        web_css = (ROOT / "site/assets/web-entry.css").read_text(encoding="utf-8")
+        self.assertIn('grid-template-areas: "story access" "details access";', web_css)
+
     def test_public_content_gutters_and_landing_rhythm_have_single_source(self):
         shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
         portal_css = (ROOT / "site/assets/portal.css").read_text(encoding="utf-8")
