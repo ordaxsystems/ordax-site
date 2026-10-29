@@ -151,6 +151,7 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn('.site-nav[data-expanded="true"] .public-locale-switcher > .sr-only', shared_css)
         self.assertIn("publicHeaderMobileLocaleInDisclosure", smoke)
         self.assertIn("localeCanSwitchInsideDisclosure", smoke)
+        self.assertIn("menuPanelFitsViewport", smoke)
         self.assertIn("navigationLandmarksMatchLocale", smoke)
         header_layout_properties = PUBLIC_SHELL_LAYOUT_PROPERTIES - {"border", "border-top"}
         for sheet in (ROOT / "site/assets").glob("*.css"):

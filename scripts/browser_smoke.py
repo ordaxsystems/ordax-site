@@ -927,7 +927,8 @@ def mobile_navigation_interaction_probe(driver: Driver) -> dict:
       if (!nav || !linksContainer || !actions || !button || !locale || !links.length) return {
         buttonPresent: false, startsCollapsed: false, opensLinks: false,
         localeLivesInDisclosure: false, localeLabelVisibleWhenOpen: false,
-        localeCanSwitchInsideDisclosure: false, escapeClosesAndRestoresFocus: false
+        localeCanSwitchInsideDisclosure: false, menuPanelFitsViewport: false,
+        escapeClosesAndRestoresFocus: false
       };
       const startsCollapsed = button.parentElement === actions &&
         button.getAttribute('aria-controls') === nav.id &&
@@ -938,6 +939,10 @@ def mobile_navigation_interaction_probe(driver: Driver) -> dict:
       const opensLinks = button.getAttribute('aria-expanded') === 'true' && nav.dataset.expanded === 'true' &&
         getComputedStyle(nav).display !== 'none' && getComputedStyle(linksContainer).display === 'grid' &&
         links.every(link => getComputedStyle(link).display !== 'none');
+      const navBox = nav.getBoundingClientRect();
+      const menuPanelFitsViewport = navBox.left >= -1 &&
+        navBox.right <= document.documentElement.clientWidth + 1 &&
+        nav.scrollWidth <= nav.clientWidth + 1;
       const localeLivesInDisclosure = nav.contains(locale) && locale.getBoundingClientRect().width > 0;
       const localeLabelVisibleWhenOpen = !!localeLabel &&
         getComputedStyle(localeLabel).position !== 'absolute' &&
@@ -954,7 +959,8 @@ def mobile_navigation_interaction_probe(driver: Driver) -> dict:
         nav.dataset.expanded === 'false' && document.activeElement === button &&
         getComputedStyle(nav).display === 'none';
       return {buttonPresent: true, startsCollapsed, opensLinks, localeLivesInDisclosure,
-        localeLabelVisibleWhenOpen, localeCanSwitchInsideDisclosure, escapeClosesAndRestoresFocus};
+        localeLabelVisibleWhenOpen, localeCanSwitchInsideDisclosure, menuPanelFitsViewport,
+        escapeClosesAndRestoresFocus};
     })();""")
 
 

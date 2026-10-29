@@ -1470,7 +1470,7 @@ html body[data-page] footer.site-footer nav {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
-    width: min(28rem, calc(100vw - clamp(24px, 8vw, 40px)));
+    width: min(28rem, calc(100% - clamp(24px, 8vw, 40px)));
     max-height: min(70vh, 38rem);
     overflow: auto;
     padding: 12px;
