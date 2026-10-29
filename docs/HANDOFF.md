@@ -65,6 +65,14 @@ Alterar apenas o owner correto → criar PR → comprovar CI e Chrome no Site �
 
 ## Polimento visual responsivo — 29/10/2026
 
+### Cabeçalho público com fonte única de layout
+
+O cabeçalho das rotas públicas usa uma composição única: marca, ações de identidade e navegação. `site/assets/site.css` é a única fonte de geometria responsiva do shell e do seletor de idioma; folhas de página podem definir cor e acabamento, mas não repetem grid, espaçamento estrutural ou breakpoints do cabeçalho. `site/i18n/catalog.js` e `site/i18n/runtime.js` continuam sendo a fonte única de idiomas e rótulos. O contrato de rotas permanece em `contracts/site-routes.json`.
+
+No celular, a marca e as ações de entrar/cadastro ficam na primeira linha; a navegação ocupa a linha seguinte com o seletor de idioma junto aos destinos, antes dos links. Essa ordem também é a ordem do DOM e do teclado. Em `Privacidade` e `Termos`, o runtime normaliza a estrutura durante a execução sem alterar os HTML legais protegidos por hash. `/conta/` conserva sua barra de aplicação própria.
+
+Esta composição substitui as notas anteriores deste handoff que descreviam o seletor sozinho numa linha estreita. O conteúdo legal, os hashes usados por Identity e os contratos de serviço permanecem intactos.
+
 - Na Conta em tablets touch, cada destino de “Mais” ocupa uma linha completa dentro do diálogo; a regra também evita que folhas de estilo do portal façam links inline em grupos com vários destinos.
 - O nome acessível “Fechar diálogo” da Conta agora tem tradução inglesa no catálogo compartilhado, para que leitores de tela recebam o idioma correto após a troca para en-US.
 - Em telas touch, as marcas clicáveis de cabeçalho/rodapé e o link de pular conteúdo agora mantêm alvos de pelo menos 44 px; a Conta segue o mesmo tamanho para a marca do topbar.

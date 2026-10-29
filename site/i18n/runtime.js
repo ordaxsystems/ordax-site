@@ -184,8 +184,23 @@
     if (label) label.textContent = t("locale.selector.label");
   }
 
+  function normalizePublicHeader() {
+    const header = document.querySelector(".site-header");
+    const navigation = header?.querySelector(":scope > .site-nav");
+    if (!header || !navigation || header.querySelector(":scope > .site-actions")) return;
+
+    const authLinks = Array.from(navigation.querySelectorAll(":scope > [data-auth-nav]"));
+    if (!authLinks.length) return;
+
+    const actions = document.createElement("div");
+    actions.className = "site-actions";
+    header.insertBefore(actions, navigation);
+    authLinks.forEach(link => actions.append(link));
+  }
+
   function installSelector() {
     if (document.querySelector("[data-public-locale-switcher]")) return;
+    normalizePublicHeader();
     const nav = document.querySelector("[data-public-locale-slot]") || document.querySelector(".site-nav");
     if (!nav) return;
 
@@ -208,7 +223,11 @@
     select.addEventListener("change", () => setLocale(select.value));
 
     host.append(text, select);
-    nav.append(host);
+    if (nav.matches(".site-nav")) {
+      nav.insertBefore(host, nav.querySelector(":scope > a"));
+    } else {
+      nav.append(host);
+    }
     updateSelector();
   }
 

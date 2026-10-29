@@ -37,6 +37,18 @@ a {
   color: inherit;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .skip-link {
   position: fixed;
   left: 16px;
@@ -56,7 +68,6 @@ a {
   transform: translateY(0);
 }
 
-.site-header,
 .site-footer {
   max-width: var(--content);
   margin: 0 auto;
@@ -66,10 +77,19 @@ a {
   gap: 28px;
 }
 
-.site-header {
-  min-height: 96px;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--line);
+.site-actions > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.site-nav > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  white-space: nowrap;
 }
 
 .brand {
@@ -102,13 +122,6 @@ a {
   margin-right: -8px;
 }
 
-.site-nav {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-  font-size: 14px;
-}
-
 .site-nav a {
   text-decoration: none;
   border-bottom: 1px solid transparent;
@@ -120,10 +133,78 @@ a {
   border-bottom-color: var(--ink);
 }
 
-.site-nav .nav-cta {
+.site-header .nav-cta {
+  gap: 12px;
   padding: 11px 17px;
   border: 1px solid var(--ink);
   border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* This higher-specificity shell contract also wins over the byte-locked
+   legal pages' legacy presentation stylesheet without changing their HTML. */
+html body[data-page] .site-header {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  grid-template-areas: "brand actions nav";
+  align-items: center;
+  justify-content: stretch;
+  gap: clamp(12px, 2vw, 28px);
+  width: 100%;
+  max-width: var(--content);
+  min-height: 96px;
+  margin: 0 auto;
+  padding: 28px 42px;
+  border-bottom: 1px solid var(--line);
+}
+
+html body[data-page="landing"] .site-header {
+  position: sticky;
+  top: 12px;
+  z-index: 130;
+}
+
+html body[data-page] .site-header > .brand {
+  grid-area: brand;
+  justify-self: start;
+  gap: 9px;
+  min-width: 0;
+  min-height: 44px;
+}
+
+html body[data-page] .site-header > .brand .brand-name { font-size: 27px; }
+
+html body[data-page] .site-header > .brand .brand-mark {
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  transform: none;
+  object-fit: contain;
+}
+
+html body[data-page] .site-header > .site-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  justify-self: start;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  font-size: 13px;
+}
+
+html body[data-page] .site-header > .site-nav {
+  grid-area: nav;
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: clamp(10px, 1.8vw, 24px);
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
 }
 
 .hero {
@@ -656,14 +737,9 @@ a {
     padding-right: 22px;
   }
 
-  .site-nav > a,
   .site-footer nav > a {
     display: inline-flex;
     align-items: center;
-    min-height: 44px;
-  }
-
-  .public-locale-select {
     min-height: 44px;
   }
 
@@ -1010,11 +1086,11 @@ a {
 .public-locale-switcher {
   display: inline-flex;
   align-items: center;
-  margin-inline-start: 0.35rem;
+  margin: 0;
 }
 
 .public-locale-select {
-  min-height: 2rem;
+  min-height: 36px;
   max-width: 10rem;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
@@ -1033,6 +1109,12 @@ a {
 .public-locale-select:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
+}
+
+/* Locale control sizing is part of the shared public header contract. */
+.site-header .public-locale-select {
+  min-width: 12rem;
+  max-width: 100%;
 }
 
 /* Public account abuse protection: layout only; authority remains server-side. */
@@ -1056,11 +1138,7 @@ a {
 /* One authenticated profile popover for all public-site headers.
    The account session and sign-out action remain owned by /auth. */
 .site-header .site-nav,
-.site-header .site-actions,
-.site-header .login-nav-actions,
-.site-header .signup-nav-actions,
-.site-header .download-nav-actions,
-.site-header .account-header-actions{position:relative}
+.site-header .site-actions{position:relative}
 .site-header .ordax-profile-menu[hidden]{display:none!important}
 .site-header .ordax-profile-menu{
   position:absolute;top:calc(100% + 10px);right:0;z-index:120;
@@ -1119,7 +1197,6 @@ a {
 /* Preserve comfortable targets on touch-first tablets and hybrid devices,
    even when their CSS viewport uses desktop breakpoints. */
 @media (any-pointer: coarse) {
-  .site-header .brand,
   .site-footer .brand {
     min-height: 44px;
   }
@@ -1130,7 +1207,6 @@ a {
     min-height: 44px;
   }
 
-  .site-header :is(.site-nav, .site-actions, .account-nav-actions, .download-nav-actions, .login-nav-actions, .signup-nav-actions) > a,
   .site-footer nav > a {
     display: inline-flex;
     align-items: center;
@@ -1149,7 +1225,7 @@ a {
     grid-template-areas: "brand actions" "nav nav";
     align-items: center;
     justify-content: stretch;
-    gap: 8px 20px;
+    gap: 8px 16px;
     min-height: 0;
     padding: 16px clamp(18px, 4vw, 32px);
   }
@@ -1161,14 +1237,14 @@ a {
     max-width: 100%;
   }
 
-  html body[data-page] .site-header > :is(.site-actions, .account-nav-actions, .download-nav-actions, .login-nav-actions, .signup-nav-actions) {
+  html body[data-page] .site-header > .site-actions {
     grid-area: actions;
     justify-self: end;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px 14px;
+    gap: 6px 10px;
     min-width: 0;
     max-width: 100%;
     margin: 0;
@@ -1190,12 +1266,16 @@ a {
     white-space: normal;
   }
 
-  html body[data-page] .site-header > .site-nav > a {
+  html body[data-page] .site-header > .site-nav > [data-public-locale-slot] {
     display: inline-flex;
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     align-items: center;
+    min-width: 0;
+  }
+
+  html body[data-page] .site-header > .site-nav > a {
+    flex: 0 1 auto;
     justify-content: center;
-    min-height: 44px;
     max-width: 100%;
     text-align: center;
     white-space: normal;
@@ -1203,75 +1283,93 @@ a {
   }
 
   html body[data-page] .site-nav > .public-locale-switcher {
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     min-width: 0;
     margin: 0;
   }
 
   html body[data-page] .site-nav .public-locale-select {
     min-width: 0;
-    max-width: 100%;
-    min-height: 44px;
-  }
-
-  html body[data-page] .account-nav-actions > .account-locale-slot,
-  html body[data-page] .site-actions > .landing-locale-slot {
-    display: inline-flex;
-    order: 0;
-    align-items: center;
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  html body[data-page] .account-nav-actions .public-locale-select,
-  html body[data-page] .site-actions .public-locale-select {
-    min-width: 0;
-    max-width: 100%;
+    max-width: min(12rem, calc(100vw - 32px));
     min-height: 44px;
   }
 }
 
 @media (max-width: 600px) {
   html body[data-page] .site-header {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "brand" "actions" "nav";
-    justify-items: center;
-    gap: 8px;
-    padding: 14px clamp(16px, 5vw, 24px);
+    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-areas: "brand actions" "nav nav";
+    justify-items: stretch;
+    gap: 6px 8px;
+    padding: 12px clamp(12px, 4vw, 20px);
   }
 
   html body[data-page] .site-header > .brand {
-    justify-self: center;
-    flex: none;
+    justify-self: start;
+    min-width: 0;
+    gap: 6px;
   }
 
-  html body[data-page] .site-header > :is(.site-actions, .account-nav-actions, .download-nav-actions, .login-nav-actions, .signup-nav-actions) {
-    justify-self: center;
+  html body[data-page] .site-header > .brand .brand-name {
+    font-size: 23px;
+  }
+
+  html body[data-page] .site-header > .brand .brand-mark {
+    width: 30px;
+    height: 26px;
+    transform: none;
+    margin: 0;
+  }
+
+  html body[data-page] .site-header > .site-actions {
+    justify-self: end;
+    flex-wrap: nowrap;
     justify-content: center;
-    width: min(100%, 36rem);
-    gap: 6px 10px;
+    width: auto;
+    max-width: 100%;
+    gap: 4px 7px;
     text-align: center;
+    font-size: 12px;
+  }
+
+  html body[data-page] .site-header > .site-actions .nav-cta {
+    padding: 9px 10px;
+    gap: 8px;
+    font-size: 12px;
   }
 
   html body[data-page] .site-header > .site-nav {
+    justify-self: stretch;
+    justify-content: flex-start;
+    gap: 2px clamp(6px, 2vw, 10px);
+    padding-top: 6px;
+    text-align: left;
+  }
+
+  html body[data-page] .site-header:not(:has(> .site-actions)) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "brand" "nav";
+    justify-items: center;
+  }
+
+  html body[data-page] .site-header:not(:has(> .site-actions)) > .brand {
+    justify-self: center;
+  }
+
+  html body[data-page] .site-header:not(:has(> .site-actions)) > .site-nav {
     justify-content: center;
-    gap: 2px clamp(6px, 2.5vw, 14px);
-    padding-top: 8px;
     text-align: center;
   }
 
-  html body[data-page] .site-nav > .public-locale-switcher,
-  html body[data-page] .account-nav-actions > .account-locale-slot,
-  html body[data-page] .site-actions > .landing-locale-slot {
-    flex: 1 1 100%;
-    justify-content: center;
-    width: 100%;
+  html body[data-page] .site-header .public-locale-select {
+    width: min(10rem, 48vw);
+    min-width: 0;
+    max-width: min(10rem, 48vw);
   }
 
-  html body[data-page] .site-header .public-locale-select {
-    width: auto;
-    min-width: 0;
-    max-width: min(100%, 18rem);
+  html body[data-page="landing"] .site-header {
+    position: relative;
+    top: auto;
   }
 
   html body[data-page] .site-footer {

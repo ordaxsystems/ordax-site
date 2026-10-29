@@ -1,5 +1,6 @@
 """Independent site contract regressions; no OS checkout, network or secrets."""
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -24,6 +25,51 @@ class SiteContractTests(unittest.TestCase):
         self.assertGreater(report["source_files"], 25)
         self.assertEqual(len(build.ROUTES), 11)
         self.assertEqual(len(set(build.ROUTES)), len(build.ROUTES))
+
+    def test_public_headers_share_one_action_and_navigation_structure(self):
+        for route in load_routes():
+            source = (ROOT / "site" / route["source"]).read_text(encoding="utf-8")
+            header_match = re.search(
+                r'<header class="site-header[^\"]*"[^>]*>(.*?)</header>',
+                source,
+                re.S,
+            )
+            if not header_match:
+                continue  # /conta/ owns its application toolbar.
+
+            header = header_match.group(1)
+            brand_at = header.find('class="brand"')
+            actions_at = header.find('class="site-actions"')
+            nav_at = header.find('class="site-nav"')
+            with self.subTest(route=route["path"]):
+                self.assertGreaterEqual(brand_at, 0, "shared header needs its brand first")
+                self.assertGreaterEqual(nav_at, 0, "shared header needs one primary navigation")
+                if actions_at >= 0:
+                    self.assertLess(brand_at, actions_at)
+                    self.assertLess(actions_at, nav_at)
+                    nav_match = re.search(r'<nav class="site-nav"[^>]*>(.*?)</nav>', header, re.S)
+                    self.assertIsNotNone(nav_match)
+                    slot_at = nav_match.group(1).find("data-public-locale-slot")
+                    link_at = nav_match.group(1).find("<a ")
+                    self.assertGreaterEqual(slot_at, 0, "language slot belongs to the shared navigation")
+                    self.assertLess(slot_at, link_at, "language control precedes navigation links")
+                else:
+                    # The legal source bytes are Identity-hash protected. Their
+                    # shared JS runtime moves auth links into .site-actions.
+                    self.assertIn('data-auth-nav="login"', header)
+                    self.assertIn('data-auth-nav="register"', header)
+
+        locale = (ROOT / "site/i18n/runtime.js").read_text(encoding="utf-8")
+        self.assertIn("function normalizePublicHeader()", locale)
+        self.assertIn("normalizePublicHeader();\n    const nav", locale)
+        self.assertIn('nav.insertBefore(host, nav.querySelector(":scope > a"))', locale)
+
+        shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
+        account_css = (ROOT / "site/assets/account.css").read_text(encoding="utf-8")
+        landing_css = (ROOT / "site/assets/landing.css").read_text(encoding="utf-8")
+        self.assertIn(".sr-only {", shared_css)
+        self.assertNotIn(".account-ui .sr-only", account_css)
+        self.assertNotIn('body[data-page="landing"] .sr-only', landing_css)
 
     def test_identity_and_mcp_account_data_share_bounded_json_transport(self):
         shell = (ROOT / "site/assets/site.js").read_text(encoding="utf-8")
