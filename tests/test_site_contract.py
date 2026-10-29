@@ -280,6 +280,16 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn("padding-inline: var(--public-page-gutter);", shared_css)
         self.assertIn("var(--public-content-top-space)", portal_css)
         self.assertIn("page-hero{max-width:920px;padding:0 0 55px}", portal_css)
+        self.assertIn(
+            ".download-hero{padding:32px var(--public-page-gutter) 120px;min-height:480px;display:block}",
+            download_css,
+            "the mobile download hero must use the shared gutter and compact vertical rhythm",
+        )
+        self.assertIn(
+            ".art-caption{bottom:18px;right:var(--public-page-gutter);font-size:7px}",
+            download_css,
+            "mobile download decoration must align to the shared page gutter",
+        )
 
         for sheet, source, selector in (
             ("portal.css", portal_css, r"\.page-shell\s*\{([^{}]*)\}"),
