@@ -81,7 +81,10 @@ class SiteContractTests(unittest.TestCase):
 
         locale = (ROOT / "site/i18n/runtime.js").read_text(encoding="utf-8")
         self.assertIn("function normalizePublicHeader()", locale)
-        self.assertIn("normalizePublicHeader();\n    const nav", locale)
+        self.assertIn("function normalizePublicFooter()", locale)
+        self.assertIn("normalizePublicHeader();\n    normalizePublicFooter();\n    if (document.querySelector", locale)
+        self.assertIn('footer?.querySelector(\':scope > a:first-child[href="/"]\')', locale)
+        self.assertIn('headerBrand?.querySelector("img.brand-mark")?.getAttribute("src")', locale)
         self.assertIn('nav.insertBefore(host, nav.querySelector(":scope > a"))', locale)
 
         shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")

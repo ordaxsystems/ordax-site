@@ -224,9 +224,38 @@
     authLinks.forEach(link => actions.append(link));
   }
 
+  function normalizePublicFooter() {
+    const footer = document.querySelector("footer.site-footer");
+    const brand = footer?.querySelector(':scope > a:first-child[href="/"]');
+    const headerBrand = document.querySelector(".site-header > .brand");
+    const symbol = headerBrand?.querySelector("img.brand-mark")?.getAttribute("src");
+    if (!brand || !symbol || brand.querySelector("img.brand-mark")) return;
+
+    // Legal documents keep Identity-pinned source bytes. Reuse the normalized
+    // header's symbol so their footer receives the shared brand presentation
+    // without copying its path or modifying the canonical document markup.
+    const name = brand.textContent.trim();
+    if (!name) return;
+
+    const mark = document.createElement("img");
+    mark.className = "brand-mark";
+    mark.src = symbol;
+    mark.width = 48;
+    mark.height = 30;
+    mark.alt = "";
+    const wordmark = document.createElement("span");
+    wordmark.className = "brand-name";
+    wordmark.textContent = name;
+    brand.classList.add("brand");
+    const label = headerBrand.getAttribute("aria-label");
+    if (label) brand.setAttribute("aria-label", label);
+    brand.replaceChildren(mark, wordmark);
+  }
+
   function installSelector() {
-    if (document.querySelector("[data-public-locale-switcher]")) return;
     normalizePublicHeader();
+    normalizePublicFooter();
+    if (document.querySelector("[data-public-locale-switcher]")) return;
     const nav = document.querySelector("[data-public-locale-slot]") || document.querySelector(".site-nav");
     if (!nav) return;
 
