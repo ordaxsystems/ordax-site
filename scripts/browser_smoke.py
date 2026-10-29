@@ -143,6 +143,7 @@ def responsive_shell_checks(report: dict, width: int, route: str,
         "publicHeaderRegionsReady": report["publicHeaderRegionsReady"],
         "publicHeaderRegionsVisible": report["publicHeaderRegionsVisible"],
         "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
+        "publicHeaderBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
         "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
         "publicHeaderLocaleMenuGrouped": report["publicHeaderLocaleMenuGrouped"],
         "sharedFooterContract": report["sharedFooterContract"],
@@ -161,6 +162,7 @@ def responsive_shell_checks(report: dict, width: int, route: str,
     if route == "/conta/":
         checks["accountShellPresent"] = report["accountPortal"]
         checks["accountTopbarFitsViewport"] = report["accountTopbarFitsViewport"]
+        checks["accountMobileNavigationLabelsFit"] = report["accountMobileNavigationLabelsFit"]
         checks["noInventedVerifiedUser"] = not report["accountHasVerifiedUser"]
     return checks
 
@@ -553,6 +555,10 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
           navToggleBox.left - localeBox.right <= 12 &&
           Math.abs(headerToolsBox.right - navToggleBox.right) <= 2 &&
           getComputedStyle(headerTools).justifyContent === 'flex-end');
+      const publicHeaderBrandActionsDoNotOverlap = route === '/conta/' || !header ||
+        (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerActions) &&
+          !!headerBrandBox && !!headerActionsBox &&
+          headerActionsBox.left - headerBrandBox.right >= 4);
       const mobileNavigationDisclosureReady = route === '/conta/' || !header || !mobileHeader ||
         (renderedInsideViewport(navToggle) && navLinksContainer &&
           navToggle.getAttribute('aria-controls') === navLinksContainer.id &&
@@ -568,6 +574,24 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
           actionsBox.left >= topbarBox.left - 1 && actionsBox.right <= topbarBox.right + 1 &&
           actionsBox.top >= topbarBox.top - 1 && actionsBox.bottom <= topbarBox.bottom + 1 &&
           accountTopbar.scrollWidth <= accountTopbar.clientWidth + 1;
+      })();
+      const accountMobileNavigationLabelsFit = route !== '/conta/' || (() => {
+        const nav = body.querySelector('.mobile-nav');
+        if (!nav || getComputedStyle(nav).display === 'none') return true;
+        const items = [...nav.querySelectorAll(':scope > a, :scope > button')];
+        const boxes = items.map(item => {
+          const label = item.querySelector(':scope > span');
+          if (!label) return null;
+          const target = item.getBoundingClientRect();
+          const text = label.getBoundingClientRect();
+          return {target, text};
+        });
+        return boxes.length === 5 && boxes.every(box => box &&
+          box.target.width >= 44 && box.target.height >= 44 && box.text.width > 0 &&
+          box.text.left >= box.target.left - 1 &&
+          box.text.right <= box.target.right + 1) &&
+          boxes.slice(1).every((box, index) =>
+            boxes[index].text.right <= box.text.left + 1);
       })();
       const footer = $('footer.site-footer');
       const footerLinks = footer ? [...footer.querySelectorAll('a')] : [];
@@ -654,16 +678,21 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
           (!!headerBrand && !!headerActions && !!headerNav && !!navLinksContainer && !!localeSelect),
         publicHeaderRegionsVisible,
         accountTopbarFitsViewport,
+        accountMobileNavigationLabelsFit,
         publicHeaderBrandActionsShareRow: route === '/conta/' || !header ||
           (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerActions) &&
             !!headerBrandBox && !!headerActionsBox &&
             Math.abs((headerBrandBox.top + headerBrandBox.height / 2) -
               (headerActionsBox.top + headerActionsBox.height / 2)) <= 6),
+        publicHeaderBrandActionsDoNotOverlap,
         publicHeaderLocaleSharesNavigationLine: localeSharesNavigationLine,
         publicHeaderLocaleMenuGrouped,
         publicMobileNavigationDisclosureReady: mobileNavigationDisclosureReady,
         publicHeaderLayout: !header ? null : {
-          header: box(header), navigation: box(headerNav),
+          header: box(header), brand: box(headerBrand), actions: box(headerActions),
+          brandActionsGap: headerBrandBox && headerActionsBox
+            ? Math.round(headerActionsBox.left - headerBrandBox.right) : null,
+          navigation: box(headerNav),
           tools: box(headerTools),
           locale: box(localeSelect), toggle: box(navToggle),
           links: box(navLinksContainer), expanded: headerNav?.dataset.expanded
@@ -1302,6 +1331,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "publicHeaderRegionsReady": report["publicHeaderRegionsReady"],
                     "publicHeaderRegionsVisible": report["publicHeaderRegionsVisible"],
                     "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
+                    "publicHeaderBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
                     "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
                     "publicHeaderLocaleMenuGrouped": report["publicHeaderLocaleMenuGrouped"],
                     "publicMobileNavigationDisclosureReady": report["publicMobileNavigationDisclosureReady"],
@@ -1501,6 +1531,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                         and report["mainCount"] == 1,
                     "noHorizontalOverflow": report["noOverflow"],
                     "headerBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
+                    "headerBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
                     "localeSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
                     "mobileLocaleAndMenuShareACompactGroup": report["publicHeaderLocaleMenuGrouped"],
                     "footerFitsViewport": report["sharedFooterFitsViewport"],
@@ -1512,6 +1543,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                 if route == "/conta/":
                     checks["accountShellPresent"] = report["accountPortal"]
                     checks["accountTopbarFitsViewport"] = report["accountTopbarFitsViewport"]
+                    checks["accountMobileNavigationLabelsFit"] = report["accountMobileNavigationLabelsFit"]
                     checks["noInventedVerifiedUser"] = not report["accountHasVerifiedUser"]
                 if route == "/":
                     checks["landingPhoneEntranceFitsViewport"] = (

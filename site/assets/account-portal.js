@@ -183,7 +183,7 @@
     { title: "Segurança e privacidade", ids: ["seguranca", "dispositivos", "privacidade"] },
     { title: "Preferências e conexões", ids: ["integracoes", "preferencias", "atividade"] }
   ]);
-  const mobileSections = Object.freeze([{ id: "visao-geral", label: "Resumo" }, { id: "assinatura", label: "Assinatura" }, { id: "consumo", label: "Consumo" }, { id: "seguranca", label: "Segurança" }]);
+  const mobileSections = Object.freeze([{ id: "visao-geral", label: "Resumo" }, { id: "assinatura", label: "Plano" }, { id: "consumo", label: "Consumo" }, { id: "seguranca", label: "Segurança" }]);
   const mobileSectionIds = new Set(mobileSections.map(section => section.id));
   const periods = Object.freeze({ month: "Este mês", week: "Últimos 7 dias", thirty: "Últimos 30 dias", year: "Este ano" });
   const resourceTabs = Object.freeze({ overview: "Visão geral", ai: "IA", storage: "Armazenamento", apis: "APIs" });
