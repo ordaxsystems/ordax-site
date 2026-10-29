@@ -288,6 +288,8 @@ assert(localeRuntime.t("site.navigation.toggle") === "Toggle primary navigation"
 assert(localeRuntime.t("locale.selector.pt-BR") === "Português", "Portuguese name must stay self-named in English UI");
 assert(localeRuntime.t("locale.selector.en-US") === "English", "English name must stay self-named in English UI");
 for (const [source, translated] of [
+  ["Navegação principal", "Primary navigation"],
+  ["Rodapé", "Footer"],
   ["Armazenamento", "Storage"],
   ["Central de ajuda", "Help center"],
   ["IA", "AI"],

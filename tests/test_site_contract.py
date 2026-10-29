@@ -129,11 +129,22 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn("localeSlot.replaceWith(host)", locale)
 
         shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
+        smoke = (ROOT / "scripts/browser_smoke.py").read_text(encoding="utf-8")
         self.assertEqual(
             len(re.findall(r"(?m)^html body\[data-page\] \.site-header\s*\{", shared_css)),
             1,
             "public header geometry belongs to the shared site shell",
         )
+        mobile_tools = re.search(
+            r"@media\s*\(max-width:\s*760px\)\s*\{.*?"
+            r"\.site-header\s*>\s*\.site-nav\s*>\s*\.site-nav-tools\s*\{([^}]*)\}",
+            shared_css,
+            re.S,
+        )
+        self.assertIsNotNone(mobile_tools)
+        self.assertRegex(mobile_tools.group(1), r"justify-content:\s*flex-end")
+        self.assertIn("publicHeaderLocaleMenuGrouped", smoke)
+        self.assertIn("navigationLandmarksMatchLocale", smoke)
         header_layout_properties = PUBLIC_SHELL_LAYOUT_PROPERTIES - {"border", "border-top"}
         for sheet in (ROOT / "site/assets").glob("*.css"):
             if sheet.name in {"site.css", "account-dashboard.css"}:

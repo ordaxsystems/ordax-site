@@ -144,6 +144,7 @@ def responsive_shell_checks(report: dict, width: int, route: str,
         "publicHeaderRegionsVisible": report["publicHeaderRegionsVisible"],
         "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
         "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
+        "publicHeaderLocaleMenuGrouped": report["publicHeaderLocaleMenuGrouped"],
         "sharedFooterContract": report["sharedFooterContract"],
         "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
         "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
@@ -496,11 +497,13 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         header?.querySelector(':scope > a:first-child');
       const headerActions = header?.querySelector(':scope > .site-actions');
       const headerNav = header?.querySelector(':scope > .site-nav');
+      const headerTools = headerNav?.querySelector(':scope > .site-nav-tools');
       const navLinksContainer = headerNav?.querySelector(':scope > .site-nav-links');
       const localeSelect = header?.querySelector('[data-public-locale-select]');
       const navToggle = headerNav?.querySelector(':scope > .site-nav-tools > [data-public-nav-toggle]');
       const headerBrandBox = headerBrand?.getBoundingClientRect();
       const headerActionsBox = headerActions?.getBoundingClientRect();
+      const headerToolsBox = headerTools?.getBoundingClientRect();
       const localeBox = localeSelect?.getBoundingClientRect();
       const navToggleBox = navToggle?.getBoundingClientRect();
       const mobileHeader = innerWidth <= 760;
@@ -541,6 +544,15 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
           const box = link.getBoundingClientRect();
           return Math.abs((box.top + box.height / 2) - (localeBox.top + localeBox.height / 2)) <= 4;
         })));
+      const publicHeaderLocaleMenuGrouped = route === '/conta/' || !header || !mobileHeader ||
+        (renderedInsideViewport(localeSelect) && renderedInsideViewport(navToggle) &&
+          !!localeBox && !!navToggleBox && !!headerToolsBox &&
+          Math.abs((navToggleBox.top + navToggleBox.height / 2) -
+            (localeBox.top + localeBox.height / 2)) <= 4 &&
+          navToggleBox.left - localeBox.right >= -1 &&
+          navToggleBox.left - localeBox.right <= 12 &&
+          Math.abs(headerToolsBox.right - navToggleBox.right) <= 2 &&
+          getComputedStyle(headerTools).justifyContent === 'flex-end');
       const mobileNavigationDisclosureReady = route === '/conta/' || !header || !mobileHeader ||
         (renderedInsideViewport(navToggle) && navLinksContainer &&
           navToggle.getAttribute('aria-controls') === navLinksContainer.id &&
@@ -648,10 +660,11 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
             Math.abs((headerBrandBox.top + headerBrandBox.height / 2) -
               (headerActionsBox.top + headerActionsBox.height / 2)) <= 6),
         publicHeaderLocaleSharesNavigationLine: localeSharesNavigationLine,
+        publicHeaderLocaleMenuGrouped,
         publicMobileNavigationDisclosureReady: mobileNavigationDisclosureReady,
         publicHeaderLayout: !header ? null : {
           header: box(header), navigation: box(headerNav),
-          tools: box(headerNav?.querySelector(':scope > .site-nav-tools')),
+          tools: box(headerTools),
           locale: box(localeSelect), toggle: box(navToggle),
           links: box(navLinksContainer), expanded: headerNav?.dataset.expanded
         },
@@ -787,6 +800,10 @@ def apply_public_locale(driver: Driver, locale: str) -> dict:
         stored:localStorage.getItem('ordax.public.locale'),
         selected:selector.value,
         accessibleName:selector.getAttribute('aria-label'),
+        navigationLabels: {
+          primary:document.querySelector('header.site-header > nav.site-nav')?.getAttribute('aria-label') || null,
+          footer:document.querySelector('footer.site-footer nav')?.getAttribute('aria-label') || null,
+        },
         skip:document.querySelector('.skip-link')?.textContent?.trim(),
         menu:toggle?.querySelector('span')?.textContent?.trim(),
         toggleLabel:toggle?.getAttribute('aria-label'),
@@ -1286,6 +1303,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "publicHeaderRegionsVisible": report["publicHeaderRegionsVisible"],
                     "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
                     "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
+                    "publicHeaderLocaleMenuGrouped": report["publicHeaderLocaleMenuGrouped"],
                     "publicMobileNavigationDisclosureReady": report["publicMobileNavigationDisclosureReady"],
                     "sharedFooterContract": report["sharedFooterContract"],
                     "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
@@ -1419,6 +1437,17 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     checks["languageNamesRemainNativeAndTagged"] = (
                         locale_state.get("languageNamesAndTags") is True
                     )
+                    if route != "/conta/":
+                        expected_landmarks = {
+                            "pt-BR": ("Navegação principal", "Rodapé"),
+                            "en-US": ("Primary navigation", "Footer"),
+                        }[locale]
+                        checks["navigationLandmarksMatchLocale"] = (
+                            locale_state.get("navigationLabels") == {
+                                "primary": expected_landmarks[0],
+                                "footer": expected_landmarks[1],
+                            }
+                        )
                     checks["selectorAccessibleNameMatchesLocale"] = (
                         locale_state.get("accessibleName") == {
                             "pt-BR": "Idioma", "en-US": "Language"
@@ -1473,6 +1502,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "noHorizontalOverflow": report["noOverflow"],
                     "headerBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
                     "localeSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
+                    "mobileLocaleAndMenuShareACompactGroup": report["publicHeaderLocaleMenuGrouped"],
                     "footerFitsViewport": report["sharedFooterFitsViewport"],
                     "footerLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
                     "interactiveTargetsHaveComfortableSize": not report["undersizedInteractiveTargets"],
