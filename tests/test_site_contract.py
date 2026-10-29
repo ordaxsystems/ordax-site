@@ -258,6 +258,7 @@ class SiteContractTests(unittest.TestCase):
         shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
         portal_css = (ROOT / "site/assets/portal.css").read_text(encoding="utf-8")
         download_css = (ROOT / "site/assets/download.css").read_text(encoding="utf-8")
+        account_css = (ROOT / "site/assets/account.css").read_text(encoding="utf-8")
 
         self.assertEqual(
             len(re.findall(r"(?m)^\s*--public-page-gutter\s*:", shared_css)), 1,
@@ -290,6 +291,14 @@ class SiteContractTests(unittest.TestCase):
             download_css,
             "mobile download decoration must align to the shared page gutter",
         )
+        stage_rules = re.findall(r"(?s)\.account-ui\s+\.account-stage\s*\{([^{}]*)\}", account_css)
+        padded_stage_rules = [
+            block for block in stage_rules if re.search(r"\bpadding(?:-inline)?\s*:", block)
+        ]
+        self.assertGreaterEqual(len(padded_stage_rules), 2)
+        for block in padded_stage_rules:
+            with self.subTest(account_stage=block[:100]):
+                self.assertIn("var(--public-page-gutter)", block)
 
         for sheet, source, selector in (
             ("portal.css", portal_css, r"\.page-shell\s*\{([^{}]*)\}"),
