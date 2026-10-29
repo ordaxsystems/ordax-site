@@ -1505,6 +1505,25 @@ html body[data-page] footer.site-footer nav {
   }
 }
 
+@media (max-width: 320px) {
+  html body[data-page] .site-header > .brand {
+    gap: 4px;
+  }
+
+  html body[data-page] .site-header > .brand .brand-name {
+    font-size: 18px;
+  }
+
+  html body[data-page] .site-header > .brand .brand-mark {
+    width: 20px;
+    height: 20px;
+  }
+
+  html body[data-page] .site-header > .site-actions .nav-cta {
+    padding-inline: 7px;
+  }
+}
+
 @media (max-width: 600px) {
   html body[data-page] footer.site-footer {
     display: grid;

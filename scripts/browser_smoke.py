@@ -144,6 +144,7 @@ def responsive_shell_checks(report: dict, width: int, route: str,
         "publicHeaderRegionsVisible": report["publicHeaderRegionsVisible"],
         "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
         "publicHeaderBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
+        "publicHeaderBrandContentFits": report["publicHeaderBrandContentFits"],
         "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
         "publicHeaderLocaleMenuGrouped": report["publicHeaderLocaleMenuGrouped"],
         "sharedFooterContract": report["sharedFooterContract"],
@@ -559,6 +560,15 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerActions) &&
           !!headerBrandBox && !!headerActionsBox &&
           headerActionsBox.left - headerBrandBox.right >= 4);
+      const publicHeaderBrandContentFits = route === '/conta/' || !header || (() => {
+        if (!headerBrand || headerBrand.scrollWidth > headerBrand.clientWidth + 1) return false;
+        const brandBox = headerBrand.getBoundingClientRect();
+        return [...headerBrand.children].every(child => {
+          const rect = child.getBoundingClientRect();
+          return rect.left >= brandBox.left - 1 && rect.right <= brandBox.right + 1 &&
+            child.scrollWidth <= child.clientWidth + 1;
+        });
+      })();
       const mobileNavigationDisclosureReady = route === '/conta/' || !header || !mobileHeader ||
         (renderedInsideViewport(navToggle) && navLinksContainer &&
           navToggle.getAttribute('aria-controls') === navLinksContainer.id &&
@@ -685,6 +695,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
             Math.abs((headerBrandBox.top + headerBrandBox.height / 2) -
               (headerActionsBox.top + headerActionsBox.height / 2)) <= 6),
         publicHeaderBrandActionsDoNotOverlap,
+        publicHeaderBrandContentFits,
         publicHeaderLocaleSharesNavigationLine: localeSharesNavigationLine,
         publicHeaderLocaleMenuGrouped,
         publicMobileNavigationDisclosureReady: mobileNavigationDisclosureReady,
@@ -1332,6 +1343,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "publicHeaderRegionsVisible": report["publicHeaderRegionsVisible"],
                     "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
                     "publicHeaderBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
+                    "publicHeaderBrandContentFits": report["publicHeaderBrandContentFits"],
                     "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
                     "publicHeaderLocaleMenuGrouped": report["publicHeaderLocaleMenuGrouped"],
                     "publicMobileNavigationDisclosureReady": report["publicMobileNavigationDisclosureReady"],
@@ -1532,6 +1544,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "noHorizontalOverflow": report["noOverflow"],
                     "headerBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
                     "headerBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
+                    "headerBrandContentFits": report["publicHeaderBrandContentFits"],
                     "localeSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
                     "mobileLocaleAndMenuShareACompactGroup": report["publicHeaderLocaleMenuGrouped"],
                     "footerFitsViewport": report["sharedFooterFitsViewport"],
