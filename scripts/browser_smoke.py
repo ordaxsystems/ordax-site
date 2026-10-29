@@ -412,6 +412,17 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         return {tag: e.tagName.toLowerCase(), text: e.textContent.trim().slice(0, 60),
           width: Math.round(rect.width), height: Math.round(rect.height)};
       });
+      const undersizedAAInteractiveTargets = controls.filter(e => {
+        const style = getComputedStyle(e);
+        const inlineTextLink = e.matches('a[href]') && style.display === 'inline' && e.closest('p');
+        return !e.closest('.playground, [hidden], [aria-hidden="true"], dialog:not([open]), details:not([open])') &&
+          !e.disabled && !inlineTextLink &&
+          (e.getBoundingClientRect().width < 24 || e.getBoundingClientRect().height < 24);
+      }).slice(0, 8).map(e => {
+        const rect = e.getBoundingClientRect();
+        return {tag: e.tagName.toLowerCase(), text: e.textContent.trim().slice(0, 60),
+          width: Math.round(rect.width), height: Math.round(rect.height)};
+      });
       const nameless = controls.filter(e => {
         if (e.getAttribute('aria-hidden') === 'true' || e.disabled) return false;
         if (e.matches('input[type=hidden]')) return false;
@@ -484,6 +495,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         sharedFooterLinksHaveComfortableTargets: !footer || footerLinks.every(link =>
           link.getBoundingClientRect().width >= 44 && link.getBoundingClientRect().height >= 44),
         undersizedInteractiveTargets,
+        undersizedAAInteractiveTargets,
         noOverflow: document.documentElement.scrollWidth <= innerWidth + 2,
         scrollWidth: document.documentElement.scrollWidth,
         overflowElements,
@@ -1086,6 +1098,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
                     "sharedFooterLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
                     "siteInteractiveTargetsHaveComfortableSize": width > 640 or not report["undersizedInteractiveTargets"],
+                    "siteInteractiveTargetsMeetMinimumSize": not report["undersizedAAInteractiveTargets"],
                     "noHorizontalOverflow": report["noOverflow"],
                     "uniqueElementIds": not report["duplicateIds"],
                     "accessibleInteractiveNames": not report["nameless"],
