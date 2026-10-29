@@ -141,7 +141,17 @@ class SiteContractTests(unittest.TestCase):
             1,
             "public header geometry belongs to the shared site shell",
         )
-        self.assertIn('.site-header[data-nav-enhanced="true"] > .site-nav {\n    display: none;', shared_css)
+        self.assertIn('.site-header[data-nav-enhanced="true"] > .site-nav {', shared_css)
+        self.assertRegex(
+            shared_css,
+            r'\.site-header\[data-nav-enhanced="true"\] > \.site-nav \{\s+position: absolute;[\s\S]*?display: none;',
+        )
+        self.assertIn(
+            '.site-header[data-nav-enhanced="true"] > .site-nav[data-expanded="true"] {\n    display: grid;',
+            shared_css,
+        )
+        self.assertIn('grid-template-columns: minmax(0, 1fr) max-content;', shared_css)
+        self.assertIn('--public-content-top-space: clamp(32px, 4.4vw, 58px);', shared_css)
         self.assertIn('.site-header > .site-actions > .site-nav-toggle', shared_css)
         self.assertIn('.site-header > .site-actions > .site-auth-actions', shared_css)
         auth_group = re.search(r"(?m)^\.site-auth-actions\s*\{([^{}]*)\}", shared_css)
@@ -225,6 +235,10 @@ class SiteContractTests(unittest.TestCase):
             "the responsive public content gutter has one token owner",
         )
         self.assertEqual(
+            len(re.findall(r"(?m)^\s*--public-content-top-space\s*:", shared_css)), 1,
+            "the public page start rhythm has one token owner",
+        )
+        self.assertEqual(
             len(re.findall(r"(?m)^\s*--public-section-block-space\s*:", shared_css)), 1,
             "the landing section rhythm has one token owner",
         )
@@ -235,6 +249,8 @@ class SiteContractTests(unittest.TestCase):
             shared_css,
         )
         self.assertIn("padding-inline: var(--public-page-gutter);", shared_css)
+        self.assertIn("var(--public-content-top-space)", portal_css)
+        self.assertIn("page-hero{max-width:920px;padding:0 0 55px}", portal_css)
 
         for sheet, source, selector in (
             ("portal.css", portal_css, r"\.page-shell\s*\{([^{}]*)\}"),

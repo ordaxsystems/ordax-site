@@ -148,12 +148,13 @@ def responsive_shell_checks(report: dict, width: int, route: str,
         "publicHeaderActionsFit": report["publicHeaderActionsFit"],
         "publicHeaderLocalePresentation": report["publicHeaderLocalePresentation"],
         "publicHeaderMobileLocaleInDisclosure": report["publicHeaderMobileLocaleInDisclosure"],
+        "publicPageStartSpacing": report["publicPageStartSpacingReady"],
         "sharedFooterContract": report["sharedFooterContract"],
         "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
         "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
         "sharedFooterLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
     }
-    if width <= 760 and route != "/conta/":
+    if route != "/conta/":
         checks["publicMobileNavigationDisclosureReady"] = (
             report["publicMobileNavigationDisclosureReady"]
         )
@@ -512,7 +513,12 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const headerBrandBox = headerBrand?.getBoundingClientRect();
       const headerActionsBox = headerActions?.getBoundingClientRect();
       const localeBox = localeSelect?.getBoundingClientRect();
-      const mobileHeader = innerWidth <= 760;
+      const compactHeader = !!navToggle && getComputedStyle(navToggle).display !== 'none';
+      const pageIntro = main?.matches('.page-shell')
+        ? main.querySelector(':scope > .page-hero > .eyebrow') : null;
+      const publicPageStartGap = pageIntro && header
+        ? Math.round(pageIntro.getBoundingClientRect().top - header.getBoundingClientRect().bottom)
+        : null;
       const renderedInsideViewport = element => {
         if (!element) return false;
         const rect = element.getBoundingClientRect();
@@ -526,7 +532,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const publicHeaderRegionsVisible = route === '/conta/' || !header ||
         (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerBrandText) &&
           !!headerBrandText.textContent.trim() && renderedInsideViewport(headerActions) &&
-          (mobileHeader
+          (compactHeader
             ? renderedInsideViewport(navToggle) && getComputedStyle(headerNav).display === 'none'
             : renderedInsideViewport(headerNav) && renderedInsideViewport(localeSelect) &&
               renderedInsideViewport(navLinksContainer)));
@@ -542,7 +548,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         };
       };
       const publicHeaderLocalePresentation = route === '/conta/' || !header ||
-        (mobileHeader
+        (compactHeader
           ? headerNav.contains(localeSelect) && getComputedStyle(headerNav).display === 'none' &&
             !renderedInsideViewport(localeSelect)
           : renderedInsideViewport(localeSelect) && renderedInsideViewport(navLinksContainer) &&
@@ -550,7 +556,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
           const box = link.getBoundingClientRect();
           return Math.abs((box.top + box.height / 2) - (localeBox.top + localeBox.height / 2)) <= 4;
         }));
-      const publicHeaderMobileLocaleInDisclosure = route === '/conta/' || !header || !mobileHeader ||
+      const publicHeaderMobileLocaleInDisclosure = route === '/conta/' || !header || !compactHeader ||
         (headerNav.contains(localeSelect) && navToggle.parentElement === headerActions);
       const publicHeaderBrandActionsDoNotOverlap = route === '/conta/' || !header ||
         (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerActions) &&
@@ -581,7 +587,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
               });
           });
       })();
-      const mobileNavigationDisclosureReady = route === '/conta/' || !header || !mobileHeader ||
+      const mobileNavigationDisclosureReady = route === '/conta/' || !header || !compactHeader ||
         (renderedInsideViewport(navToggle) && navLinksContainer &&
           navToggle.parentElement === headerActions &&
           navToggle.getAttribute('aria-controls') === headerNav.id &&
@@ -737,6 +743,9 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         publicHeaderLocalePresentation,
         publicHeaderMobileLocaleInDisclosure,
         publicMobileNavigationDisclosureReady: mobileNavigationDisclosureReady,
+        publicPageStartGap,
+        publicPageStartSpacingReady: publicPageStartGap === null ||
+          (publicPageStartGap >= 0 && publicPageStartGap <= 64),
         publicHeaderLayout: !header ? null : {
           header: box(header), brand: box(headerBrand), actions: box(headerActions),
           brandActionsGap: headerBrandBox && headerActionsBox
@@ -1507,6 +1516,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "publicHeaderLocalePresentation": report["publicHeaderLocalePresentation"],
                     "publicHeaderMobileLocaleInDisclosure": report["publicHeaderMobileLocaleInDisclosure"],
                     "publicMobileNavigationDisclosureReady": report["publicMobileNavigationDisclosureReady"],
+                    "publicPageStartSpacing": report["publicPageStartSpacingReady"],
                     "sharedFooterContract": report["sharedFooterContract"],
                     "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
                     "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
@@ -1722,6 +1732,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "headerActionsFit": report["publicHeaderActionsFit"],
                     "localePresentation": report["publicHeaderLocalePresentation"],
                     "mobileLocaleIsInsideDisclosure": report["publicHeaderMobileLocaleInDisclosure"],
+                    "publicPageStartSpacing": report["publicPageStartSpacingReady"],
                     "footerFitsViewport": report["sharedFooterFitsViewport"],
                     "footerLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
                     "interactiveTargetsHaveComfortableSize": not report["undersizedInteractiveTargets"],
@@ -1730,7 +1741,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     checks["accountMobileFooterClearOfNavigation"] = (
                         report["accountMobileFooterClearance"]["clear"]
                     )
-                if width <= 760 and route != "/conta/":
+                if route != "/conta/":
                     checks["mobileDisclosureReady"] = report["publicMobileNavigationDisclosureReady"]
                 if route == "/conta/":
                     checks["accountShellPresent"] = report["accountPortal"]
