@@ -8,6 +8,8 @@ As páginas de Privacidade e Termos agora limitam o texto corrido a 76ch e usam 
 
 Em dispositivos com ponteiro de toque, os links de navegação do cabeçalho e rodapé, atalhos dos formulários de identidade, controles principais da Conta e ações de integridade/download também mantêm alvo mínimo de 44px, mesmo acima dos breakpoints móveis.
 
+Na página Download, o cabeçalho usa duas linhas entre 761 e 900px para manter ações, navegação e idioma dentro da largura disponível antes do breakpoint móvel.
+
 ## Propriedade e fronteiras
 
 - **`ordax-site`**: HTML/CSS/JS público, onze rotas, apresentação de login/Conta, SEO, i18n, build e testes independentes.

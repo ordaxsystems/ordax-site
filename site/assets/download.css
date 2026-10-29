@@ -29,3 +29,10 @@ body[data-page="download"]{--canvas:var(--ordax-bg);--surface:var(--ordax-panel)
 [data-page="download"] .hero-anchor{min-height:44px;align-items:center}
 @media(max-width:760px){[data-page="download"] .account-notice a{display:inline-flex;align-items:center;min-height:44px}}
 @media(any-pointer:coarse){.integrity-panel>a,.account-notice a{display:inline-flex;align-items:center;min-height:44px}}
+
+/* Keep the full Download navigation inside the tablet viewport. */
+@media(min-width:761px) and (max-width:900px){
+  [data-page="download"] .site-header{flex-wrap:wrap;gap:12px 20px;padding-inline:32px}
+  [data-page="download"] .site-nav{order:3;width:100%;justify-content:center;border-top:1px solid #27384e;padding:14px 0 0;gap:20px;overflow-x:auto}
+  [data-page="download"] .download-nav-actions{margin-left:auto}
+}
