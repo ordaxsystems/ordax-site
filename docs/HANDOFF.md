@@ -69,4 +69,5 @@ Alterar apenas o owner correto → criar PR → comprovar CI e Chrome no Site �
 - O nome acessível “Fechar diálogo” da Conta agora tem tradução inglesa no catálogo compartilhado, para que leitores de tela recebam o idioma correto após a troca para en-US.
 - Em telas touch, as marcas clicáveis de cabeçalho/rodapé e o link de pular conteúdo agora mantêm alvos de pelo menos 44 px; a Conta segue o mesmo tamanho para a marca do topbar.
 - Em touch, a demonstração compacta da home sai da ordem de teclado até ser ampliada; os diálogos do notebook e telefone mantêm alvos utilizáveis.
+- Nos cabeçalhos de identidade, o seletor de idioma agora reserva espaço para exibir por inteiro “Português (Brasil)” e “English (US)” em desktop; o tamanho móvel continua controlado pelo breakpoint existente.
 - Acessibilidade manual, Identity real, catálogo oficial, staging e produção continuam nos estados descritos acima; este ajuste é somente de apresentação.
