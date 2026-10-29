@@ -1,5 +1,5 @@
 {
-  "$schema": "ordax.site-public-shell/1",
+  "$schema": "ordax.site-public-shell/2",
   "brand": {
     "href": "/",
     "aria_label": "OrdaX — início",
@@ -38,21 +38,23 @@
         { "href": "#ecossistema", "label": "Aplicativos" },
         { "href": "#dispositivos", "label": "Onde usar" }
       ],
-      "footer_tagline": "Um universo para sua vida e seu trabalho.",
-      "footer_navigation": [
-        { "href": "#intelligence", "label": "Intelligence" },
-        { "href": "#controle", "label": "Controle e segurança" },
-        { "href": "#duvidas", "label": "Dúvidas" },
-        { "href": "https://web.ordax.com.br/", "label": "OrdaX Web" },
-        { "href": "/download/", "label": "Download" },
-        { "href": "/login/", "label": "Entrar" },
-        { "href": "/cadastro/", "label": "Criar conta" },
-        { "href": "#planos", "label": "Planos e benefícios" },
-        { "href": "/conta/", "label": "Conta" },
-        { "href": "/licencas/", "label": "Licenças" },
-        { "href": "/privacidade/", "label": "Privacidade" },
-        { "href": "/termos/", "label": "Termos" }
-      ]
+      "footer": {
+        "tagline": "Um universo para sua vida e seu trabalho.",
+        "navigation": [
+          { "href": "#intelligence", "label": "Intelligence" },
+          { "href": "#controle", "label": "Controle e segurança" },
+          { "href": "#duvidas", "label": "Dúvidas" },
+          { "href": "https://web.ordax.com.br/", "label": "OrdaX Web" },
+          { "href": "/download/", "label": "Download" },
+          { "href": "/login/", "label": "Entrar" },
+          { "href": "/cadastro/", "label": "Criar conta" },
+          { "href": "#planos", "label": "Planos e benefícios" },
+          { "href": "/conta/", "label": "Conta" },
+          { "href": "/licencas/", "label": "Licenças" },
+          { "href": "/privacidade/", "label": "Privacidade" },
+          { "href": "/termos/", "label": "Termos" }
+        ]
+      }
     },
     "/download/": {
       "actions": [
@@ -64,68 +66,38 @@
         { "href": "/#produto", "label": "Intelligence" },
         { "href": "/#dispositivos", "label": "Dispositivos" }
       ],
-      "footer_tagline": "Seu sistema. Novas possibilidades.",
-      "footer_navigation": [
-        { "href": "/", "label": "Início" },
-        { "href": "/cadastro/", "label": "Criar conta" },
-        { "href": "/licencas/", "label": "Licenças" },
-        { "href": "/privacidade/", "label": "Privacidade" },
-        { "href": "/termos/", "label": "Termos" }
-      ]
+      "footer": {
+        "tagline": "Seu sistema. Novas possibilidades.",
+        "navigation": [
+          { "href": "/", "label": "Início" },
+          { "href": "/cadastro/", "label": "Criar conta" },
+          { "href": "/licencas/", "label": "Licenças" },
+          { "href": "/privacidade/", "label": "Privacidade" },
+          { "href": "/termos/", "label": "Termos" }
+        ]
+      }
     },
     "/login/": {
       "actions": [
         { "href": "/cadastro/", "auth": "register", "label": "Criar conta", "cta": true, "arrow": true }
       ],
-      "navigation": [{ "href": "/", "label": "Início" }],
-      "footer_tagline": "Seu sistema. Sua identidade.",
-      "footer_navigation": [
-        { "href": "/", "label": "Início" },
-        { "href": "/download/", "label": "Download" },
-        { "href": "/licencas/", "label": "Licenças" },
-        { "href": "/privacidade/", "label": "Privacidade" },
-        { "href": "/termos/", "label": "Termos" }
-      ]
+      "navigation": { "profile": "home-only" },
+      "footer": { "profile": "identity" }
     },
     "/cadastro/": {
-      "actions": [
-        { "href": "/login/", "auth": "login", "label": "Entrar", "cta": true, "arrow": true }
-      ],
-      "navigation": [{ "href": "/", "label": "Início" }],
-      "footer_tagline": "Seu sistema. Sua identidade.",
-      "footer_navigation": [
-        { "href": "/", "label": "Início" },
-        { "href": "/download/", "label": "Download" },
-        { "href": "/licencas/", "label": "Licenças" },
-        { "href": "/privacidade/", "label": "Privacidade" },
-        { "href": "/termos/", "label": "Termos" }
-      ]
+      "actions": { "profile": "login-primary" },
+      "navigation": { "profile": "home-only" },
+      "footer": { "profile": "identity" }
     },
     "/recuperar/": {
-      "actions": [
-        { "href": "/login/", "auth": "login", "label": "Entrar", "cta": true, "arrow": true }
-      ],
-      "navigation": [{ "href": "/", "label": "Início" }],
-      "footer_tagline": "Seu sistema. Sua identidade.",
-      "footer_navigation": [
-        { "href": "/", "label": "Início" },
-        { "href": "/login/", "label": "Entrar" },
-        { "href": "/privacidade/", "label": "Privacidade" },
-        { "href": "/termos/", "label": "Termos" }
-      ]
+      "actions": { "profile": "login-primary" },
+      "navigation": { "profile": "home-only" },
+      "footer": { "profile": "identity-recovery" }
     },
     "/recuperar/nova-senha/": {
-      "actions": [
-        { "href": "/login/", "auth": "login", "label": "Entrar", "cta": true, "arrow": true }
-      ],
-      "navigation": [{ "href": "/", "label": "Início" }],
-      "footer_tagline": "Seu sistema. Sua identidade.",
-      "footer_navigation": [
-        { "href": "/", "label": "Início" },
-        { "href": "/login/", "label": "Entrar" },
-        { "href": "/privacidade/", "label": "Privacidade" },
-        { "href": "/termos/", "label": "Termos" }
-      ]
+      "actions": { "profile": "login-primary" },
+      "navigation": { "profile": "home-only" },
+      "footer": { "profile": "identity-recovery" }
     },
     "/licencas/": {
       "actions": [
@@ -137,30 +109,63 @@
         { "href": "/download/", "label": "Download" },
         { "href": "/licencas/", "label": "Licenças", "current": true }
       ],
-      "footer_tagline": "Protótipo OrdaX · conformidade vinculada por release.",
-      "footer_navigation": [
-        { "href": "/", "label": "Início" },
-        { "href": "/download/", "label": "Download" },
-        { "href": "/licencas/", "label": "Licenças", "current": true },
-        { "href": "/privacidade/", "label": "Privacidade" },
-        { "href": "/termos/", "label": "Termos" }
-      ]
+      "footer": {
+        "tagline": "Protótipo OrdaX · conformidade vinculada por release.",
+        "navigation": [
+          { "href": "/", "label": "Início" },
+          { "href": "/download/", "label": "Download" },
+          { "href": "/licencas/", "label": "Licenças", "current": true },
+          { "href": "/privacidade/", "label": "Privacidade" },
+          { "href": "/termos/", "label": "Termos" }
+        ]
+      }
     },
     "/web/": {
-      "actions": [
-        { "href": "/login/", "auth": "login", "label": "Entrar", "cta": true, "arrow": true }
-      ],
+      "actions": { "profile": "login-primary" },
       "navigation": [
         { "href": "/", "label": "Início" },
         { "href": "/download/", "label": "Download" }
       ],
-      "footer_tagline": "Uma conta. Seu espaço de trabalho.",
-      "footer_navigation": [
-        { "href": "/", "label": "Início" },
-        { "href": "/download/", "label": "Download" },
-        { "href": "/privacidade/", "label": "Privacidade" },
-        { "href": "/termos/", "label": "Termos" }
+      "footer": {
+        "tagline": "Uma conta. Seu espaço de trabalho.",
+        "navigation": [
+          { "href": "/", "label": "Início" },
+          { "href": "/download/", "label": "Download" },
+          { "href": "/privacidade/", "label": "Privacidade" },
+          { "href": "/termos/", "label": "Termos" }
+        ]
+      }
+    }
+  },
+  "profiles": {
+    "actions": {
+      "login-primary": [
+        { "href": "/login/", "auth": "login", "label": "Entrar", "cta": true, "arrow": true }
       ]
+    },
+    "navigation": {
+      "home-only": [{ "href": "/", "label": "Início" }]
+    },
+    "footers": {
+      "identity": {
+        "tagline": "Seu sistema. Sua identidade.",
+        "navigation": [
+          { "href": "/", "label": "Início" },
+          { "href": "/download/", "label": "Download" },
+          { "href": "/licencas/", "label": "Licenças" },
+          { "href": "/privacidade/", "label": "Privacidade" },
+          { "href": "/termos/", "label": "Termos" }
+        ]
+      },
+      "identity-recovery": {
+        "tagline": "Seu sistema. Sua identidade.",
+        "navigation": [
+          { "href": "/", "label": "Início" },
+          { "href": "/login/", "label": "Entrar" },
+          { "href": "/privacidade/", "label": "Privacidade" },
+          { "href": "/termos/", "label": "Termos" }
+        ]
+      }
     }
   }
 }

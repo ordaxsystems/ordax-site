@@ -27,13 +27,15 @@ Gates remanescentes e owner de cada integração: [HANDOFF.md](HANDOFF.md). Coma
 ## Checklist SSOT e shell responsivo — 29/10/2026
 
 - [x] `contracts/site-routes.json` continua sendo o único inventário de rotas e indexabilidade.
-- [x] `contracts/public-shell.json` é o owner único dos fragmentos e do conteúdo do cabeçalho/rodapé nas oito rotas comuns; o build os gera com `scripts/public_shell.py`.
+- [x] `contracts/public-shell.json` é o owner único dos fragmentos e do conteúdo do cabeçalho/rodapé nas oito rotas comuns; perfis nomeados mantêm em um só lugar ações de login repetidas, navegação simples e rodapés de autenticação/recuperação; `scripts/public_shell.py` valida e resolve os perfis no build.
 - [x] `site/assets/site.css` é o owner da geometria e dos breakpoints; `site/i18n/catalog.js`/`runtime.js` são os owners de idioma e traduções.
 - [x] O mobile mantém marca e ações de identidade na mesma linha; o seletor é inserido junto aos links da navegação, sem fila de idioma separada.
 - [x] Exceções são declaradas no contrato: `/conta/` usa shell de aplicação próprio; Privacidade/Termos preservam seus bytes por hash de Identity e o runtime normaliza a apresentação.
 - [x] Testes de contrato cobrem HTML gerado, separação de CSS, conteúdo localizado e preservação dos HTML legais.
-- [x] Build do candidato, verificação do bundle, smoke estático nas 11 rotas, 73 testes Python, localização PT-BR/en-US e contrato legal.
-- [x] Prévia local inspecionada nas 11 rotas em 1440, 390 e 320 px: sem overflow horizontal; marca/ações na mesma linha; seletor compartilhando a linha da navegação; rodapé dentro da largura. A troca en-US/PT-BR também foi conferida.
-- [ ] Execução completa de `scripts/browser_smoke.py` e captura de evidências: este host não tem ChromeDriver/Chrome instalados no PATH. Repetir no runner CI configurado para validar também teclado, console, recursos e estados sem JavaScript.
+- [x] Build do candidato, verificação do bundle, smoke estático nas 11 rotas, 74 testes Python, localização PT-BR/en-US e contrato legal.
+- [x] Chrome/Playwright: onze rotas em 320 e 390 px sem overflow horizontal; em ambas as larguras os controles Site autônomos atendem 44×44 px; cada rota mantém um `main`, um `h1` e nomes acessíveis, e o rodapé cabe na viewport. Links dentro de parágrafos seguem a exceção inline; a demonstração `.playground` segue o owner Surface.
+- [x] Revisão visual da header em 320 e 390 px: logo e ações de conta na primeira linha; idioma integrado à linha de navegação. Em 320 px o último link reflui para a linha seguinte com o restante do cabeçalho dentro da tela.
+- [x] A escolha de mobile segue a recomendação da [NN/g para o seletor de idioma](https://www.nngroup.com/articles/language-switching-ecommerce/): mantê-lo visível acima da dobra ou dentro da navegação, que libera o canto superior para ações prioritárias. O critério de reflow a 320 CSS px está descrito pela [WAI/W3C](https://www.w3.org/WAI/WCAG21/Understanding/reflow). O alvo 44×44 px é uma meta adotada pelo Site alinhada ao [critério enhanced 2.5.5](https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced).
+- [ ] `scripts/browser_smoke.py` completo e capturas de evidência no runner CI: o comando `chromedriver` não está disponível no PATH deste host. A auditoria Playwright direcionada acima não substitui os cenários completos de teclado, console, recursos e estados sem JavaScript.
 
 Este checklist cobre regressões estruturais do shell; não declara conformidade WCAG. O gate manual de zoom real, leitor de tela, contraste em composições e estados permanece em [ACCESSIBILITY-GATES.md](ACCESSIBILITY-GATES.md).

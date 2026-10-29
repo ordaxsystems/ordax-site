@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import build
 from public_release_catalog import render_catalog, validate_catalog, PublicReleaseCatalogError, _same_origin_path
-from public_shell import load_contract as load_public_shell, render_public_shell
+from public_shell import PublicShellError, load_contract as load_public_shell, render_public_shell
 from site_routes import load_routes
 from site_seo import validate_origin, render_html
 from smoke_static import check_css_dependencies
@@ -184,6 +184,43 @@ class SiteContractTests(unittest.TestCase):
         landing = (ROOT / "site/index.html").read_text(encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "markers must each occur once"):
             render_public_shell(landing.replace("<!-- ORDAX_PUBLIC_HEADER -->", ""), "/", contract)
+
+    def test_public_shell_profiles_remove_repeated_route_fragments(self):
+        path = ROOT / "contracts/public-shell.json"
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(raw["$schema"], "ordax.site-public-shell/2")
+        self.assertEqual(
+            raw["routes"]["/cadastro/"]["actions"], {"profile": "login-primary"}
+        )
+        for route in ("/login/", "/cadastro/"):
+            with self.subTest(route=route):
+                self.assertEqual(raw["routes"][route]["navigation"], {"profile": "home-only"})
+                self.assertEqual(raw["routes"][route]["footer"], {"profile": "identity"})
+        for route in ("/recuperar/", "/recuperar/nova-senha/"):
+            with self.subTest(route=route):
+                self.assertEqual(raw["routes"][route]["navigation"], {"profile": "home-only"})
+                self.assertEqual(raw["routes"][route]["footer"], {"profile": "identity-recovery"})
+
+        expanded = load_public_shell(load_routes())
+        self.assertEqual(
+            expanded["routes"]["/cadastro/"]["actions"],
+            raw["profiles"]["actions"]["login-primary"],
+        )
+        self.assertEqual(
+            expanded["routes"]["/login/"]["footer"],
+            raw["profiles"]["footers"]["identity"],
+        )
+        self.assertEqual(
+            expanded["routes"]["/recuperar/"]["footer"],
+            raw["profiles"]["footers"]["identity-recovery"],
+        )
+
+        raw["routes"]["/cadastro/"]["footer"] = {"profile": "missing"}
+        with tempfile.TemporaryDirectory() as tmp:
+            malformed = Path(tmp) / "public-shell.json"
+            malformed.write_text(json.dumps(raw), encoding="utf-8")
+            with self.assertRaisesRegex(PublicShellError, "unknown profile"):
+                load_public_shell(load_routes(), malformed)
 
     def test_identity_and_mcp_account_data_share_bounded_json_transport(self):
         shell = (ROOT / "site/assets/site.js").read_text(encoding="utf-8")

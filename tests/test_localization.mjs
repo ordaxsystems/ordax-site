@@ -191,17 +191,34 @@ for (const key of ptKeys) {
 
 const sourceMessages = new Set(Object.keys(catalog.sourceIndex).map(normalize));
 const publicShell = JSON.parse(read("contracts/public-shell.json"));
+const resolveShellProfile = (group, value) => {
+  if (!value || Array.isArray(value) || typeof value !== "object" || !value.profile) return value;
+  const profile = publicShell.profiles?.[group]?.[value.profile];
+  assert(profile, `unknown public shell ${group} profile: ${value.profile}`);
+  return profile;
+};
 const shellMessages = [
   publicShell.brand.aria_label,
   publicShell.brand.name,
   publicShell.header_navigation_label,
   publicShell.footer_navigation_label,
-  ...Object.values(publicShell.routes).flatMap(route => [
-    ...route.actions.map(item => item.label),
-    ...route.navigation.map(item => item.label),
-    route.footer_tagline,
-    ...route.footer_navigation.map(item => item.label),
+  ...Object.values(publicShell.profiles.actions).flatMap(items => items.map(item => item.label)),
+  ...Object.values(publicShell.profiles.navigation).flatMap(items => items.map(item => item.label)),
+  ...Object.values(publicShell.profiles.footers).flatMap(footer => [
+    footer.tagline,
+    ...footer.navigation.map(item => item.label),
   ]),
+  ...Object.values(publicShell.routes).flatMap(route => {
+    const actions = resolveShellProfile("actions", route.actions);
+    const navigation = resolveShellProfile("navigation", route.navigation);
+    const footer = resolveShellProfile("footers", route.footer);
+    return [
+      ...actions.map(item => item.label),
+      ...navigation.map(item => item.label),
+      footer.tagline,
+      ...footer.navigation.map(item => item.label),
+    ];
+  }),
 ];
 for (const value of shellMessages) {
   if (!looksPortuguese(value)) continue;

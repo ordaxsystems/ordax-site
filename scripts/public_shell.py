@@ -1,6 +1,7 @@
 """Render the public header and footer from one route-aware Site contract."""
 from __future__ import annotations
 
+from copy import deepcopy
 import html
 import json
 import re
@@ -70,6 +71,23 @@ def _validate_links(value: object, label: str, *, allow_auth: bool = False) -> N
         raise PublicShellError(label + " marks multiple current pages")
 
 
+def _resolve_profile(value: object, profiles: dict, label: str) -> object:
+    """Expand an explicit named profile while keeping route overrides local."""
+    if isinstance(value, dict) and set(value) == {"profile"}:
+        name = value["profile"]
+        if not isinstance(name, str) or name not in profiles:
+            raise PublicShellError(label + " references an unknown profile")
+        return deepcopy(profiles[name])
+    return value
+
+
+def _validate_footer(value: object, label: str) -> None:
+    if (not isinstance(value, dict) or set(value) != {"tagline", "navigation"}
+            or not isinstance(value["tagline"], str) or not value["tagline"].strip()):
+        raise PublicShellError(label + " has invalid footer data")
+    _validate_links(value["navigation"], label + " footer")
+
+
 def load_contract(routes: list[dict], path: Path = CONTRACT_PATH) -> dict:
     """Load the shell data and prove its route keys cover the canonical routes."""
     if path.is_symlink() or not path.is_file():
@@ -77,8 +95,8 @@ def load_contract(routes: list[dict], path: Path = CONTRACT_PATH) -> dict:
     contract = json.loads(path.read_text(encoding="utf-8"))
     if (not isinstance(contract, dict)
             or set(contract) != {"$schema", "brand", "header_navigation_label",
-                                 "footer_navigation_label", "exceptions", "routes"}
-            or contract["$schema"] != "ordax.site-public-shell/1"):
+                                 "footer_navigation_label", "exceptions", "profiles", "routes"}
+            or contract["$schema"] != "ordax.site-public-shell/2"):
         raise PublicShellError("invalid public shell contract")
     brand = contract["brand"]
     if (not isinstance(brand, dict)
@@ -92,6 +110,23 @@ def load_contract(routes: list[dict], path: Path = CONTRACT_PATH) -> dict:
     for field in ("header_navigation_label", "footer_navigation_label"):
         if not isinstance(contract[field], str) or not contract[field].strip():
             raise PublicShellError("invalid public shell navigation label")
+
+    profiles = contract["profiles"]
+    if (not isinstance(profiles, dict)
+            or set(profiles) != {"actions", "navigation", "footers"}
+            or any(not isinstance(profiles[group], dict) or not profiles[group]
+                   for group in ("actions", "navigation", "footers"))):
+        raise PublicShellError("invalid public shell profiles")
+    for group in ("actions", "navigation", "footers"):
+        for name, value in profiles[group].items():
+            if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9-]*", name):
+                raise PublicShellError("invalid public shell profile name")
+            if group == "actions":
+                _validate_links(value, "profile " + name, allow_auth=True)
+            elif group == "navigation":
+                _validate_links(value, "profile " + name)
+            else:
+                _validate_footer(value, "profile " + name)
 
     exceptions = contract["exceptions"]
     if not isinstance(exceptions, list):
@@ -113,14 +148,25 @@ def load_contract(routes: list[dict], path: Path = CONTRACT_PATH) -> dict:
         raise PublicShellError("public shell route data must match canonical Site routes")
 
     for route_path, data in route_data.items():
-        if (not isinstance(data, dict)
-                or set(data) != {"actions", "navigation", "footer_tagline", "footer_navigation"}
-                or not isinstance(data["actions"], list) or not 1 <= len(data["actions"]) <= 2
-                or not isinstance(data["footer_tagline"], str) or not data["footer_tagline"].strip()):
+        if not isinstance(data, dict) or set(data) != {"actions", "navigation", "footer"}:
             raise PublicShellError("invalid public shell route data: " + route_path)
-        _validate_links(data["actions"], route_path + " actions", allow_auth=True)
-        _validate_links(data["navigation"], route_path + " navigation")
-        _validate_links(data["footer_navigation"], route_path + " footer")
+        resolved = {
+            "actions": _resolve_profile(
+                data["actions"], profiles["actions"], route_path + " actions"
+            ),
+            "navigation": _resolve_profile(
+                data["navigation"], profiles["navigation"], route_path + " navigation"
+            ),
+            "footer": _resolve_profile(
+                data["footer"], profiles["footers"], route_path + " footer"
+            ),
+        }
+        if not isinstance(resolved["actions"], list) or not 1 <= len(resolved["actions"]) <= 2:
+            raise PublicShellError("invalid public shell route data: " + route_path)
+        _validate_links(resolved["actions"], route_path + " actions", allow_auth=True)
+        _validate_links(resolved["navigation"], route_path + " navigation")
+        _validate_footer(resolved["footer"], route_path)
+        route_data[route_path] = resolved
     return contract
 
 
@@ -167,11 +213,12 @@ def _render_header(contract: dict, data: dict) -> str:
 
 
 def _render_footer(contract: dict, data: dict) -> str:
-    navigation = "".join(_link(item) for item in data["footer_navigation"])
+    footer = data["footer"]
+    navigation = "".join(_link(item) for item in footer["navigation"])
     return (
         '<footer class="site-footer"><div>'
         + _render_brand(contract, header=False)
-        + f'<p>{html.escape(data["footer_tagline"])}</p></div>'
+        + f'<p>{html.escape(footer["tagline"])}</p></div>'
         + f'<nav aria-label="{html.escape(contract["footer_navigation_label"], quote=True)}">'
         + navigation + '</nav></footer>'
     )
