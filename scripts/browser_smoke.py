@@ -22,7 +22,7 @@ import urllib.request
 from pathlib import Path
 from site_routes import PATHS as ROUTES
 VIEWPORTS = ((1440, 900), (1024, 900), (768, 900), (760, 900),
-             (390, 844), (320, 740))
+             (430, 900), (390, 844), (360, 800), (320, 740))
 # Touch-first tablets retain a desktop CSS viewport while using coarse input.
 # Sample both sides of shared-shell and account-app layout boundaries.
 TOUCH_VIEWPORTS = (641, 760, 761, 1100, 1101, 1180, 1181)
@@ -324,6 +324,33 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const header = $('header.site-header');
       const heroCopy = route === '/' ? $('.hero-copy') : null;
       const heroCopyStyle = heroCopy ? getComputedStyle(heroCopy) : null;
+      const landingPhoneEntrance = route !== '/' ? null : (() => {
+        const phone = $('.playground .phone-device');
+        const animation = phone?.getAnimations().find(item =>
+          item.animationName === 'phone-enter');
+        if (!phone || !animation) return {checked: false, fits: false};
+        const previousTime = animation.currentTime;
+        const previousState = animation.playState;
+        animation.pause();
+        animation.currentTime = 0;
+        const rect = phone.getBoundingClientRect();
+        const viewportWidth = visualViewport?.width || innerWidth;
+        const documentWidth = document.documentElement.scrollWidth;
+        const result = {
+          checked: true,
+          fits: rect.left >= -1 && rect.right <= viewportWidth + 1 &&
+            documentWidth <= viewportWidth + 1,
+          phoneLeft: Math.round(rect.left * 10) / 10,
+          phoneRight: Math.round(rect.right * 10) / 10,
+          viewportWidth,
+          documentWidth
+        };
+        if (previousTime !== null) animation.currentTime = previousTime;
+        if (previousState === 'running') animation.play();
+        else if (previousState === 'finished') animation.finish();
+        else animation.pause();
+        return result;
+      })();
       const headerBrand = header?.querySelector(':scope > .brand') ||
         header?.querySelector(':scope > a:first-child');
       const headerActions = header?.querySelector(':scope > .site-actions');
@@ -430,6 +457,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         landingHeroCopyVisible: !heroCopy || (heroCopyStyle.opacity === '1' &&
           heroCopyStyle.visibility === 'visible' && heroCopyStyle.display !== 'none'),
         landingHeroCopyHasNoEntranceAnimation: !heroCopy || heroCopyStyle.animationName === 'none',
+        landingPhoneEntrance,
         skip: !!$('.skip-link[href^="#"]'),
         publicHeaderRegionsReady: route === '/conta/' || !header ||
           (!!headerBrand && !!headerActions && !!headerNav && !!navLinksContainer && !!localeSelect),
@@ -1073,6 +1101,8 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                         "landingFixturePresent": report["landingFixturePresent"],
                         "landingHeroCopyVisibleOnFirstRender": report["landingHeroCopyVisible"],
                         "landingHeroCopyHasNoEntranceAnimation": report["landingHeroCopyHasNoEntranceAnimation"],
+                        "landingPhoneEntranceFitsViewport": report["landingPhoneEntrance"]["checked"]
+                          and report["landingPhoneEntrance"]["fits"],
                     })
                 for name, success in check.items():
                     if not success:
@@ -1118,6 +1148,11 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                 if route == "/conta/":
                     checks["accountShellPresent"] = report["accountPortal"]
                     checks["noInventedVerifiedUser"] = not report["accountHasVerifiedUser"]
+                if route == "/":
+                    checks["landingPhoneEntranceFitsViewport"] = (
+                        report["landingPhoneEntrance"]["checked"]
+                        and report["landingPhoneEntrance"]["fits"]
+                    )
                 for name, success in checks.items():
                     if not success:
                         failures.append({"route": route, "viewport": f"touch-{width}",
