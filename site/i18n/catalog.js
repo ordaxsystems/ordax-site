@@ -458,7 +458,7 @@
     ["Licenças, componentes de terceiros e código-fonte de conformidade das releases OrdaX.", "Licenses, third-party components, and compliance source code for OrdaX releases."],
     ["Conformidade de releases públicas", "Public release compliance"],
     ["LICENÇAS · CÓDIGO ABERTO", "LICENSES · OPEN SOURCE"],
-    ["Transparência por release, sem transformar todo o OrdaX em uma licença só.", "Transparency by release, without treating all of OrdaX as a single license."],
+    ["Transparência por release", "Transparency by release"],
     ["Cada release pública deverá trazer seu inventário de software, avisos de terceiros e o pacote de código-fonte exigido pelos componentes distribuídos. Esses artefatos são vinculados à mesma release por tamanho e SHA-256.", "Each public release must include its software inventory, third-party notices, and the source-code package required by distributed components. These artifacts are bound to the same release by size and SHA-256."],
     ["Verificando releases públicas", "Checking public releases"],
     ["Consultando o mesmo catálogo usado pela página de download.", "Checking the same catalog used by the download page."],
