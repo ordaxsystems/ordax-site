@@ -122,6 +122,7 @@
     ["Gerencie sua conta", "Manage your account"],
     ["Seu perfil, suas conexões e suas preferências.", "Your profile, connections, and preferences."],
     ["Fechar menu", "Close menu"],
+    ["Fechar diálogo", "Close dialog"],
     ["Buscar dados, assinatura, consumo...", "Search data, subscription, usage..."],
     ["CENTRAL DE CONTA", "ACCOUNT CENTER"],
     ["Sua conta. Seu espaço.", "Your account. Your space."],
