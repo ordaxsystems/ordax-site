@@ -106,7 +106,9 @@ html body[data-page] footer.site-footer > a:first-child:not(.brand),
 html body[data-page] footer.site-footer nav > a {
   display: inline-flex;
   align-items: center;
+  min-width: 44px;
   min-height: 44px;
+  justify-content: center;
 }
 
 html body[data-page].account-ui footer.site-footer .brand {
@@ -115,8 +117,6 @@ html body[data-page].account-ui footer.site-footer .brand {
 
 html body[data-page] footer.site-footer nav > a {
   max-width: 100%;
-  min-width: 44px;
-  justify-content: center;
   overflow-wrap: anywhere;
 }
 

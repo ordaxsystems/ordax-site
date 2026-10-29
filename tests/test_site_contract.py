@@ -127,6 +127,23 @@ class SiteContractTests(unittest.TestCase):
             "public footer geometry belongs to the shared site shell",
         )
         self.assertIn("@media (max-width: 1050px)", shared_css)
+        footer_targets = re.search(
+            r"(?s)html body\[data-page\] footer\.site-footer \.brand,.*?\{([^}]*)\}",
+            shared_css,
+        )
+        self.assertIsNotNone(footer_targets)
+        self.assertRegex(footer_targets.group(1), r"min-width:\s*44px")
+        self.assertRegex(footer_targets.group(1), r"min-height:\s*44px")
+
+        account_css = (ROOT / "site/assets/account-dashboard.css").read_text(encoding="utf-8")
+        account_footer_targets = re.search(
+            r"(?m)^body\.account-portal \.page-footer>div>a\{([^}]*)\}", account_css
+        )
+        self.assertIsNotNone(account_footer_targets)
+        self.assertRegex(account_footer_targets.group(1), r"min-width:\s*44px")
+        self.assertRegex(account_footer_targets.group(1), r"min-height:\s*44px")
+        self.assertIn("body.account-portal .identity-bottom .text-link{min-width:44px;min-height:44px}", account_css)
+        self.assertIn("body.account-portal .topbar-center>a{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px}", account_css)
 
         for sheet in (ROOT / "site/assets").glob("*.css"):
             if sheet.name in {"site.css", "account-dashboard.css"}:

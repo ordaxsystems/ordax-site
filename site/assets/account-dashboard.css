@@ -105,6 +105,7 @@ body.account-portal .page-footer{display:flex;align-items:center;justify-content
 body.account-portal .page-footer>span{display:flex;align-items:center;gap:6px;flex-wrap:wrap;line-height:1.6;}
 body.account-portal .page-footer img{width:18px;height:18px;object-fit:contain;opacity:.65}
 body.account-portal .page-footer>div{display:flex;align-items:center;gap:20px}
+body.account-portal .page-footer>div>a{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px}
 body.account-portal .footer-status{display:flex;align-items:center;gap:5px}
 body.account-portal .footer-status>span{width:4px;height:4px;border-radius:50%;background:var(--subtle)}
 body.account-portal .mobile-nav,body.account-portal .mobile-more{display:none}
@@ -699,7 +700,6 @@ body.account-portal summary:focus-visible{outline:2px solid var(--md-focus);outl
  body.account-portal .locale-field select{font-size:16px}
  body.account-portal .device-actions>.text-link{margin-left:0;flex-basis:100%}
 }
-@media(max-width:640px){body.account-portal .page-footer>div>a{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px}}
 @media(max-width:640px){
  body.account-portal .segment-tabs button{min-height:44px}
  body.account-portal .breadcrumb a{display:inline-flex;align-items:center;min-height:44px}
@@ -717,7 +717,9 @@ body.account-portal .integration-caps em{color:var(--muted-foreground)}
 body.account-portal .resource-table thead th,body.account-portal .records-table thead th{font-size:12px}
 body.account-portal .usage-history>summary{min-height:44px;padding:12px 0}
 @media(any-pointer:coarse){
- body.account-portal .button,body.account-portal .sidebar-link,body.account-portal .segment-tabs button,body.account-portal .breadcrumb a,body.account-portal .page-footer>div>a,body.account-portal .text-link,body.account-portal .mobile-nav>a,body.account-portal .mobile-nav>button,body.account-portal .usage-history>summary,body.account-portal .related-area,body.account-portal .quick-link,body.account-portal .mobile-more nav>a,body.account-portal .more-link{min-height:44px}
+ body.account-portal .button,body.account-portal .sidebar-link,body.account-portal .segment-tabs button,body.account-portal .breadcrumb a,body.account-portal .text-link,body.account-portal .mobile-nav>a,body.account-portal .mobile-nav>button,body.account-portal .usage-history>summary,body.account-portal .related-area,body.account-portal .quick-link,body.account-portal .mobile-more nav>a,body.account-portal .more-link{min-height:44px}
+ body.account-portal .identity-bottom .text-link{min-width:44px;min-height:44px}
+ body.account-portal .topbar-center>a{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px}
  body.account-portal .topbar .brand{min-height:44px}
  body.account-portal .public-locale-select,body.account-portal .period-filter select,body.account-portal .form-field input{min-height:44px}
  body.account-portal .icon-button,body.account-portal .sidebar-heading .button{width:44px;height:44px}
