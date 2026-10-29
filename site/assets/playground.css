@@ -196,9 +196,8 @@ body[data-page="landing"]{--canvas:#f5f5f2;--surface:#fff;--ink:#17201f;--muted:
 [data-page="landing"] .closing-note .eyebrow{justify-content:center;font-size:9px}
 .closing-note h2{font-weight:450;font-size:clamp(48px,6vw,76px);letter-spacing:-.06em;line-height:1.03;margin:0 0 30px}
 .closing-note>a{font-size:12px;border-bottom:1px solid #a7b29f;padding-bottom:8px}.closing-note>a span{margin-left:25px}
-[data-page="landing"] .site-footer{max-width:1320px;display:flex;align-items:center;gap:35px;padding:34px 40px;border-top:1px solid var(--line)}
-[data-page="landing"] .site-footer p{font-size:10px;color:var(--muted);margin:10px 0 0}
-[data-page="landing"] .site-footer nav{display:flex;flex-wrap:wrap;gap:15px;margin-left:auto;font-size:11px}
+[data-page="landing"] .site-footer p{font-size:10px;color:var(--muted)}
+[data-page="landing"] .site-footer nav{font-size:11px}
 .footer-caption{display:none}
 @keyframes notebook-enter{from{opacity:0;transform:translateY(40px) rotateX(12deg)}to{opacity:1;transform:none}}
 @keyframes phone-enter{from{opacity:0;transform:translate(20px,65px) rotate(-6deg)}to{opacity:1;transform:none}}

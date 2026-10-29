@@ -18,6 +18,15 @@ from smoke_static import check_css_dependencies
 DEV_LOCK = build.load_dev_artifact_lock(ROOT / "contracts/dev-artifact-lock.json")
 BRAND_PIN = DEV_LOCK["brand"]["manifest_sha256"]
 PREVIEW_PIN = DEV_LOCK["surface_preview"]["manifest_sha256"]
+PUBLIC_SHELL_LAYOUT_PROPERTIES = {
+    "align-content", "align-items", "border", "border-top", "column-gap",
+    "display", "flex", "flex-basis", "flex-direction", "flex-flow",
+    "flex-grow", "flex-shrink", "flex-wrap", "gap", "grid-area",
+    "grid-template-columns", "grid-template-areas", "height", "justify-content",
+    "margin", "margin-inline", "margin-left", "max-height", "max-width",
+    "min-height", "min-width", "overflow", "padding", "padding-inline",
+    "row-gap", "width",
+}
 
 class SiteContractTests(unittest.TestCase):
     def test_owner_and_routes(self):
@@ -65,11 +74,73 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn('nav.insertBefore(host, nav.querySelector(":scope > a"))', locale)
 
         shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
+        self.assertEqual(
+            len(re.findall(r"(?m)^html body\[data-page\] \.site-header\s*\{", shared_css)),
+            1,
+            "public header geometry belongs to the shared site shell",
+        )
+        header_layout_properties = PUBLIC_SHELL_LAYOUT_PROPERTIES - {"border", "border-top"}
+        for sheet in (ROOT / "site/assets").glob("*.css"):
+            if sheet.name in {"site.css", "account-dashboard.css"}:
+                continue
+            source = sheet.read_text(encoding="utf-8")
+            for selector, block in re.findall(r"([^{}]+)\{([^{}]*)\}", source):
+                if not any(component in selector for component in (
+                        ".site-header", ".site-actions", ".site-nav", ".brand", ".brand-mark")):
+                    continue
+                declarations = {
+                    declaration.split(":", 1)[0].strip().lower()
+                    for declaration in block.split(";")
+                    if ":" in declaration
+                }
+                if ".nav-cta" in selector:
+                    declarations.discard("display")  # page-specific CTA decoration only
+                with self.subTest(sheet=sheet.name, selector=selector.strip()):
+                    self.assertFalse(
+                        declarations & header_layout_properties,
+                        "page styles may theme the header, not redefine its layout",
+                    )
         account_css = (ROOT / "site/assets/account.css").read_text(encoding="utf-8")
         landing_css = (ROOT / "site/assets/landing.css").read_text(encoding="utf-8")
         self.assertIn(".sr-only {", shared_css)
         self.assertNotIn(".account-ui .sr-only", account_css)
         self.assertNotIn('body[data-page="landing"] .sr-only', landing_css)
+
+    def test_public_footers_share_one_layout_source(self):
+        shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
+        self.assertEqual(
+            len(re.findall(r"(?m)^html body\[data-page\] footer\.site-footer\s*\{", shared_css)),
+            1,
+            "public footer geometry belongs to the shared site shell",
+        )
+        self.assertIn("@media (max-width: 1050px)", shared_css)
+
+        for sheet in (ROOT / "site/assets").glob("*.css"):
+            if sheet.name in {"site.css", "account-dashboard.css"}:
+                continue
+            source = sheet.read_text(encoding="utf-8")
+            for selector, block in re.findall(r"([^{}]+)\{([^{}]*)\}", source):
+                if ".site-footer" not in selector:
+                    continue
+                declarations = {
+                    declaration.split(":", 1)[0].strip().lower()
+                    for declaration in block.split(";")
+                    if ":" in declaration
+                }
+                with self.subTest(sheet=sheet.name, selector=selector.strip()):
+                    self.assertFalse(
+                        declarations & PUBLIC_SHELL_LAYOUT_PROPERTIES,
+                        "page styles may set footer theme and type, not layout",
+                    )
+
+        for route in load_routes():
+            source = (ROOT / "site" / route["source"]).read_text(encoding="utf-8")
+            with self.subTest(route=route["path"]):
+                if route["path"] == "/conta/":
+                    self.assertIn('<footer class="page-footer">', source)
+                    self.assertNotIn('<footer class="site-footer">', source)
+                else:
+                    self.assertIn('<footer class="site-footer">', source)
 
     def test_identity_and_mcp_account_data_share_bounded_json_transport(self):
         shell = (ROOT / "site/assets/site.js").read_text(encoding="utf-8")

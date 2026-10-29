@@ -3,6 +3,8 @@
 
 > **Regra vigente:** ADR-032 substitui somente as decisões transitórias de snapshots (ADR-010/011); os demais ADRs continuam válidos. A documentação operacional é o [README](../README.md) e o [handoff](HANDOFF.md). Referências antigas abaixo são histórico, não instrução para executar comandos removidos.
 
+**SITE-ADR-033 — Geometria única do shell público (2026-10-29):** `site/assets/site.css` é a fonte de layout e breakpoints do cabeçalho e do rodapé nas rotas públicas. Folhas específicas preservam tema e tipografia, sem redefinir a estrutura; testes de contrato e smoke responsivo cobrem esse limite. `/conta/` mantém os componentes da própria aplicação, e os documentos legais protegidos por hash permanecem intactos.
+
 **SITE-ADR-032 — Encerramento dos snapshots temporários (2026-10-24):** Surface publica marca e Meridian em prereleases Dev assinadas com pins externos de archive+manifesto, e o Site usa o único `contracts/dev-artifact-lock.json`. Nenhum snapshot OS, clone do renderer, plano comercial fictício ou atalho de publicação é preservado no fluxo padrão. Os ADRs anteriores descrevem fases históricas, não instruções atuais.
 
 **SITE-ADR-001 — Isolamento de repositório (2026-10-23):** HTML/CSS/JS e catálogo local PT-BR/en-US têm owner no Site. Nenhum runtime, backend, código React da Surface ou utilitário de kernel entra no artefato.

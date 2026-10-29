@@ -142,11 +142,8 @@
 .account-ui .account-legal { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--account-muted); font-size: 12px; margin-top: 8px; }
 .account-ui :is(.account-legal, .account-quicklinks) a:hover { text-decoration: underline; text-underline-offset: 4px; }
 .account-ui .account-legal a { display: inline-flex; align-items: center; min-height: 32px; }
-.account-ui .site-footer { width: 100%; max-width: 1184px; min-height: 0; margin: 0 auto; padding: 20px 32px; border: 0; gap: 20px; align-items: center; justify-content: space-between; }
-.account-ui .site-footer .brand { display: none; }
-.account-ui .site-footer p { margin: 0; color: var(--account-muted); font-size: 12px; }
-.account-ui .site-footer nav { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--account-muted); font-size: 12px; }
-.account-ui .site-footer nav a { display: inline-flex; align-items: center; min-height: 32px; }
+.account-ui .site-footer p,
+.account-ui .site-footer nav { color: var(--account-muted); font-size: 12px; }
 /* Shared identity controls also serve the Web login bootstrap. */
 .account-ui .identity-label-row { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
 .account-ui .identity-label-row a { display: inline-flex; align-items: center; min-height: 32px; color: var(--account-accent); font-size: 12px; font-weight: 400; }

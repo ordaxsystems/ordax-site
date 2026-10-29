@@ -47,6 +47,8 @@ A apresentação de planos mostra apenas **Planos em preparação — contrataç
 
 `contracts/site-routes.json` é o inventário único de rotas e indexação consumido por builder, testes de localização e Chrome. O domínio canônico **não** pertence a esse contrato: a origem HTTPS é injetada pelo owner de deployment por `--public-origin` (no CI candidato: `https://ordax.com.br`). O build gera canonical/OpenGraph, `robots.txt` e `sitemap.xml` apenas no artefato; Conta/Identity/entrada Web têm `noindex`.
 
+O shell público tem uma fonte de layout: `site/assets/site.css` controla a geometria e os breakpoints compartilhados do cabeçalho e do rodapé em todas as rotas; CSS de página pode manter apenas tema e tipografia. O idioma e seus rótulos continuam em `site/i18n/catalog.js`/`runtime.js`; `/conta/` conserva o rodapé próprio da aplicação. `tests/test_site_contract.py` protege essa separação, e o smoke de browser confere reflow e links do rodapé por rota.
+
 A landing lê **um** `/assets/playground-fixture.json` de mesma origem, com falha indisponível explícita. Foi removida a segunda fixture embutida na landing (~159 KB), sem copiar fonte executável da Surface. O controlador mantém um único landmark `main` para acessibilidade.
 
 CI de candidato: `python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence` usa ChromeDriver pré-instalado, exercita 11 rotas em 1440, 390 e 320 px, guarda capturas e relatório e mantém APIs de autenticação indisponíveis em loopback. A execução [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365) não substitui uma auditoria WCAG completa ou auth E2E em staging.

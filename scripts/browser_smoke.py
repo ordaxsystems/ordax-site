@@ -314,6 +314,9 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const $ = s => document.querySelector(s);
       const body = document.body;
       const main = $('main');
+      const footer = $('footer.site-footer');
+      const footerLinks = footer ? [...footer.querySelectorAll('a')] : [];
+      const footerBox = footer?.getBoundingClientRect();
       const forms = [...document.querySelectorAll('form.identity-form')];
       const visibleAuthForms = forms.filter(x => !x.hidden);
       const readyControls = forms.flatMap(f => [...f.querySelectorAll('input[type=password],button[type=submit]')]).filter(x => !x.disabled);
@@ -366,6 +369,16 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         mainCount: document.querySelectorAll('main').length,
         mainH1Count: [...document.querySelectorAll('main h1')].filter(h => !h.closest('.playground, [aria-hidden="true"]')).length,
         skip: !!$('.skip-link[href^="#"]'),
+        sharedFooterContract: route === '/conta/'
+          ? !footer && !!$('footer.page-footer')
+          : !!footer,
+        sharedFooterLayout: footer ? getComputedStyle(footer).display : null,
+        sharedFooterResponsiveLayout: !footer || getComputedStyle(footer).display ===
+          (innerWidth <= 1050 ? 'grid' : 'flex'),
+        sharedFooterFitsViewport: !footer || (footerBox.left >= -2 && footerBox.right <= innerWidth + 2
+          && footer.scrollWidth <= footer.clientWidth + 2),
+        sharedFooterLinksHaveComfortableTargets: !footer || footerLinks.every(link =>
+          link.getBoundingClientRect().height >= 44),
         noOverflow: document.documentElement.scrollWidth <= innerWidth + 2,
         scrollWidth: document.documentElement.scrollWidth,
         overflowElements,
@@ -890,6 +903,10 @@ def run(root: Path, evidence: Path) -> dict:
                     "namedDocument": bool(report["title"]),
                     "mainHasSinglePrimaryHeading": report["mainH1Count"] == 1,
                     "skipNavigation": report["skip"],
+                    "sharedFooterContract": report["sharedFooterContract"],
+                    "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
+                    "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
+                    "sharedFooterLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
                     "noHorizontalOverflow": report["noOverflow"],
                     "uniqueElementIds": not report["duplicateIds"],
                     "accessibleInteractiveNames": not report["nameless"],

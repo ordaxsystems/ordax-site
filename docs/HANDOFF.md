@@ -79,3 +79,9 @@ Esta composição substitui as notas anteriores deste handoff que descreviam o s
 - Em touch, a demonstração compacta da home sai da ordem de teclado até ser ampliada; os diálogos do notebook e telefone mantêm alvos utilizáveis.
 - Nos cabeçalhos de identidade, o seletor de idioma agora reserva espaço para exibir por inteiro “Português (Brasil)” e “English (US)” em desktop; o tamanho móvel continua controlado pelo breakpoint existente.
 - Acessibilidade manual, Identity real, catálogo oficial, staging e produção continuam nos estados descritos acima; este ajuste é somente de apresentação.
+
+### Shell público com geometria centralizada — 29/10/2026
+
+`site/assets/site.css` é agora a única fonte de layout responsivo do cabeçalho e do rodapé públicos. O CSS do portal deixou de redefinir largura, posição, espaçamento ou quebra do cabeçalho; folhas de página podem manter cores, bordas visuais e tipografia. O rodapé segue o mesmo grid móvel em todas as rotas que usam `.site-footer` e preserva alvos de link de 44 px. O contrato em `tests/test_site_contract.py` impede que a geometria volte a ser copiada para CSS de página; `scripts/browser_smoke.py` verifica presença, reflow, limites da viewport e tamanho dos links em todas as rotas.
+
+`/conta/` mantém `.page-footer` e seu CSS próprio por ser a barra do aplicativo Conta, sem usar o shell público. Os HTML de Privacidade e Termos seguem byte-idênticos e a validação de documento continua fechada conforme os hashes publicados por Identity.

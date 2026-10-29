@@ -68,13 +68,54 @@ a {
   transform: translateY(0);
 }
 
-.site-footer {
-  max-width: var(--content);
+/* One public footer layout for every route. The semantic selector keeps this
+   shared shell authoritative over older page CSS on hash-locked legal pages. */
+html body[data-page] footer.site-footer {
+  width: min(100%, var(--content));
   margin: 0 auto;
-  padding: 28px 42px;
+  padding: clamp(24px, 3vw, 42px);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 28px;
+  justify-content: space-between;
+  gap: 24px 32px;
+  min-height: 150px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+html body[data-page] footer.site-footer > * {
+  min-width: 0;
+}
+
+html body[data-page] footer.site-footer > div {
+  flex: 0 1 280px;
+}
+
+html body[data-page] footer.site-footer > div > p {
+  margin: 12px 0 0;
+}
+
+html body[data-page] footer.site-footer > p {
+  margin: 0;
+}
+
+html body[data-page] footer.site-footer .brand,
+html body[data-page] footer.site-footer > a:first-child:not(.brand),
+html body[data-page] footer.site-footer nav > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+html body[data-page].account-ui footer.site-footer .brand {
+  display: inline-flex;
+}
+
+html body[data-page] footer.site-footer nav > a {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .site-actions > a {
@@ -676,17 +717,14 @@ html body[data-page] .site-header > .site-nav {
   font-size: 14px;
 }
 
-.site-footer {
-  min-height: 150px;
-  justify-content: space-between;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.site-footer nav {
+html body[data-page] footer.site-footer nav {
   display: flex;
-  gap: 18px;
+  flex: 1 1 540px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px 14px;
+  min-width: 0;
 }
 
 .site-footer a {
@@ -735,12 +773,6 @@ html body[data-page] .site-header > .site-nav {
   .auth-shell {
     padding-left: 22px;
     padding-right: 22px;
-  }
-
-  .site-footer nav > a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
   }
 
   .brand-name {
@@ -1197,22 +1229,6 @@ html body[data-page] .site-header > .site-nav {
 /* Preserve comfortable targets on touch-first tablets and hybrid devices,
    even when their CSS viewport uses desktop breakpoints. */
 @media (any-pointer: coarse) {
-  .site-footer .brand {
-    min-height: 44px;
-  }
-
-  .site-footer > a:first-child:not(.brand) {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-  }
-
-  .site-footer nav > a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-  }
-
   .public-locale-select { min-height: 44px; }
 }
 
@@ -1372,33 +1388,33 @@ html body[data-page] .site-header > .site-nav {
     top: auto;
   }
 
-  html body[data-page] .site-footer {
+  html body[data-page] footer.site-footer {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 12px;
-    width: 100%;
     min-height: 0;
     padding: 24px clamp(16px, 5vw, 24px);
   }
 
-  html body[data-page] .site-footer > *,
-  html body[data-page] .site-footer nav {
+  html body[data-page] footer.site-footer > *,
+  html body[data-page] footer.site-footer nav {
     min-width: 0;
     max-width: 100%;
   }
 
-  html body[data-page] .site-footer nav {
+  html body[data-page] footer.site-footer nav {
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-start;
     gap: 2px 12px;
     width: 100%;
     margin: 0;
+    flex: none;
   }
 
-  html body[data-page] .site-footer nav > a,
-  html body[data-page] .site-footer > a:first-child:not(.brand) {
+  html body[data-page] footer.site-footer nav > a,
+  html body[data-page] footer.site-footer > a:first-child:not(.brand) {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
@@ -1406,7 +1422,7 @@ html body[data-page] .site-header > .site-nav {
     overflow-wrap: anywhere;
   }
 
-  html body[data-page] .site-footer p {
+  html body[data-page] footer.site-footer p {
     max-width: 65ch;
     overflow-wrap: anywhere;
   }
