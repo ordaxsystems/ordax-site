@@ -80,6 +80,12 @@ body[data-page="landing"] .demo-status, body[data-page="landing"] .demo-sync-not
 body[data-page="landing"] .demo-sync-note { max-width: 820px; line-height: 1.8; }
 body[data-page="landing"] .demo-tools button { min-height: 44px; color: var(--ink); border-color: var(--line); background: var(--md-subtle); border-radius: var(--md-radius-small); }
 body[data-page="landing"] .demo-tools button:hover { background: var(--md-subtle); }
+/* On touch, keep the virtual notebook wide enough for usable controls in the dialog. */
+@media (any-pointer: coarse) {
+  body[data-page="landing"] .demo-expanded[data-expanded-device="laptop"] [data-expanded-mount] {
+    min-width: 1120px;
+  }
+}
 body[data-page="landing"] .landing-section { max-width: 1344px; margin: 0 auto; padding: 44px 48px; border-top: 1px solid var(--line); }
 body[data-page="landing"] .landing-heading { max-width: 740px; }
 body[data-page="landing"] .landing-heading h2, body[data-page="landing"] .landing-closing h2 { font: 500 clamp(30px, 3.4vw, 44px)/1.14 var(--sans); letter-spacing: -.045em; margin: 0; text-wrap: balance; }

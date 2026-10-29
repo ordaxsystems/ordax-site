@@ -57,7 +57,7 @@
     ["Arquivos de exemplo", "Example files"],
     ["Explore o OrdaX por dentro.", "Explore inside OrdaX."],
     ["Seus arquivos", "Your files"],
-    ["Navegue pela Central, abra Espaços e confira os aplicativos. A interface é a mesma do produto, com dados de exemplo.", "Explore Central, open Spaces and browse the apps. The interface matches the product, with example data."],
+    ["Amplie o notebook ou o telefone para navegar pela Central, abrir Espaços e conferir aplicativos com dados de exemplo.", "Expand the laptop or phone to browse Central, open Spaces, and explore apps with sample data."],
     ["02 / WEB COMPACTO", "02 / COMPACT WEB"],
     ["Interface responsiva", "Responsive interface"],
     ["Interface do produto com dados fictícios. Esta demonstração não conecta sua conta, não acessa arquivos e não executa IA. O cenário Aurora contém respostas predefinidas.", "Product interface with fictional data. This demo does not connect your account, access files or run AI. The Aurora scenario contains predefined responses."],
