@@ -1333,7 +1333,7 @@ html body[data-page] footer.site-footer nav {
 
 /* Shared public header geometry. Route content lives in the public shell
    contract; this is the single layout source for generated and legal shells. */
-@media (max-width: 1100px) {
+@media (max-width: 1160px) {
   html body[data-page] .site-header {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, auto);
