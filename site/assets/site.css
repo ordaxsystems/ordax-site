@@ -115,12 +115,16 @@ html body[data-page].account-ui footer.site-footer .brand {
 
 html body[data-page] footer.site-footer nav > a {
   max-width: 100%;
+  min-width: 44px;
+  justify-content: center;
   overflow-wrap: anywhere;
 }
 
 .site-actions > a {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 44px;
   min-height: 44px;
   white-space: nowrap;
   text-decoration: none;
@@ -129,6 +133,8 @@ html body[data-page] footer.site-footer nav > a {
 .site-nav > a {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 44px;
   min-height: 44px;
   white-space: nowrap;
 }

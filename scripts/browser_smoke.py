@@ -340,6 +340,17 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         const box = e.getBoundingClientRect();
         return box.width > 0 && box.height > 0 && getComputedStyle(e).visibility !== 'hidden';
       });
+      const undersizedInteractiveTargets = controls.filter(e => {
+        const style = getComputedStyle(e);
+        const inlineTextLink = e.matches('a[href]') && style.display === 'inline' && e.closest('p');
+        return !e.closest('.playground, [hidden], [aria-hidden="true"], dialog:not([open]), details:not([open])') &&
+          !e.disabled && !inlineTextLink &&
+          (e.getBoundingClientRect().width < 44 || e.getBoundingClientRect().height < 44);
+      }).slice(0, 8).map(e => {
+        const rect = e.getBoundingClientRect();
+        return {tag: e.tagName.toLowerCase(), text: e.textContent.trim().slice(0, 60),
+          width: Math.round(rect.width), height: Math.round(rect.height)};
+      });
       const nameless = controls.filter(e => {
         if (e.getAttribute('aria-hidden') === 'true' || e.disabled) return false;
         if (e.matches('input[type=hidden]')) return false;
@@ -399,7 +410,8 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         sharedFooterFitsViewport: !footer || (footerBox.left >= -2 && footerBox.right <= innerWidth + 2
           && footer.scrollWidth <= footer.clientWidth + 2),
         sharedFooterLinksHaveComfortableTargets: !footer || footerLinks.every(link =>
-          link.getBoundingClientRect().height >= 44),
+          link.getBoundingClientRect().width >= 44 && link.getBoundingClientRect().height >= 44),
+        undersizedInteractiveTargets,
         noOverflow: document.documentElement.scrollWidth <= innerWidth + 2,
         scrollWidth: document.documentElement.scrollWidth,
         overflowElements,
@@ -931,6 +943,7 @@ def run(root: Path, evidence: Path) -> dict:
                     "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
                     "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
                     "sharedFooterLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
+                    "siteInteractiveTargetsHaveComfortableSize": width > 640 or not report["undersizedInteractiveTargets"],
                     "noHorizontalOverflow": report["noOverflow"],
                     "uniqueElementIds": not report["duplicateIds"],
                     "accessibleInteractiveNames": not report["nameless"],

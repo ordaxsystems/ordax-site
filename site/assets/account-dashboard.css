@@ -699,7 +699,7 @@ body.account-portal summary:focus-visible{outline:2px solid var(--md-focus);outl
  body.account-portal .locale-field select{font-size:16px}
  body.account-portal .device-actions>.text-link{margin-left:0;flex-basis:100%}
 }
-@media(max-width:640px){body.account-portal .page-footer>div>a{display:inline-flex;align-items:center;min-height:44px}}
+@media(max-width:640px){body.account-portal .page-footer>div>a{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px}}
 @media(max-width:640px){
  body.account-portal .segment-tabs button{min-height:44px}
  body.account-portal .breadcrumb a{display:inline-flex;align-items:center;min-height:44px}
