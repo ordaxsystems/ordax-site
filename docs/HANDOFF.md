@@ -73,6 +73,10 @@ No celular, a marca e as ações de entrar/cadastro ficam na primeira linha; a n
 
 Esta composição substitui as notas anteriores deste handoff que descreviam o seletor sozinho numa linha estreita. O conteúdo legal, os hashes usados por Identity e os contratos de serviço permanecem intactos.
 
+### Primeiro frame da página inicial — 29/10/2026
+
+O texto e as ações do hero da home não aguardam mais a animação de entrada de 0,85 s para atingir opacidade total. A regra foi removida apenas de `.hero-copy`; as animações da demonstração continuam sob o owner visual correspondente. `scripts/browser_smoke.py` verifica opacidade, visibilidade e ausência de animação em todas as seis larguras principais. O bundle do commit `c77fe166caee717f923d02ef0865e6ca10113b98` passou no build, na verificação de integridade, no smoke estático, nos 74 testes Python, na localização e em 143 estados Chrome (66 matriz principal + 77 touch coarse), sem falhas. Evidência: `work/browser-evidence-initial-hero-visible/`; SHA-256 do manifesto `724365C9F06C980E8D3F05407DE4F35A06835159D87162FD9E8087F55E21427C`.
+
 - Na Conta em tablets touch, cada destino de “Mais” ocupa uma linha completa dentro do diálogo; a regra também evita que folhas de estilo do portal façam links inline em grupos com vários destinos.
 - O nome acessível “Fechar diálogo” da Conta agora tem tradução inglesa no catálogo compartilhado, para que leitores de tela recebam o idioma correto após a troca para en-US.
 - Em telas touch, as marcas clicáveis de cabeçalho/rodapé e o link de pular conteúdo agora mantêm alvos de pelo menos 44 px; a Conta segue o mesmo tamanho para a marca do topbar.
