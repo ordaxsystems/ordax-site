@@ -718,3 +718,25 @@ body.account-portal .usage-history>summary{min-height:44px;padding:12px 0}
  body.account-portal .search-launch{min-height:44px}
 }
 @media(any-pointer:coarse) and (max-width:980px){body.account-portal .search-launch{width:44px}}
+
+/* Touch tablets need visible section names where the compact desktop rail
+   would otherwise show only icons. Reuse the labeled mobile destinations. */
+@media(any-pointer:coarse) and (min-width:641px) and (max-width:1180px){
+ body.account-portal .account-app{--sidebar-width:0px}
+ body.account-portal .desktop-sidebar{display:none}
+ body.account-portal .topbar{grid-template-columns:minmax(0,1fr) auto;padding-inline:17px}
+ body.account-portal .brand{background:transparent;color:var(--foreground);padding:0;gap:8px;font-size:21px}
+ body.account-portal .brand img{width:34px;height:34px}
+ body.account-portal .brand-os{color:var(--muted-foreground)}
+ body.account-portal .topbar-center{display:none}
+ body.account-portal .account-main{margin-left:0;padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+ body.account-portal .mobile-nav{position:fixed;inset-inline:0;bottom:0;height:calc(72px + env(safe-area-inset-bottom));z-index:40;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--sidebar);border-top:1px solid var(--border);padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+ body.account-portal .mobile-nav>a,body.account-portal .mobile-nav>button{display:flex;min-height:44px;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:11px;color:var(--md-rail-muted);padding:0;height:51px;border-radius:4px;position:relative}
+ body.account-portal .mobile-nav>.button{color:var(--md-rail-muted)}
+ body.account-portal .mobile-nav>.button:not(:disabled):hover{background:var(--md-rail-selected);color:var(--md-rail-text)}
+ body.account-portal .mobile-nav>.button:focus-visible{outline-offset:1px}
+ body.account-portal .mobile-nav svg{width:19px;height:19px;stroke-width:1.5}
+ body.account-portal .mobile-nav .active{color:var(--md-rail-text)}
+ body.account-portal .mobile-nav .active:before{content:'';position:absolute;top:-9px;width:25px;height:2px;background:var(--primary);box-shadow:0 2px 9px var(--primary)}
+ body.account-portal .mobile-more[open]{display:block;position:fixed;inset:calc(var(--account-topbar-height) + 8px) 0 calc(72px + env(safe-area-inset-bottom));height:auto;width:min(720px,calc(100% - 32px));max-width:none;max-height:none;margin:0 auto;padding:20px;background:var(--background);z-index:39;overflow:auto;border:1px solid var(--border);border-radius:var(--radius)}
+}

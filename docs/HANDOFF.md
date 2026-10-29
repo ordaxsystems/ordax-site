@@ -4,6 +4,8 @@
 
 ## Ajuste de leitura — 2026-10-29
 
+Na Minha Conta, tablets com ponteiro de toque (641–1180px) usam a barra inferior com nomes visíveis para Resumo, Assinatura, Consumo, Segurança e Mais. Isso substitui a faixa lateral de ícones compacta nesse perfil de entrada; teclado/leitores mantêm os nomes acessíveis e o menu Mais abre as demais seções.
+
 Nas telas de login, cadastro e recuperação, além da entrada Web, o seletor de idioma agora mantém largura suficiente para mostrar “Português (Brasil)” e “English (US)” em celular. O cabeçalho já distribui os links em linhas quando necessário; a atualização não muda os destinos nem os estados fail-closed.
 
 Na home, os cinco links da navegação em telas estreitas não cabiam na faixa rolável sem mostrar por completo o último link. Até 760px, a navegação agora pode ocupar duas linhas e distribui os links no centro; isso deixa todos os destinos visíveis em 320–390px e evita depender de rolagem horizontal oculta. Em até 360px, o seletor de idioma ocupa uma linha própria e as ações mantêm seus rótulos sem quebra, inclusive em inglês. De 361 a 400px, o seletor preserva largura para mostrar o nome completo do idioma. O cache da folha landing foi atualizado.
