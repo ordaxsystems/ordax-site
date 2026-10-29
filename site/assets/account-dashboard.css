@@ -726,6 +726,7 @@ body.account-portal .usage-history>summary{min-height:44px;padding:12px 0}
  body.account-portal .desktop-sidebar{display:none}
  body.account-portal .topbar{grid-template-columns:minmax(0,1fr) auto;padding-inline:17px}
  body.account-portal .brand{background:transparent;color:var(--foreground);padding:0;gap:8px;font-size:21px}
+ body.account-portal .topbar .brand>span{display:inline}
  body.account-portal .brand img{width:34px;height:34px}
  body.account-portal .brand-os{color:var(--muted-foreground)}
  body.account-portal .topbar-center{display:none}
