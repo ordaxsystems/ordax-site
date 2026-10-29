@@ -186,7 +186,7 @@
  .account-ui .brand-name { font-size: 23px; }
  .account-ui .account-nav-actions { flex-wrap: wrap; gap: 8px; font-size: 12px; }
  .account-ui .account-locale-slot { order: 3; }
- .account-ui .public-locale-select { max-width: 120px; min-height: 44px; font-size: 12px; }
+ .account-ui .public-locale-select { width: 158px; max-width: 158px; min-height: 44px; font-size: 12px; }
  .account-ui .nav-cta { padding-inline: 10px; gap: 8px; }
  .account-ui .account-stage { padding-inline: 16px; }
  .account-ui .account-card { padding: 22px; }
