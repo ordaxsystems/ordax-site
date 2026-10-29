@@ -215,6 +215,37 @@ class SiteContractTests(unittest.TestCase):
                     "portal.css must remain the authoritative owner",
                 )
 
+    def test_public_content_gutters_and_landing_rhythm_have_single_source(self):
+        shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
+        portal_css = (ROOT / "site/assets/portal.css").read_text(encoding="utf-8")
+        download_css = (ROOT / "site/assets/download.css").read_text(encoding="utf-8")
+
+        self.assertEqual(
+            len(re.findall(r"(?m)^\s*--public-page-gutter\s*:", shared_css)), 1,
+            "the responsive public content gutter has one token owner",
+        )
+        self.assertEqual(
+            len(re.findall(r"(?m)^\s*--public-section-block-space\s*:", shared_css)), 1,
+            "the landing section rhythm has one token owner",
+        )
+        self.assertIn("padding: var(--public-page-gutter);", shared_css)
+        self.assertIn("padding: 70px var(--public-page-gutter) 84px;", shared_css)
+        self.assertIn(
+            "padding: var(--public-section-block-space) var(--public-page-gutter);",
+            shared_css,
+        )
+        self.assertIn("padding-inline: var(--public-page-gutter);", shared_css)
+
+        for sheet, source, selector in (
+            ("portal.css", portal_css, r"\.page-shell\s*\{([^{}]*)\}"),
+            ("download.css", download_css, r"\.download-container\s*\{([^{}]*)\}"),
+        ):
+            blocks = re.findall(selector, source)
+            self.assertTrue(blocks, f"{sheet} must own its page container")
+            for block in blocks:
+                with self.subTest(sheet=sheet, block=block[:80]):
+                    self.assertIn("var(--public-page-gutter)", block)
+
     def test_public_footers_share_one_layout_source(self):
         contract = load_public_shell(load_routes())
         shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
