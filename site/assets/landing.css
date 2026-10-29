@@ -250,7 +250,7 @@ body[data-page="landing"] .site-footer p { font-size: 12px; line-height: 1.8; }
 @media (max-width: 400px) {
   body[data-page="landing"] .landing-space-grid { grid-template-columns: minmax(0, 1fr); }
   body[data-page="landing"] .site-actions { gap: 8px; }
-  body[data-page="landing"] .public-locale-select { width: 138px; font-size: 12px; }
+  body[data-page="landing"] .public-locale-select { width: 158px; font-size: 12px; }
   body[data-page="landing"] .hero-actions > .button { width: 100%; }
   body[data-page="landing"] .site-actions { gap: 10px; font-size: 12px; }
   body[data-page="landing"] .brand-name { font-size: 22px; }
@@ -258,7 +258,10 @@ body[data-page="landing"] .site-footer p { font-size: 12px; line-height: 1.8; }
 }
 @media (max-width: 360px) {
   body[data-page="landing"] .site-nav { column-gap: 10px; }
-  body[data-page="landing"] .site-actions { gap: 6px; }
+  body[data-page="landing"] .site-actions { flex-wrap: wrap; justify-content: center; column-gap: 6px; row-gap: 8px; }
+  body[data-page="landing"] .landing-locale-slot { flex: 0 0 100%; justify-content: center; }
+  body[data-page="landing"] .public-locale-select { width: 158px; }
+  body[data-page="landing"] .site-actions > a { white-space: nowrap; }
   body[data-page="landing"] .site-actions .nav-cta { padding-inline: 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
