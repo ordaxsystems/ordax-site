@@ -27,4 +27,5 @@ body[data-page="download"]{--canvas:var(--ordax-bg);--surface:var(--ordax-panel)
 /* Keep the two supporting actions comfortable to use on touch screens. */
 [data-page="download"] .hero-anchor{min-height:44px;align-items:center}
 @media(max-width:760px){[data-page="download"] .account-notice a{display:inline-flex;align-items:center;min-height:44px}}
-@media(any-pointer:coarse){.integrity-panel>a,.account-notice a{display:inline-flex;align-items:center;min-height:44px}}
+.integrity-panel>a{display:inline-flex;align-items:center;min-height:44px}
+@media(any-pointer:coarse){.account-notice a{display:inline-flex;align-items:center;min-height:44px}}
