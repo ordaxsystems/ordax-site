@@ -322,6 +322,8 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const body = document.body;
       const main = $('main');
       const header = $('header.site-header');
+      const heroCopy = route === '/' ? $('.hero-copy') : null;
+      const heroCopyStyle = heroCopy ? getComputedStyle(heroCopy) : null;
       const headerBrand = header?.querySelector(':scope > .brand') ||
         header?.querySelector(':scope > a:first-child');
       const headerActions = header?.querySelector(':scope > .site-actions');
@@ -425,6 +427,9 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         main: !!main,
         mainCount: document.querySelectorAll('main').length,
         mainH1Count: [...document.querySelectorAll('main h1')].filter(h => !h.closest('.playground, [aria-hidden="true"]')).length,
+        landingHeroCopyVisible: !heroCopy || (heroCopyStyle.opacity === '1' &&
+          heroCopyStyle.visibility === 'visible' && heroCopyStyle.display !== 'none'),
+        landingHeroCopyHasNoEntranceAnimation: !heroCopy || heroCopyStyle.animationName === 'none',
         skip: !!$('.skip-link[href^="#"]'),
         publicHeaderRegionsReady: route === '/conta/' || !header ||
           (!!headerBrand && !!headerActions && !!headerNav && !!navLinksContainer && !!localeSelect),
@@ -1064,7 +1069,11 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     check.update({"accountShellPresent": report["accountPortal"],
                                   "noInventedVerifiedUser": not report["accountHasVerifiedUser"]})
                 if route == "/":
-                    check["landingFixturePresent"] = report["landingFixturePresent"]
+                    check.update({
+                        "landingFixturePresent": report["landingFixturePresent"],
+                        "landingHeroCopyVisibleOnFirstRender": report["landingHeroCopyVisible"],
+                        "landingHeroCopyHasNoEntranceAnimation": report["landingHeroCopyHasNoEntranceAnimation"],
+                    })
                 for name, success in check.items():
                     if not success:
                         failures.append({"route": route, "viewport": width, "rule": name,

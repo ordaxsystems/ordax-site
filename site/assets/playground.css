@@ -212,7 +212,6 @@ body[data-page="landing"]{--canvas:#f5f5f2;--surface:#fff;--ink:#17201f;--muted:
 [data-page="landing"] .hero{position:relative;padding-top:78px;padding-bottom:50px;background:radial-gradient(ellipse at 50% 10%,#ece7dcaa,transparent 65%)}
 [data-page="landing"] .hero h1{font-weight:450;letter-spacing:-.067em;font-size:clamp(43px,6.1vw,86px)}
 [data-page="landing"] .hero h1 span{color:#8b9188}
-[data-page="landing"] .hero-copy{animation:project-reveal .85s ease both}
 [data-page="landing"] .hero-lead{font-size:16px}
 [data-page="landing"] .button-primary{background:#22332a;color:#f8f7ef}
 [data-page="landing"] .button-primary:hover{background:#3e5042}
@@ -225,7 +224,7 @@ body[data-page="landing"]{--canvas:#f5f5f2;--surface:#fff;--ink:#17201f;--muted:
 @keyframes project-reveal{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 @keyframes sculpture-arrive{from{opacity:0;transform:rotate(-55deg) scale(.85)}to{opacity:1;transform:rotate(-35deg) scale(1)}}
 @media(max-width:640px){[data-page="landing"] .hero{padding-top:43px;padding-bottom:32px}[data-page="landing"] .hero h1{font-size:clamp(37px,9vw,57px)}[data-page="landing"] .hero-lead{font-size:13px}.demo-recipes button{font-size:9px;padding:9px 10px}.device-stage{padding-top:15px}}
-@media(prefers-reduced-motion:reduce){.project-demo,.aurora-sculpture,.intelligence-response,[data-page="landing"] .hero-copy,.laptop-device,.phone-device{animation:none}.product-features article,.mode-map>div,.intelligence-cta{transition:none}}
+@media(prefers-reduced-motion:reduce){.project-demo,.aurora-sculpture,.intelligence-response,.laptop-device,.phone-device{animation:none}.product-features article,.mode-map>div,.intelligence-cta{transition:none}}
 /* Approved titanium concept. Device geometry uses the stage, not page breakpoints. */
 body.titanium-concept{--canvas:#080f19;--surface:#101a29;--ink:#edf2fa;--muted:#98a7bd;--line:#ffffff20;--accent:#a9c9f7;background:radial-gradient(ellipse at 80% 18%,#172d482f,transparent 43%),#080f19;color:var(--ink);color-scheme:dark}
 .titanium-concept .brand-name{font-weight:450;color:#eff4fd}
