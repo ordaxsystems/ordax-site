@@ -162,8 +162,7 @@
 }
 @media (max-width: 780px) {
  .account-ui .account-stage { display: flex; flex-direction: column; align-items: stretch; gap: 28px; padding: 12px 20px 24px; }
- .account-ui .account-access { order: 1; }
- .account-ui .account-story { order: 2; max-width: 460px; width: 100%; margin: 0 auto; padding-top: 24px; border-top: 1px solid var(--account-line); gap: 24px; }
+ .account-ui .account-story { max-width: 460px; width: 100%; margin: 0 auto; padding-top: 24px; border-top: 1px solid var(--account-line); gap: 24px; }
  .account-ui .account-story :is(h1, h2) { font-size: 32px; }
  .account-ui .account-benefits > li { grid-template-columns: 110px minmax(0, 1fr); gap: 12px; }
 }

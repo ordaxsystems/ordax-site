@@ -225,6 +225,27 @@ class SiteContractTests(unittest.TestCase):
                     "portal.css must remain the authoritative owner",
                 )
 
+    def test_identity_mobile_stack_preserves_document_order(self):
+        account_css = (ROOT / "site/assets/account.css").read_text(encoding="utf-8")
+        self.assertNotRegex(
+            account_css,
+            r"\border\s*:\s*\d+",
+            "mobile identity layouts must not visually reorder sections away from the DOM",
+        )
+
+        expected_sections = {
+            "site/login/index.html": ["account-access", "account-story"],
+            "site/cadastro/index.html": ["account-access", "account-story"],
+            "site/recuperar/index.html": ["account-access", "account-story"],
+            "site/recuperar/nova-senha/index.html": ["account-access", "account-story"],
+            "site/web/index.html": ["account-story", "account-access"],
+        }
+        for source_path, expected in expected_sections.items():
+            markup = (ROOT / source_path).read_text(encoding="utf-8")
+            actual = re.findall(r'<section class="(account-access|account-story)\b', markup)
+            with self.subTest(route=source_path):
+                self.assertEqual(actual, expected)
+
     def test_public_content_gutters_and_landing_rhythm_have_single_source(self):
         shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
         portal_css = (ROOT / "site/assets/portal.css").read_text(encoding="utf-8")
