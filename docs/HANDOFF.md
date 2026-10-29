@@ -10,6 +10,8 @@ Em dispositivos com ponteiro de toque, os links de navegação do cabeçalho e r
 
 Na página Download, o cabeçalho usa duas linhas entre 761 e 900px para manter ações, navegação e idioma dentro da largura disponível antes do breakpoint móvel.
 
+As versões em inglês de Termos e Privacidade agora traduzem todos os títulos de seção, a data de vigência e o rótulo de contato que ainda apareciam em português. O catálogo i18n está referenciado por fingerprint nas onze rotas para entregar as novas traduções após o deploy. O texto legal em português não foi alterado.
+
 ## Propriedade e fronteiras
 
 - **`ordax-site`**: HTML/CSS/JS público, onze rotas, apresentação de login/Conta, SEO, i18n, build e testes independentes.
