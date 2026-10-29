@@ -48,3 +48,11 @@ Esta verificação é local e não comprova Identity em staging, autorização d
 - Candidato `source_commit=e67923e6cf8398ad148eeaa3a64643ea0487e816`; SHA-256 do manifesto `B60F1BE92A215FE140623C6DAD4D847E52C242A60D5566F326AB328682725665`. `build.py check`, 76 testes Python, localização (1.716 mensagens, 11 rotas, 2 idiomas), `build.py verify` e smoke estático (11 rotas) passaram. A prévia em `http://127.0.0.1:4219/licencas/` respondeu HTTP 200; inspeção visual e árvore de acessibilidade confirmaram o heading novo.
 - A matriz completa de navegador ainda se refere ao candidato `c70d0b6…` acima. Nesta máquina, `scripts/browser_smoke.py` não iniciou por falta de ChromeDriver; não atribuir aquela matriz ao commit `e67923e`. O CI de navegador executa em `main` ou em pull request.
 - Não houve deploy de produção.
+
+## Atualização de layout SSOT — 29/10/2026
+
+- `site/assets/portal.css` agora é o único owner da geometria e tipografia de `.page-shell`, `.page-hero`, `.auth-shell` e `.auth-copy`. `site/assets/site.css` não redefine esses componentes; isso remove a disputa entre os breakpoints de 1050 px do shell geral e 1000 px do portal.
+- A imagem fornecida mostrava a prévia antiga servida em `4209` (`site-preview-responsive-final-c6ed577`). A prévia foi apontada para o candidato atual. Em 390 px e 280 px, a marca, as ações de conta agrupadas e o botão do menu ocupam uma linha; idioma aparece no disclosure aberto, antes dos links. Entrar e cadastrar seguem como links distintos para login e registro, dentro do mesmo grupo visual.
+- Candidato verificado: `source_commit=31b01e0d9ca7e2ef273c5365e0c2d4a22a54ad31`; SHA-256 do manifesto `A7D054481E3BAC03C53C845B3AA9AC87A9AC6974805ECB3EEB8B15C46010BFB6`.
+- `build.py check`, 77 testes Python, localização (1.716 mensagens, 11 rotas e 2 idiomas), `build.py verify` e smoke estático (11 rotas) passaram. Chrome aprovou 11 rotas × 9 viewports (99 casos), 281 verificações de breakpoint, 308 checagens bilíngues, 77 casos touch, 22 reflows, 11 testes de texto a 200%, 22 testes de espaçamento e 6 casos sem JavaScript, sem falhas. Relatório e 132 capturas: `work/browser-evidence-header-layout-ssot-20261029/`.
+- Prévia local atual: `http://127.0.0.1:4209/termos/`. Esta checagem é de candidato local; não houve deploy de produção.
