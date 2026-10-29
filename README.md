@@ -55,7 +55,7 @@ No mobile, marca e ações de conta ficam na primeira linha. Um botão disclosur
 
 A landing lê **um** `/assets/playground-fixture.json` de mesma origem, com falha indisponível explícita. Foi removida a segunda fixture embutida na landing (~159 KB), sem copiar fonte executável da Surface. O controlador mantém um único landmark `main` para acessibilidade.
 
-CI de candidato: `python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence` usa ChromeDriver pré-instalado, exercita 11 rotas em 1440, 1024, 768, 760, 390 e 320 px, guarda capturas e relatório e mantém APIs de autenticação indisponíveis em loopback. A execução [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365) registra a matriz anterior; alterações posteriores precisam passar no CI da revisão atual. A prova continua sem substituir auditoria WCAG completa ou auth E2E em staging.
+CI de candidato: `python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence` usa ChromeDriver pré-instalado e a matriz de viewports definida em `scripts/browser_smoke.py` para exercitar as 11 rotas. A execução guarda capturas e relatório e mantém APIs de autenticação indisponíveis em loopback. O CI precisa passar na revisão atual; provas locais não substituem auditoria WCAG completa ou auth E2E em staging.
 
 Os snapshots históricos do OS já foram eliminados do Git do Site. Marca e Meridian são consumidas de duas prereleases Dev assinadas da Surface; não existe catálogo comercial autorizado.
 
