@@ -34,3 +34,11 @@ body[data-page="conta"] [data-account-logout] button{font:600 13px var(--sans);c
 body[data-page="conta"] [data-account-logout] button:disabled{opacity:.55;cursor:not-allowed}
 body[data-page="conta"] .account-future{margin-top:27px}
 body[data-page] :is(.status-panel p,.site-footer p,.site-footer nav){font-size:12px}
+
+/* Give portal and document navigation a dedicated tablet row before links wrap. */
+@media(min-width:761px) and (max-width:900px){
+  body:is([data-page="conta"],[data-page^="recuperar"],[data-page="licencas"],[data-page="privacidade"],[data-page="termos"]) .site-header{flex-wrap:wrap;align-items:center;gap:12px 24px;padding:18px 32px}
+  body:is([data-page="conta"],[data-page^="recuperar"],[data-page="licencas"],[data-page="privacidade"],[data-page="termos"]) .site-nav{order:3;flex:1 0 100%;width:100%;justify-content:center;border-top:1px solid #27384e;padding:14px 0 0;gap:22px;margin-left:0;overflow-x:auto}
+  body:is([data-page="conta"],[data-page^="recuperar"],[data-page="licencas"],[data-page="privacidade"],[data-page="termos"]) .site-nav>a{flex:0 0 auto;white-space:nowrap}
+  body:is([data-page="conta"],[data-page^="recuperar"],[data-page="licencas"],[data-page="privacidade"],[data-page="termos"]) .public-locale-switcher{flex:0 0 auto}
+}

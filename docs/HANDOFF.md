@@ -8,7 +8,7 @@ As páginas de Privacidade e Termos agora limitam o texto corrido a 76ch e usam 
 
 Em dispositivos com ponteiro de toque, os links de navegação do cabeçalho e rodapé, atalhos dos formulários de identidade, controles principais da Conta e ações de integridade/download também mantêm alvo mínimo de 44px, mesmo acima dos breakpoints móveis.
 
-Na página Download, o cabeçalho usa duas linhas entre 761 e 900px para manter ações, navegação e idioma dentro da largura disponível antes do breakpoint móvel.
+Na página Download, o cabeçalho usa duas linhas entre 761 e 900px para manter ações, navegação e idioma dentro da largura disponível antes do breakpoint móvel. Os cabeçalhos do portal e das páginas legais também reservam uma segunda linha para evitar que rótulos da navegação quebrem nesse intervalo.
 
 As versões em inglês de Termos e Privacidade agora traduzem todos os títulos de seção, a data de vigência e o rótulo de contato que ainda apareciam em português. O catálogo i18n está referenciado por fingerprint nas onze rotas para entregar as novas traduções após o deploy. O texto legal em português não foi alterado.
 
