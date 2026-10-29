@@ -297,6 +297,27 @@ class SiteContractTests(unittest.TestCase):
             with self.assertRaisesRegex(PublicShellError, "unknown profile"):
                 load_public_shell(load_routes(), malformed)
 
+    def test_account_navigation_is_derived_from_section_metadata(self):
+        portal = (ROOT / "site/assets/account-portal.js").read_text(encoding="utf-8")
+        catalog = (ROOT / "site/i18n/catalog.js").read_text(encoding="utf-8")
+        account_css = (ROOT / "site/assets/account-dashboard.css").read_text(encoding="utf-8")
+        self.assertIn(
+            "sections.filter(section => section.navigationGroup === group.id).map(section => section.id)",
+            portal,
+        )
+        self.assertIn("sections.filter(section => section.mobileLabel)", portal)
+        self.assertIn("sections.filter(section => section.mobileOverflow)", portal)
+        self.assertNotRegex(portal, r"const mobileSections\s*=\s*Object\.freeze\(\s*\[")
+        for label in ("Resumo", "Plano", "Consumo", "Segurança"):
+            with self.subTest(label=label):
+                self.assertIn(f'mobileLabel: "{label}"', portal)
+                self.assertRegex(catalog, r'\["' + re.escape(label) + r'"\s*,')
+        self.assertEqual(
+            len(re.findall(r"(?m)^\s*body\.account-portal \.mobile-nav\{", account_css)),
+            1,
+            "mobile navigation geometry must have one responsive owner",
+        )
+
     def test_identity_and_mcp_account_data_share_bounded_json_transport(self):
         shell = (ROOT / "site/assets/site.js").read_text(encoding="utf-8")
         portal = (ROOT / "site/assets/account-portal.js").read_text(encoding="utf-8")
