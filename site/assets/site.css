@@ -648,26 +648,12 @@ a {
 }
 
 @media (max-width: 760px) {
-  .site-header,
-  .site-footer,
   .hero,
   .section,
   .page-shell,
   .auth-shell {
     padding-left: 22px;
     padding-right: 22px;
-  }
-
-  .site-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .site-nav {
-    width: 100%;
-    gap: 14px;
-    overflow-x: auto;
-    padding-bottom: 6px;
   }
 
   .site-nav > a,
@@ -726,18 +712,12 @@ a {
     margin-top: 42px;
   }
 
-  .site-footer {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .release-card-header,
   .release-target {
     align-items: flex-start;
     flex-direction: column;
   }
 }
-
 
 .release-compliance {
   margin-top: 28px;
@@ -781,7 +761,6 @@ a {
     flex-direction: column;
   }
 }
-
 
 /* MVP public landing */
 
@@ -1010,7 +989,6 @@ a {
   }
 }
 
-
 .download-flow {
   margin-top: 88px;
   padding-left: 0;
@@ -1027,7 +1005,6 @@ a {
     margin-top: 64px;
   }
 }
-
 
 /* Public-site localization owner */
 .public-locale-switcher {
@@ -1058,27 +1035,6 @@ a {
   outline-offset: 2px;
 }
 
-/* The injected language selector is a complete navigation item, not an
-   extra fixed-width item on the last row. The four document/download headers
-   otherwise overflow at a 320px desktop CSS viewport (400% reflow case). */
-@media (max-width: 430px) {
-  body:is([data-page="download"], [data-page="licencas"], [data-page="privacidade"], [data-page="termos"]) .site-nav {
-    flex-wrap: wrap;
-  }
-
-  body:is([data-page="download"], [data-page="licencas"], [data-page="privacidade"], [data-page="termos"]) .site-nav > .public-locale-switcher {
-    flex: 0 1 100%;
-    min-width: 0;
-    margin-inline-start: 0;
-  }
-
-  body:is([data-page="download"], [data-page="licencas"], [data-page="privacidade"], [data-page="termos"]) .site-nav .public-locale-select {
-    min-width: 0;
-    max-width: 100%;
-  }
-}
-
-
 /* Public account abuse protection: layout only; authority remains server-side. */
 .identity-turnstile {
   min-height: 65px;
@@ -1087,7 +1043,6 @@ a {
   justify-content: flex-start;
   overflow: hidden;
 }
-
 
 /* Auth messages are plain text from a fixed allowlist, never arbitrary URLs or HTML. */
 .identity-notice{margin:16px 0 0;padding:13px 15px;border:1px solid #536c85;border-radius:9px;background:#15283a;color:#d9eaff;font-size:12px;line-height:1.6}
@@ -1183,4 +1138,178 @@ a {
   }
 
   .public-locale-select { min-height: 44px; }
+}
+
+/* Shared public shell layout. Every public route uses the same row order and
+   wrapping rules; page styles own only their typography, color and spacing. */
+@media (max-width: 1100px) {
+  html body[data-page] .site-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+    grid-template-areas: "brand actions" "nav nav";
+    align-items: center;
+    justify-content: stretch;
+    gap: 8px 20px;
+    min-height: 0;
+    padding: 16px clamp(18px, 4vw, 32px);
+  }
+
+  html body[data-page] .site-header > .brand {
+    grid-area: brand;
+    justify-self: start;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  html body[data-page] .site-header > :is(.site-actions, .account-nav-actions, .download-nav-actions, .login-nav-actions, .signup-nav-actions) {
+    grid-area: actions;
+    justify-self: end;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px 14px;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+  }
+
+  html body[data-page] .site-header > .site-nav {
+    grid-area: nav;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px clamp(10px, 2vw, 22px);
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 8px 0 0;
+    overflow: visible;
+    border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+    white-space: normal;
+  }
+
+  html body[data-page] .site-header > .site-nav > a {
+    display: inline-flex;
+    flex: 0 1 auto;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    max-width: 100%;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  html body[data-page] .site-nav > .public-locale-switcher {
+    flex: 0 1 auto;
+    min-width: 0;
+    margin: 0;
+  }
+
+  html body[data-page] .site-nav .public-locale-select {
+    min-width: 0;
+    max-width: 100%;
+    min-height: 44px;
+  }
+
+  html body[data-page] .account-nav-actions > .account-locale-slot,
+  html body[data-page] .site-actions > .landing-locale-slot {
+    display: inline-flex;
+    order: 0;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  html body[data-page] .account-nav-actions .public-locale-select,
+  html body[data-page] .site-actions .public-locale-select {
+    min-width: 0;
+    max-width: 100%;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 600px) {
+  html body[data-page] .site-header {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "brand" "actions" "nav";
+    justify-items: center;
+    gap: 8px;
+    padding: 14px clamp(16px, 5vw, 24px);
+  }
+
+  html body[data-page] .site-header > .brand {
+    justify-self: center;
+    flex: none;
+  }
+
+  html body[data-page] .site-header > :is(.site-actions, .account-nav-actions, .download-nav-actions, .login-nav-actions, .signup-nav-actions) {
+    justify-self: center;
+    justify-content: center;
+    width: min(100%, 36rem);
+    gap: 6px 10px;
+    text-align: center;
+  }
+
+  html body[data-page] .site-header > .site-nav {
+    justify-content: center;
+    gap: 2px clamp(6px, 2.5vw, 14px);
+    padding-top: 8px;
+    text-align: center;
+  }
+
+  html body[data-page] .site-nav > .public-locale-switcher,
+  html body[data-page] .account-nav-actions > .account-locale-slot,
+  html body[data-page] .site-actions > .landing-locale-slot {
+    flex: 1 1 100%;
+    justify-content: center;
+    width: 100%;
+  }
+
+  html body[data-page] .site-header .public-locale-select {
+    width: auto;
+    min-width: 0;
+    max-width: min(100%, 18rem);
+  }
+
+  html body[data-page] .site-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+    width: 100%;
+    min-height: 0;
+    padding: 24px clamp(16px, 5vw, 24px);
+  }
+
+  html body[data-page] .site-footer > *,
+  html body[data-page] .site-footer nav {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  html body[data-page] .site-footer nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 2px 12px;
+    width: 100%;
+    margin: 0;
+  }
+
+  html body[data-page] .site-footer nav > a,
+  html body[data-page] .site-footer > a:first-child:not(.brand) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  html body[data-page] .site-footer p {
+    max-width: 65ch;
+    overflow-wrap: anywhere;
+  }
 }

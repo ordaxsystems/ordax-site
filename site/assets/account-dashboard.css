@@ -255,6 +255,11 @@ body.account-portal .management-icon{width:32px;height:32px}
 body.account-portal .page-footer>span{font-size:12px}
 body.account-portal .page-footer>div{gap:10px}}
 @media(max-width:980px) and (min-width:641px){
+body.account-portal .topbar{grid-template-columns:var(--sidebar-width) minmax(0,1fr);padding-inline:18px}
+body.account-portal .topbar-center{display:none}
+body.account-portal .topbar-actions{min-width:0;justify-content:flex-end}
+}
+@media(max-width:980px) and (min-width:641px){
 body.account-portal .chart-legend{gap:12px;font-size:10px}
 body.account-portal .segment-tabs button{padding:0 8px;font-size:12px}
 body.account-portal .setting-row{grid-template-columns:32px minmax(0,1fr)}
@@ -483,7 +488,6 @@ body.account-portal .records-table{width:100%;table-layout:fixed;border-collapse
 body.account-portal .records-table thead th{text-align:left;padding:12px 8px;border-block:1px solid var(--border);font-size:11px;font-weight:500;color:var(--muted-foreground)}
 body.account-portal .records-table thead th:first-child{width:40%}
 body.account-portal .records-table tbody td{padding:0}
-
 
 /* Shared settings primitives: capability metadata supplies every state label. */
 body.account-portal .status-tag.is-local,body.account-portal .status-tag.is-verified{background:var(--md-sage-soft);border-color:var(--md-border);color:var(--md-sage)}
