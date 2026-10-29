@@ -372,18 +372,13 @@ html body[data-page] .site-header > .site-nav > .site-nav-links {
   text-transform: uppercase;
 }
 
-.hero h1,
-.page-hero h1,
-.auth-copy h1 {
+.hero h1 {
   margin: 0;
   font-family: var(--serif);
+  font-size: clamp(64px, 7.4vw, 118px);
   font-weight: 400;
   letter-spacing: -.055em;
   line-height: .95;
-}
-
-.hero h1 {
-  font-size: clamp(64px, 7.4vw, 118px);
 }
 
 .hero-lead {
@@ -616,31 +611,6 @@ html body[data-page] .site-header > .site-nav > .site-nav-links {
   align-items: end;
 }
 
-.page-shell,
-.auth-shell {
-  max-width: var(--content);
-  margin: 0 auto;
-  padding: 86px 42px 120px;
-}
-
-.page-hero {
-  max-width: 980px;
-}
-
-.page-hero h1 {
-  font-size: clamp(54px, 6.4vw, 98px);
-  overflow-wrap: break-word;
-}
-
-.page-hero > p:last-child,
-.auth-copy > p:last-child {
-  max-width: 720px;
-  margin: 30px 0 0;
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1.6;
-}
-
 .status-panel {
   margin-top: 70px;
   display: flex;
@@ -733,18 +703,6 @@ html body[data-page] .site-header > .site-nav > .site-nav-links {
 
 .info-grid h2 {
   font-size: 34px;
-}
-
-.auth-shell {
-  min-height: 660px;
-  display: grid;
-  grid-template-columns: 1.15fr .85fr;
-  gap: 110px;
-  align-items: center;
-}
-
-.auth-copy h1 {
-  font-size: clamp(52px, 5.5vw, 88px);
 }
 
 .auth-card {
@@ -855,21 +813,14 @@ html body[data-page] footer.site-footer nav {
 
   .section-heading,
   .split-section,
-  .account-callout,
-  .auth-shell {
+  .account-callout {
     grid-template-columns: 1fr;
-  }
-
-  .auth-shell {
-    gap: 52px;
   }
 }
 
 @media (max-width: 760px) {
   .hero,
-  .section,
-  .page-shell,
-  .auth-shell {
+  .section {
     padding-left: 22px;
     padding-right: 22px;
   }

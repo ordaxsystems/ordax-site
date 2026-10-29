@@ -185,6 +185,22 @@ class SiteContractTests(unittest.TestCase):
         self.assertNotIn(".account-ui .sr-only", account_css)
         self.assertNotIn('body[data-page="landing"] .sr-only', landing_css)
 
+    def test_portal_document_and_auth_layouts_have_one_stylesheet_owner(self):
+        shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
+        portal_css = (ROOT / "site/assets/portal.css").read_text(encoding="utf-8")
+        for selector in (".page-shell", ".page-hero", ".auth-shell", ".auth-copy"):
+            with self.subTest(selector=selector):
+                self.assertNotRegex(
+                    shared_css,
+                    rf"(?<![\w-]){re.escape(selector)}(?![\w-])",
+                    "portal page layout must not be redefined in the public landing stylesheet",
+                )
+                self.assertRegex(
+                    portal_css,
+                    rf"(?<![\w-]){re.escape(selector)}(?![\w-])",
+                    "portal.css must remain the authoritative owner",
+                )
+
     def test_public_footers_share_one_layout_source(self):
         contract = load_public_shell(load_routes())
         shared_css = (ROOT / "site/assets/site.css").read_text(encoding="utf-8")
