@@ -41,6 +41,8 @@ python3 scripts/smoke_static.py --out out/site
 python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence
 ```
 
+Em Windows, deixe `chromedriver.exe` no `PATH` e informe o navegador instalado: `python scripts/browser_smoke.py --chrome-binary "C:\Program Files\Google\Chrome\Application\chrome.exe" --out out/site --evidence out/browser-evidence`. O CI Linux continua usando a descoberta padrão de `google-chrome`.
+
 A apresentação de planos mostra apenas **Planos em preparação — contratação indisponível**; não possui catálogo de ofertas autorizado e não exibe preços/cotas fictícios. O catálogo de downloads permanece vazio sem publicação atestada do owner. Login/Identity, pagamentos, DNS e Stable continuam bloqueados pelos gates próprios; uma prerelease Dev não é autorização de produção.
 
 ## Site SSOT, SEO e prova real de browser

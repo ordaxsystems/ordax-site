@@ -238,15 +238,18 @@ class Driver:
             raise BrowserProofError(str(result["value"]))
         return result.get("value")
 
-    def create(self):
+    def create(self, chrome_binary: str | None = None):
+        chrome_options = {"args": [
+            "--headless=new", "--no-sandbox", "--disable-dev-shm-usage",
+            "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+            "--window-size=1440,900",
+        ]}
+        if chrome_binary:
+            chrome_options["binary"] = chrome_binary
         response = self.command("POST", "/session", {
             "capabilities": {"alwaysMatch": {
                 "browserName": "chrome",
-                "goog:chromeOptions": {"args": [
-                    "--headless=new", "--no-sandbox", "--disable-dev-shm-usage",
-                    "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-                    "--window-size=1440,900",
-                ]},
+                "goog:chromeOptions": chrome_options,
             }}
         })
         # W3C response returns {sessionId,capabilities} under value.
@@ -830,11 +833,15 @@ def wait_for_route(driver: Driver, route: str) -> None:
             time.sleep(0.1)
 
 
-def run(root: Path, evidence: Path) -> dict:
+def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
     if not (root / "public-site-manifest.json").is_file():
         raise BrowserProofError("build candidate missing; never browse unpackaged source")
-    if not shutil.which("chromedriver") or not shutil.which("google-chrome"):
-        raise BrowserProofError("Chrome + ChromeDriver required on pinned CI runner")
+    chrome_binary = (str(Path(chrome_binary).resolve()) if chrome_binary
+                     else shutil.which("google-chrome"))
+    if (not shutil.which("chromedriver") or not chrome_binary
+            or not Path(chrome_binary).is_file()):
+        raise BrowserProofError(
+            "Chrome + ChromeDriver required; pass --chrome-binary when Chrome is not on PATH")
     evidence.mkdir(parents=True, exist_ok=True)
     server = http.server.ThreadingHTTPServer(
         ("127.0.0.1", 0),
@@ -883,7 +890,7 @@ def run(root: Path, evidence: Path) -> dict:
                 time.sleep(0.1)
         else:
             raise BrowserProofError("ChromeDriver did not start")
-        driver.create()
+        driver.create(chrome_binary)
         for route in ROUTES:
             for width, height in VIEWPORTS:
                 driver.cdp("Emulation.setDeviceMetricsOverride", {
@@ -1443,8 +1450,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default="out/site")
     parser.add_argument("--evidence", default="out/browser-evidence")
+    parser.add_argument(
+        "--chrome-binary",
+        help="Path to Chrome/Chromium when it is not named google-chrome on PATH",
+    )
     args = parser.parse_args()
-    output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
+    output = run(Path(args.out).resolve(), Path(args.evidence).resolve(), args.chrome_binary)
     print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
 
 
