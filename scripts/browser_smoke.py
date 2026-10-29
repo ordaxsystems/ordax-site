@@ -29,17 +29,17 @@ from urllib.parse import unquote, urljoin, urlsplit
 
 from site_routes import PATHS as ROUTES
 VIEWPORTS = ((1440, 900), (1024, 900), (768, 900), (760, 900),
-             (430, 900), (390, 844), (360, 800), (320, 740))
+             (430, 900), (390, 844), (360, 800), (320, 740), (280, 740))
 # Touch-first tablets retain a desktop CSS viewport while using coarse input.
 # Sample both sides of shared-shell and account-app layout boundaries.
 TOUCH_VIEWPORTS = (641, 760, 761, 1100, 1101, 1180, 1181)
-LOCALIZATION_VIEWPORTS = (320, 360, 390, 430, 600, 641, 768, 980, 1024, 1100, 1180, 1280, 1440)
+LOCALIZATION_VIEWPORTS = (280, 320, 360, 390, 430, 600, 641, 768, 980, 1024, 1100, 1180, 1280, 1440)
 NO_SCRIPT_ROUTES = ("/login/", "/cadastro/", "/recuperar/",
                     "/recuperar/nova-senha/", "/conta/", "/web/")
 # 1280px layout viewed through 200% and 400% effective CSS viewports.
 # This checks responsive reflow, not real browser zoom or text magnification.
 REFLOW_WIDTHS = ((640, 200), (320, 400))
-BREAKPOINT_WIDTH_RANGE = (320, 2560)
+BREAKPOINT_WIDTH_RANGE = (280, 2560)
 SURFACE_OWNED_STYLESHEETS = frozenset({"playground.css", "surface-snapshot.css"})
 
 
@@ -1465,7 +1465,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     short = route.strip("/").replace("/", "-") or "home"
                     failed = [name for name, success in checks.items() if not success]
                     screenshot = None
-                    if failed or (width == 320 and locale == "en-US"):
+                    if failed or (width in (280, 320) and locale == "en-US"):
                         screenshot = f"localized-{locale}-{short}-{width}.png"
                         driver.shot(evidence / screenshot)
                         report["screenshot"] = screenshot
