@@ -622,7 +622,7 @@ body.account-portal .detail-help-link{display:flex;align-items:center;gap:8px;pa
 body.account-portal .detail-help-link svg{width:16px;height:16px}
 body.account-portal .detail-help-link svg:last-child{margin-left:auto}
 body.account-portal summary:focus-visible{outline:2px solid var(--md-focus);outline-offset:4px;border-radius:var(--control-radius)}
-@media(max-width:1180px) and (min-width:641px){
+@media(max-width:1180px) and (min-width:981px){
  body.account-portal .account-app{--sidebar-width:var(--md-rail-compact)}
  body.account-portal .desktop-sidebar{padding-inline:10px}
  body.account-portal :is(.sidebar-heading,.desktop-sidebar .nav-group-label,.desktop-sidebar .sidebar-link>span,.brand>span){display:none}

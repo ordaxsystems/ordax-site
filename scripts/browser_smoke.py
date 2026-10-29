@@ -389,6 +389,16 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
           navToggle.getAttribute('aria-expanded') === 'false' &&
           headerNav.dataset.expanded === 'false' &&
           getComputedStyle(navLinksContainer).display === 'none');
+      const accountTopbar = route === '/conta/' ? body.querySelector('.topbar') : null;
+      const accountTopbarActions = accountTopbar?.querySelector('.topbar-actions');
+      const accountTopbarFitsViewport = !accountTopbar || (() => {
+        const topbarBox = accountTopbar.getBoundingClientRect();
+        const actionsBox = accountTopbarActions?.getBoundingClientRect();
+        return !!actionsBox && topbarBox.left >= -1 && topbarBox.right <= innerWidth + 1 &&
+          actionsBox.left >= topbarBox.left - 1 && actionsBox.right <= topbarBox.right + 1 &&
+          actionsBox.top >= topbarBox.top - 1 && actionsBox.bottom <= topbarBox.bottom + 1 &&
+          accountTopbar.scrollWidth <= accountTopbar.clientWidth + 1;
+      })();
       const footer = $('footer.site-footer');
       const footerLinks = footer ? [...footer.querySelectorAll('a')] : [];
       const footerBox = footer?.getBoundingClientRect();
@@ -472,6 +482,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         skip: !!$('.skip-link[href^="#"]'),
         publicHeaderRegionsReady: route === '/conta/' || !header ||
           (!!headerBrand && !!headerActions && !!headerNav && !!navLinksContainer && !!localeSelect),
+        accountTopbarFitsViewport,
         publicHeaderBrandActionsShareRow: route === '/conta/' || !header ||
           (!!headerBrandBox && !!headerActionsBox &&
             Math.abs((headerBrandBox.top + headerBrandBox.height / 2) -
@@ -1144,6 +1155,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     check.update({"formsFailClosed": not report["exposedAuthForms"] and not report["enabledCredentials"]})
                 if route == "/conta/":
                     check.update({"accountShellPresent": report["accountPortal"],
+                                  "accountTopbarFitsViewport": report["accountTopbarFitsViewport"],
                                   "noInventedVerifiedUser": not report["accountHasVerifiedUser"]})
                 if route == "/":
                     check.update({
@@ -1196,6 +1208,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     checks["mobileDisclosureReady"] = report["publicMobileNavigationDisclosureReady"]
                 if route == "/conta/":
                     checks["accountShellPresent"] = report["accountPortal"]
+                    checks["accountTopbarFitsViewport"] = report["accountTopbarFitsViewport"]
                     checks["noInventedVerifiedUser"] = not report["accountHasVerifiedUser"]
                 if route == "/":
                     checks["landingPhoneEntranceFitsViewport"] = (
