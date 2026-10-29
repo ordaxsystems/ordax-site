@@ -917,8 +917,28 @@ def solid_surface_contrast_probe(driver: Driver) -> dict:
     """
     return driver.run(r"""return (() => {
       const parse = raw => {
-        const m = String(raw).match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s\/]+([\d.]+))?\s*\)$/i);
-        return m ? [+m[1], +m[2], +m[3], m[4] == null ? 1 : +m[4]] : null;
+        const value = String(raw).trim();
+        const legacy = value.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s\/]+([\d.]+))?\s*\)$/i);
+        if (legacy) return [+legacy[1], +legacy[2], +legacy[3], legacy[4] == null ? 1 : +legacy[4]];
+
+        // Modern browsers may serialize computed RGB colors as color(srgb ...).
+        // CSS Color 4 also defines srgb-linear; convert it to encoded sRGB before
+        // applying the WCAG relative-luminance formula below.
+        const modern = value.match(/^color\(\s*(srgb|srgb-linear)\s+(.+)\)$/i);
+        if (!modern) return null;
+        const [components, alphaValue] = modern[2].split('/').map(part => part.trim());
+        const channels = components.split(/\s+/);
+        if (channels.length !== 3 || channels.some(channel => !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?$/.test(channel))) return null;
+        if (alphaValue != null && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?$/.test(alphaValue)) return null;
+        const normalized = channels.map(channel => {
+          const parsed = Number.parseFloat(channel);
+          return Math.max(0, Math.min(1, channel.endsWith('%') ? parsed / 100 : parsed));
+        });
+        const encoded = modern[1].toLowerCase() === 'srgb-linear'
+          ? normalized.map(channel => channel <= 0.0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - 0.055)
+          : normalized;
+        const alpha = alphaValue == null ? 1 : Number.parseFloat(alphaValue) / (alphaValue.endsWith('%') ? 100 : 1);
+        return [...encoded.map(channel => channel * 255), Math.max(0, Math.min(1, alpha))];
       };
       const blend = (front, back) => {
         const a = front[3];
@@ -946,9 +966,22 @@ def solid_surface_contrast_probe(driver: Driver) -> dict:
         '.topbar-center a', '.breadcrumb a', '.page-footer a'
       ];
       const nodes = [...new Set(selectors.flatMap(s => [...document.querySelectorAll(s)]))];
-      const failed = [], unchecked = {};
+      const failed = [], unchecked = {}, uncheckedItems = [];
+      const uncheckedExampleLimit = 24;
       let measured = 0;
-      const skip = why => {unchecked[why] = (unchecked[why] || 0) + 1};
+      const describe = el => ({
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        classes: typeof el.className === 'string' ? el.className.trim().split(/\s+/).slice(0,5) : [],
+        text: el.textContent.trim().replace(/\s+/g, ' ').slice(0,90),
+      });
+      const skip = (why, el, details={}) => {
+        unchecked[why] = (unchecked[why] || 0) + 1;
+        if (uncheckedItems.length < uncheckedExampleLimit) {
+          const style = getComputedStyle(el);
+          uncheckedItems.push({reason:why, ...describe(el), foreground:style.color, ...details});
+        }
+      };
       for (const el of nodes) {
         if (!Array.from(el.childNodes).some(n => n.nodeType===Node.TEXT_NODE && n.textContent.trim())) continue;
         const style=getComputedStyle(el);
@@ -961,17 +994,29 @@ def solid_surface_contrast_probe(driver: Driver) -> dict:
         let background=[255,255,255,1], unmeasurable=false;
         for (const n of chain) {
           const css=getComputedStyle(n);
-          if (css.backgroundImage!=='none') {skip('image-or-gradient');unmeasurable=true;break}
+          if (css.backgroundImage!=='none') {
+            skip('image-or-gradient', el, {
+              backgroundOwner: describe(n),
+              backgroundImage: css.backgroundImage.slice(0,180),
+            });
+            unmeasurable=true;break;
+          }
           if (Number(css.opacity)<1 || css.mixBlendMode!=='normal' || css.filter!=='none') {
-            skip('layer-compositing');unmeasurable=true;break;
+            skip('layer-compositing', el, {
+              compositingOwner: describe(n),
+              opacity: css.opacity,
+              mixBlendMode: css.mixBlendMode,
+              filter: css.filter,
+            });
+            unmeasurable=true;break;
           }
           const bg=parse(css.backgroundColor);
-          if (!bg){skip('unknown-background');unmeasurable=true;break}
+          if (!bg){skip('unknown-background', el, {backgroundOwner:describe(n)});unmeasurable=true;break}
           background=blend(bg,background);
         }
         if (unmeasurable) continue;
         const text=parse(style.color);
-        if (!text) {skip('unknown-foreground');continue}
+        if (!text) {skip('unknown-foreground', el);continue}
         const foreground=blend(text,background);
         const px=parseFloat(style.fontSize)||0;
         const weight=parseInt(style.fontWeight,10)||400;
@@ -988,8 +1033,13 @@ def solid_surface_contrast_probe(driver: Driver) -> dict:
           minimum:threshold,
         });
       }
+      const uncheckedCount = Object.values(unchecked).reduce((sum,count)=>sum+count,0);
+      const unsupportedColorCount = (unchecked['unknown-foreground'] || 0) +
+        (unchecked['unknown-background'] || 0);
       return {measured, failed:failed.slice(0,16), failedCount:failed.length,
-              unchecked, scope:'flat-color foreground/background with no image or compositing'};
+              unsupportedColorCount,
+              unchecked, uncheckedItems, uncheckedItemsCapped:Math.max(0,uncheckedCount-uncheckedItems.length),
+              scope:'flat-color foreground/background with no image or compositing'};
     })();""")
 
 
@@ -1373,8 +1423,14 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                         "skipLinkKeyboardNavigates": report["skipLinkDestination"],
                         "skipLinkKeyboardFocus": report["skipLinkFocusLandsOnMain"],
                         "localeSwitcherLocalizedAndPersistent": all(report["localeSwitch"].values()),
-                        "measuredFlatSurfaceTextContrast": report["solidSurfaceContrast"]["failedCount"] == 0,
-                        "flatSurfaceCoverage": route == "/" or report["solidSurfaceContrast"]["measured"] > 0,
+                        "measuredFlatSurfaceTextContrast": (
+                            report["solidSurfaceContrast"]["failedCount"] == 0
+                            and report["solidSurfaceContrast"]["unsupportedColorCount"] == 0
+                        ),
+                        "flatSurfaceCoverage": (
+                            report["solidSurfaceContrast"]["measured"] > 0
+                            and report["solidSurfaceContrast"]["unsupportedColorCount"] == 0
+                        ),
                         "reducedMotionBrowserPreferenceHonored": report["reducedMotion"]["preferenceMatches"]
                           and report["reducedMotion"]["scrollingIsInstant"]
                           and not report["reducedMotion"]["activeMotion"],
