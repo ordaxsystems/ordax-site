@@ -144,6 +144,20 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn('.site-header[data-nav-enhanced="true"] > .site-nav {\n    display: none;', shared_css)
         self.assertIn('.site-header > .site-actions > .site-nav-toggle', shared_css)
         self.assertIn('.site-header > .site-actions > .site-auth-actions', shared_css)
+        auth_group = re.search(r"(?m)^\.site-auth-actions\s*\{([^{}]*)\}", shared_css)
+        self.assertIsNotNone(auth_group)
+        self.assertNotRegex(auth_group.group(1), r"(?m)^\s*(?:border|background)\s*:")
+        self.assertIn("gap: clamp(8px, 1.2vw, 16px);", auth_group.group(1))
+        self.assertIn(
+            '.site-header > .site-actions > .site-auth-actions > [data-auth-nav="login"] {',
+            shared_css,
+        )
+        self.assertIn(
+            '.site-header > .site-actions > .site-auth-actions > [data-auth-nav="register"] {',
+            shared_css,
+        )
+        self.assertIn("background: var(--ordax-button-bg, var(--ordax-accent, var(--accent)));", shared_css)
+        self.assertIn("color: var(--ordax-button-text, var(--ordax-accent-ink, #fff));", shared_css)
         self.assertIn('.site-header > .site-actions [data-shell-label="desktop"]', shared_css)
         self.assertIn('.site-header > .site-actions [data-shell-label="mobile"]', shared_css)
         self.assertIn(
