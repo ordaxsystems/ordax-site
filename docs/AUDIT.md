@@ -32,7 +32,8 @@ Gates remanescentes e owner de cada integração: [HANDOFF.md](HANDOFF.md). Coma
 - [x] O mobile mantém marca e ações de identidade na mesma linha; o seletor é inserido junto aos links da navegação, sem fila de idioma separada.
 - [x] Exceções são declaradas no contrato: `/conta/` usa shell de aplicação próprio; Privacidade/Termos preservam seus bytes por hash de Identity e o runtime normaliza a apresentação.
 - [x] Testes de contrato cobrem HTML gerado, separação de CSS, conteúdo localizado e preservação dos HTML legais.
-- [ ] Build final, smoke estático e suíte completa: registrar resultados do candidato desta revisão antes do push.
-- [ ] Smoke Chrome com 11 rotas, 1440/390/320 px, alinhamento header, idioma junto à navegação, reflow e rodapé: pendente nesta revisão até execução em host com ChromeDriver.
+- [x] Build do candidato, verificação do bundle, smoke estático nas 11 rotas, 73 testes Python, localização PT-BR/en-US e contrato legal.
+- [x] Prévia local inspecionada nas 11 rotas em 1440, 390 e 320 px: sem overflow horizontal; marca/ações na mesma linha; seletor compartilhando a linha da navegação; rodapé dentro da largura. A troca en-US/PT-BR também foi conferida.
+- [ ] Execução completa de `scripts/browser_smoke.py` e captura de evidências: este host não tem ChromeDriver/Chrome instalados no PATH. Repetir no runner CI configurado para validar também teclado, console, recursos e estados sem JavaScript.
 
 Este checklist cobre regressões estruturais do shell; não declara conformidade WCAG. O gate manual de zoom real, leitor de tela, contraste em composições e estados permanece em [ACCESSIBILITY-GATES.md](ACCESSIBILITY-GATES.md).
