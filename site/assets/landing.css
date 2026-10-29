@@ -9,6 +9,7 @@ body[data-page="landing"].titanium-concept {
   --muted: var(--md-muted);
   --line: var(--md-border);
   --accent: var(--md-accent);
+  --landing-readable-muted: color-mix(in srgb, var(--md-muted) 80%, var(--md-ink));
   --sans: var(--ordax-font);
   --serif: var(--ordax-font-display);
   background: var(--canvas);
@@ -94,7 +95,7 @@ body[data-page="landing"] .landing-benefits p { grid-column: 1/-1; padding-top: 
 body[data-page="landing"] .landing-space-board { margin-top: 24px; border: 1px solid var(--line); border-radius: var(--md-radius-large); background: var(--surface); overflow: hidden; }
 body[data-page="landing"] .landing-board-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
 body[data-page="landing"] .landing-board-top > span:first-child { display: flex; align-items: center; gap: 12px; font-size: 14px; }
-body[data-page="landing"] .landing-tag { max-width: 100%; display: inline-flex; align-items: center; width: fit-content; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 12px; line-height: 1.5; flex-shrink: 0; }
+body[data-page="landing"] .landing-tag { max-width: 100%; display: inline-flex; align-items: center; width: fit-content; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--landing-readable-muted); font-size: 12px; line-height: 1.5; flex-shrink: 0; }
 body[data-page="landing"] .landing-space-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 16px; background: var(--md-canvas); }
 body[data-page="landing"] .landing-space-card { padding: 20px; border: 1px solid var(--line); border-radius: var(--md-radius); background: var(--surface); display: grid; grid-template-columns: 36px minmax(0,1fr); grid-template-rows: auto auto 1fr auto; gap: 0 10px; align-items: start; min-width: 0; }
 body[data-page="landing"] .landing-space-card > .landing-icon { width: 36px; height: 36px; padding: 8px; border: 1px solid var(--line); border-radius: var(--md-radius-small); background: var(--md-sage-soft); }
@@ -106,7 +107,7 @@ body[data-page="landing"] .landing-caption { color: var(--md-muted); font-size: 
 body[data-page="landing"] .landing-space-board > .landing-caption { margin: 0; padding: 12px 20px; border-top: 1px solid var(--line); }
 body[data-page="landing"] .landing-network { margin-top: 14px; display: flex; gap: 16px; align-items: center; padding: 18px 20px; background: var(--md-subtle); border-radius: var(--md-radius); }
 body[data-page="landing"] .landing-network h3 { margin: 0 0 8px; font-size: 16px; font-weight: 500; }
-body[data-page="landing"] .landing-network p { margin: 0; font-size: 13px; line-height: 1.8; color: var(--muted); }
+body[data-page="landing"] .landing-network p { margin: 0; font-size: 13px; line-height: 1.8; color: var(--landing-readable-muted); }
 body[data-page="landing"] .landing-intelligence { display: grid; grid-template-columns: 1fr 1fr; gap: 24px 32px; align-items: start; }
 body[data-page="landing"] .landing-text-link { display: inline-flex; align-items: center; gap: 18px; color: var(--accent); font-size: 13px; min-height: 44px; line-height: 1.6; }
 body[data-page="landing"] .landing-heading .landing-text-link { margin-top: 12px; }
@@ -284,8 +285,9 @@ body[data-page="landing"] .landing-benefits .landing-icon {box-sizing:border-box
 body[data-page="landing"] .landing-space-card:nth-child(2)>.landing-icon {background:var(--md-accent-soft);color:var(--md-accent)}
 body[data-page="landing"] .landing-space-card:nth-child(3)>.landing-icon {background:var(--md-blue-soft);color:var(--md-blue)}
 body[data-page="landing"] .landing-space-card:nth-child(4)>.landing-icon {background:var(--md-rose-soft);color:var(--md-rose)}
-body[data-page="landing"] .landing-feature-grid > .landing-studio {background:var(--md-rail);color:var(--md-rail-text)}
+body[data-page="landing"] .landing-feature-grid > .landing-studio {--landing-rail-accent-readable:color-mix(in srgb,var(--md-art-clay) 70%,var(--md-rail-text));background:var(--md-rail);color:var(--md-rail-text)}
 body[data-page="landing"] .landing-studio :is(.eyebrow,.landing-icon,.landing-studio-flow) {color:var(--md-art-clay)}
+body[data-page="landing"] .landing-studio :is(.eyebrow,.landing-studio-flow) {color:var(--landing-rail-accent-readable)}
 body[data-page="landing"] .landing-feature-grid > .landing-studio p:not(.eyebrow),
 body[data-page="landing"] .landing-studio .landing-caption {color:var(--md-rail-muted)}
 body[data-page="landing"] .landing-studio-flow {border-color:var(--md-rail-border)}

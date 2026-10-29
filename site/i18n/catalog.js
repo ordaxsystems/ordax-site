@@ -1157,6 +1157,7 @@
     "locale.selector.en-US": ["English", "English"],
     "site.navigation.menu": ["Menu", "Menu"],
     "site.navigation.toggle": ["Alternar navegação principal", "Toggle primary navigation"],
+    "site.action.signup.compact": ["Cadastrar", "Sign up"],
     "identity.login.ready.title": ["Acesso disponível", "Sign-in available"],
     "identity.login.ready.detail": ["Continue para o serviço seguro de identidade OrdaX.", "Continue to the secure OrdaX identity service."],
     "identity.login.gated.title": ["Acesso temporariamente indisponível", "Sign-in temporarily unavailable"],

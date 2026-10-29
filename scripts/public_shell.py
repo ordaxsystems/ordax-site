@@ -47,13 +47,16 @@ def _validate_links(value: object, label: str, *, allow_auth: bool = False) -> N
     for item in value:
         allowed = {"href", "label", "current"}
         if allow_auth:
-            allowed |= {"auth", "cta", "arrow"}
+            allowed |= {"auth", "cta", "arrow", "mobile_label"}
         if not isinstance(item, dict) or set(item) - allowed:
             raise PublicShellError(label + " has invalid link fields")
         if not _is_safe_href(item.get("href")):
             raise PublicShellError(label + " has an unsafe link target")
         if not isinstance(item.get("label"), str) or not item["label"].strip():
             raise PublicShellError(label + " has an empty label")
+        if "mobile_label" in item and (
+                not isinstance(item["mobile_label"], str) or not item["mobile_label"].strip()):
+            raise PublicShellError(label + " has an empty mobile label")
         if "current" in item and type(item["current"]) is not bool:
             raise PublicShellError(label + " has an invalid current-page marker")
         current_count += item.get("current") is True
@@ -180,9 +183,19 @@ def _link(item: dict, *, auth_label: bool = False) -> str:
     auth_attribute = _attribute("data-auth-nav", item["auth"]) if item.get("auth") else ""
     current_attribute = _attribute("aria-current", "page") if item.get("current") else ""
     label = html.escape(item["label"])
+    if "mobile_label" in item:
+        desktop_label = f'<span data-shell-label="desktop">{label}</span>'
+        mobile_label = html.escape(item["mobile_label"])
+        label = (f'{desktop_label}<span data-shell-label="mobile">{mobile_label}</span>')
     if auth_label:
-        label = f'<span data-auth-nav-label>{label}</span>'
-    arrow = ' <span aria-hidden="true">↗</span>' if item.get("arrow") else ""
+        if "mobile_label" in item:
+            label = (f'<span data-auth-nav-label data-shell-label="desktop">{html.escape(item["label"])}</span>'
+                     f'<span data-shell-label="mobile">{html.escape(item["mobile_label"])}</span>')
+        else:
+            label = f'<span data-auth-nav-label>{label}</span>'
+    # Spacing belongs to the shell's flex gap. A literal separator remains a
+    # flex item when responsive CSS hides the decorative arrow.
+    arrow = '<span aria-hidden="true">↗</span>' if item.get("arrow") else ""
     return (f'<a{class_attribute}{_attribute("href", item["href"])}'
             f'{auth_attribute}{current_attribute}>{label}{arrow}</a>')
 

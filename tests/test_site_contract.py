@@ -116,11 +116,15 @@ class SiteContractTests(unittest.TestCase):
 
         locale = (ROOT / "site/i18n/runtime.js").read_text(encoding="utf-8")
         self.assertIn("function normalizePublicHeader()", locale)
+        self.assertIn("const addCompactRegisterLabel = () =>", locale)
+        self.assertIn('catalog.messages[SOURCE_LOCALE]?.["site.action.signup.compact"]', locale)
+        self.assertIn('mobileLabel.dataset.shellLabel = "mobile"', locale)
         self.assertIn("function normalizePublicFooter()", locale)
         self.assertIn("function normalizePublicNavigation(nav)", locale)
         self.assertIn("function installResponsiveNavigation(nav, linksContainer)", locale)
-        self.assertIn('toggle.setAttribute("aria-controls", linksContainer.id)', locale)
+        self.assertIn('toggle.setAttribute("aria-controls", nav.id)', locale)
         self.assertIn('toggle.setAttribute("aria-expanded", "false")', locale)
+        self.assertIn("actions.append(toggle)", locale)
         self.assertIn('event.key === "Escape"', locale)
         self.assertIn("normalizePublicHeader();\n    normalizePublicFooter();\n    const nav =", locale)
         self.assertIn('footer?.querySelector(\':scope > a:first-child[href="/"]\')', locale)
@@ -135,15 +139,18 @@ class SiteContractTests(unittest.TestCase):
             1,
             "public header geometry belongs to the shared site shell",
         )
-        mobile_tools = re.search(
-            r"@media\s*\(max-width:\s*760px\)\s*\{.*?"
-            r"\.site-header\s*>\s*\.site-nav\s*>\s*\.site-nav-tools\s*\{([^}]*)\}",
+        self.assertIn('.site-header[data-nav-enhanced="true"] > .site-nav {\n    display: none;', shared_css)
+        self.assertIn('.site-header > .site-actions > .site-nav-toggle', shared_css)
+        self.assertIn('.site-header > .site-actions [data-shell-label="desktop"]', shared_css)
+        self.assertIn('.site-header > .site-actions [data-shell-label="mobile"]', shared_css)
+        self.assertIn(
+            '.site-header > .site-actions > .nav-cta [data-shell-label] {\n  margin: 0;',
             shared_css,
-            re.S,
         )
-        self.assertIsNotNone(mobile_tools)
-        self.assertRegex(mobile_tools.group(1), r"justify-content:\s*flex-end")
-        self.assertIn("publicHeaderLocaleMenuGrouped", smoke)
+        self.assertIn('.site-header > .site-actions > .site-nav-toggle > span {\n    display: none;', shared_css)
+        self.assertIn('.site-nav[data-expanded="true"] .public-locale-switcher > .sr-only', shared_css)
+        self.assertIn("publicHeaderMobileLocaleInDisclosure", smoke)
+        self.assertIn("localeCanSwitchInsideDisclosure", smoke)
         self.assertIn("navigationLandmarksMatchLocale", smoke)
         header_layout_properties = PUBLIC_SHELL_LAYOUT_PROPERTIES - {"border", "border-top"}
         for sheet in (ROOT / "site/assets").glob("*.css"):
@@ -253,6 +260,24 @@ class SiteContractTests(unittest.TestCase):
                 self.assertEqual(header.group(1).count('class="site-nav-links"'), 1)
                 self.assertEqual(footer.group(1).count('aria-label="Rodapé"'), 1)
                 self.assertNotIn('data-public-locale-slot', header.group(1))
+                actions = contract["routes"][route["path"]]["actions"]
+                expected_mobile_labels = sum("mobile_label" in item for item in actions)
+                self.assertEqual(
+                    header.group(1).count('data-shell-label="mobile"'),
+                    expected_mobile_labels,
+                    "compact action labels must be rendered from the shell contract",
+                )
+                if expected_mobile_labels:
+                    self.assertEqual(
+                        header.group(1).count('data-shell-label="desktop"'),
+                        expected_mobile_labels,
+                    )
+                if route["path"] == "/":
+                    self.assertIn(
+                        '</span><span aria-hidden="true">↗</span>',
+                        header.group(1),
+                        "CTA spacing belongs to the shell gap, not a whitespace flex item",
+                    )
                 self.assertNotIn("<!-- ORDAX_PUBLIC_HEADER -->", rendered)
                 self.assertNotIn("<!-- ORDAX_PUBLIC_FOOTER -->", rendered)
 

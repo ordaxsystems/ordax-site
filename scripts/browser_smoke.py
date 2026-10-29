@@ -145,8 +145,9 @@ def responsive_shell_checks(report: dict, width: int, route: str,
         "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
         "publicHeaderBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
         "publicHeaderBrandContentFits": report["publicHeaderBrandContentFits"],
-        "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
-        "publicHeaderLocaleMenuGrouped": report["publicHeaderLocaleMenuGrouped"],
+        "publicHeaderActionsFit": report["publicHeaderActionsFit"],
+        "publicHeaderLocalePresentation": report["publicHeaderLocalePresentation"],
+        "publicHeaderMobileLocaleInDisclosure": report["publicHeaderMobileLocaleInDisclosure"],
         "sharedFooterContract": report["sharedFooterContract"],
         "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
         "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
@@ -507,12 +508,10 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const headerTools = headerNav?.querySelector(':scope > .site-nav-tools');
       const navLinksContainer = headerNav?.querySelector(':scope > .site-nav-links');
       const localeSelect = header?.querySelector('[data-public-locale-select]');
-      const navToggle = headerNav?.querySelector(':scope > .site-nav-tools > [data-public-nav-toggle]');
+      const navToggle = headerActions?.querySelector(':scope > [data-public-nav-toggle]');
       const headerBrandBox = headerBrand?.getBoundingClientRect();
       const headerActionsBox = headerActions?.getBoundingClientRect();
-      const headerToolsBox = headerTools?.getBoundingClientRect();
       const localeBox = localeSelect?.getBoundingClientRect();
-      const navToggleBox = navToggle?.getBoundingClientRect();
       const mobileHeader = innerWidth <= 760;
       const renderedInsideViewport = element => {
         if (!element) return false;
@@ -527,9 +526,10 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const publicHeaderRegionsVisible = route === '/conta/' || !header ||
         (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerBrandText) &&
           !!headerBrandText.textContent.trim() && renderedInsideViewport(headerActions) &&
-          renderedInsideViewport(headerNav) && renderedInsideViewport(localeSelect) &&
-          (mobileHeader ? renderedInsideViewport(navToggle)
-            : renderedInsideViewport(navLinksContainer)));
+          (mobileHeader
+            ? renderedInsideViewport(navToggle) && getComputedStyle(headerNav).display === 'none'
+            : renderedInsideViewport(headerNav) && renderedInsideViewport(localeSelect) &&
+              renderedInsideViewport(navLinksContainer)));
       const box = element => {
         if (!element) return null;
         const rect = element.getBoundingClientRect();
@@ -541,25 +541,17 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
           background: style.backgroundColor
         };
       };
-      const localeSharesNavigationLine = route === '/conta/' || !header ||
-        (renderedInsideViewport(localeSelect) && (mobileHeader
-          ? renderedInsideViewport(navToggle) && !!navToggleBox && navToggleBox.width > 0 &&
-            Math.abs((navToggleBox.top + navToggleBox.height / 2) -
-              (localeBox.top + localeBox.height / 2)) <= 4
-          : renderedInsideViewport(navLinksContainer) &&
+      const publicHeaderLocalePresentation = route === '/conta/' || !header ||
+        (mobileHeader
+          ? headerNav.contains(localeSelect) && getComputedStyle(headerNav).display === 'none' &&
+            !renderedInsideViewport(localeSelect)
+          : renderedInsideViewport(localeSelect) && renderedInsideViewport(navLinksContainer) &&
             [...navLinksContainer.querySelectorAll(':scope > a')].some(link => {
           const box = link.getBoundingClientRect();
           return Math.abs((box.top + box.height / 2) - (localeBox.top + localeBox.height / 2)) <= 4;
-        })));
-      const publicHeaderLocaleMenuGrouped = route === '/conta/' || !header || !mobileHeader ||
-        (renderedInsideViewport(localeSelect) && renderedInsideViewport(navToggle) &&
-          !!localeBox && !!navToggleBox && !!headerToolsBox &&
-          Math.abs((navToggleBox.top + navToggleBox.height / 2) -
-            (localeBox.top + localeBox.height / 2)) <= 4 &&
-          navToggleBox.left - localeBox.right >= -1 &&
-          navToggleBox.left - localeBox.right <= 12 &&
-          Math.abs(headerToolsBox.right - navToggleBox.right) <= 2 &&
-          getComputedStyle(headerTools).justifyContent === 'flex-end');
+        }));
+      const publicHeaderMobileLocaleInDisclosure = route === '/conta/' || !header || !mobileHeader ||
+        (headerNav.contains(localeSelect) && navToggle.parentElement === headerActions);
       const publicHeaderBrandActionsDoNotOverlap = route === '/conta/' || !header ||
         (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerActions) &&
           !!headerBrandBox && !!headerActionsBox &&
@@ -573,12 +565,24 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
             child.scrollWidth <= child.clientWidth + 1;
         });
       })();
+      const publicHeaderActionsFit = route === '/conta/' || !header || (() => {
+        if (!headerActions || headerActions.scrollWidth > headerActions.clientWidth + 1) return false;
+        const actionsBox = headerActions.getBoundingClientRect();
+        return [...headerActions.children].filter(child => getComputedStyle(child).display !== 'none')
+          .every(child => {
+            const rect = child.getBoundingClientRect();
+            return rect.left >= actionsBox.left - 1 && rect.right <= actionsBox.right + 1 &&
+              child.scrollWidth <= child.clientWidth + 1;
+          });
+      })();
       const mobileNavigationDisclosureReady = route === '/conta/' || !header || !mobileHeader ||
         (renderedInsideViewport(navToggle) && navLinksContainer &&
-          navToggle.getAttribute('aria-controls') === navLinksContainer.id &&
+          navToggle.parentElement === headerActions &&
+          navToggle.getAttribute('aria-controls') === headerNav.id &&
           navToggle.getAttribute('aria-expanded') === 'false' &&
           headerNav.dataset.expanded === 'false' &&
-          getComputedStyle(navLinksContainer).display === 'none');
+          getComputedStyle(headerNav).display === 'none' &&
+          !renderedInsideViewport(localeSelect));
       const accountTopbar = route === '/conta/' ? body.querySelector('.topbar') : null;
       const accountTopbarActions = accountTopbar?.querySelector('.topbar-actions');
       const accountTopbarFitsViewport = !accountTopbar || (() => {
@@ -723,8 +727,9 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
               (headerActionsBox.top + headerActionsBox.height / 2)) <= 6),
         publicHeaderBrandActionsDoNotOverlap,
         publicHeaderBrandContentFits,
-        publicHeaderLocaleSharesNavigationLine: localeSharesNavigationLine,
-        publicHeaderLocaleMenuGrouped,
+        publicHeaderActionsFit,
+        publicHeaderLocalePresentation,
+        publicHeaderMobileLocaleInDisclosure,
         publicMobileNavigationDisclosureReady: mobileNavigationDisclosureReady,
         publicHeaderLayout: !header ? null : {
           header: box(header), brand: box(headerBrand), actions: box(headerActions),
@@ -910,29 +915,46 @@ def localization_probe(driver: Driver) -> dict:
 
 
 def mobile_navigation_interaction_probe(driver: Driver) -> dict:
-    """Exercise the mobile disclosure, including Escape and focus restoration."""
+    """Exercise the mobile disclosure, locale control, Escape, and focus restoration."""
     return driver.run(r"""return (() => {
       const nav = document.querySelector('.site-header > .site-nav');
       const linksContainer = nav?.querySelector(':scope > .site-nav-links');
-      const button = nav?.querySelector(':scope > .site-nav-tools > [data-public-nav-toggle]');
+      const actions = document.querySelector('.site-header > .site-actions');
+      const button = actions?.querySelector(':scope > [data-public-nav-toggle]');
+      const locale = nav?.querySelector('[data-public-locale-select]');
+      const localeLabel = nav?.querySelector('[data-public-locale-label]');
       const links = linksContainer ? [...linksContainer.querySelectorAll(':scope > a')] : [];
-      if (!nav || !linksContainer || !button || !links.length) return {
+      if (!nav || !linksContainer || !actions || !button || !locale || !links.length) return {
         buttonPresent: false, startsCollapsed: false, opensLinks: false,
-        escapeClosesAndRestoresFocus: false
+        localeLivesInDisclosure: false, localeLabelVisibleWhenOpen: false,
+        localeCanSwitchInsideDisclosure: false, escapeClosesAndRestoresFocus: false
       };
-      const startsCollapsed = button.getAttribute('aria-expanded') === 'false' &&
-        nav.dataset.expanded === 'false' && getComputedStyle(linksContainer).display === 'none';
+      const startsCollapsed = button.parentElement === actions &&
+        button.getAttribute('aria-controls') === nav.id &&
+        button.getAttribute('aria-expanded') === 'false' && nav.dataset.expanded === 'false' &&
+        getComputedStyle(nav).display === 'none' && locale.getBoundingClientRect().width === 0;
       button.focus();
       button.click();
-      const opensLinks = button.getAttribute('aria-expanded') === 'true' &&
-        nav.dataset.expanded === 'true' && getComputedStyle(linksContainer).display !== 'none' &&
+      const opensLinks = button.getAttribute('aria-expanded') === 'true' && nav.dataset.expanded === 'true' &&
+        getComputedStyle(nav).display !== 'none' && getComputedStyle(linksContainer).display === 'grid' &&
         links.every(link => getComputedStyle(link).display !== 'none');
+      const localeLivesInDisclosure = nav.contains(locale) && locale.getBoundingClientRect().width > 0;
+      const localeLabelVisibleWhenOpen = !!localeLabel &&
+        getComputedStyle(localeLabel).position !== 'absolute' &&
+        localeLabel.getBoundingClientRect().width > 0 && localeLabel.textContent.trim().length > 0;
+      const initialLocale = document.documentElement.lang;
+      locale.value = initialLocale === 'en-US' ? 'pt-BR' : 'en-US';
+      locale.dispatchEvent(new Event('change', {bubbles: true}));
+      const localeCanSwitchInsideDisclosure = document.documentElement.lang === locale.value;
+      locale.value = initialLocale;
+      locale.dispatchEvent(new Event('change', {bubbles: true}));
       links[0].focus();
       links[0].dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
       const escapeClosesAndRestoresFocus = button.getAttribute('aria-expanded') === 'false' &&
         nav.dataset.expanded === 'false' && document.activeElement === button &&
-        getComputedStyle(linksContainer).display === 'none';
-      return {buttonPresent: true, startsCollapsed, opensLinks, escapeClosesAndRestoresFocus};
+        getComputedStyle(nav).display === 'none';
+      return {buttonPresent: true, startsCollapsed, opensLinks, localeLivesInDisclosure,
+        localeLabelVisibleWhenOpen, localeCanSwitchInsideDisclosure, escapeClosesAndRestoresFocus};
     })();""")
 
 
@@ -1032,16 +1054,9 @@ def solid_surface_contrast_probe(driver: Driver) -> dict:
         const [high,low]=[luminance(a),luminance(b)].sort((x,y)=>y-x);
         return (high+0.05)/(low+0.05);
       };
-      const selectors = [
-        '.site-header a', '.site-header button',
-        '.site-header select', '.page-shell h1', '.page-shell h2',
-        '.page-shell p', '.page-shell a', '.download-container h2',
-        '.download-container p', '.download-container a',
-        '.account-ui h1', '.account-ui h2', '.account-ui a',
-        '.account-ui p', '.account-ui label',
-        '.topbar-center a', '.breadcrumb a', '.page-footer a'
-      ];
-      const nodes = [...new Set(selectors.flatMap(s => [...document.querySelectorAll(s)]))];
+      // Audit every visible DOM text owner, rather than maintaining a selector
+      // list that can silently miss newly added headings, labels, or notices.
+      const nodes = [...document.querySelectorAll('body *')];
       const failed = [], unchecked = {}, uncheckedItems = [];
       const uncheckedExampleLimit = 24;
       let measured = 0;
@@ -1064,7 +1079,8 @@ def solid_surface_contrast_probe(driver: Driver) -> dict:
         const rect=el.getBoundingClientRect();
         if (el.closest('[hidden], [aria-hidden="true"], .demo-native, .playground') ||
             rect.width<1 || rect.height<1 || style.visibility!=='visible' ||
-            style.display==='none' || Number(style.opacity)<1) continue;
+            style.display==='none' || Number(style.opacity)<1 ||
+            rect.right<=0 || rect.bottom<=0 || rect.left>=innerWidth || rect.top>=innerHeight) continue;
         const chain=[];
         for(let p=el; p; p=p.parentElement) chain.unshift(p);
         let background=[255,255,255,1], unmeasurable=false;
@@ -1422,13 +1438,13 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                 # backend requests remain fail-closed on loopback.
                 wait_for_route(driver, route)
                 report = probe(driver, route, width, height)
+                report["solidSurfaceContrast"] = solid_surface_contrast_probe(driver)
                 # The viewport and browser accessibility tree are audited on
                 # every route. Keyboard travel is tested on desktop only:
                 # the same page markup and tab order is shared with mobile.
                 if width == VIEWPORTS[0][0]:
                     report.update(accessibility_probe(driver))
                     report["localeSwitch"] = localization_probe(driver)
-                    report["solidSurfaceContrast"] = solid_surface_contrast_probe(driver)
                     driver.cdp("Emulation.setEmulatedMedia", {"features": [
                         {"name": "prefers-reduced-motion", "value": "reduce"}
                     ]})
@@ -1475,8 +1491,9 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
                     "publicHeaderBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
                     "publicHeaderBrandContentFits": report["publicHeaderBrandContentFits"],
-                    "publicHeaderLocaleSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
-                    "publicHeaderLocaleMenuGrouped": report["publicHeaderLocaleMenuGrouped"],
+                    "publicHeaderActionsFit": report["publicHeaderActionsFit"],
+                    "publicHeaderLocalePresentation": report["publicHeaderLocalePresentation"],
+                    "publicHeaderMobileLocaleInDisclosure": report["publicHeaderMobileLocaleInDisclosure"],
                     "publicMobileNavigationDisclosureReady": report["publicMobileNavigationDisclosureReady"],
                     "sharedFooterContract": report["sharedFooterContract"],
                     "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
@@ -1491,6 +1508,14 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "noUnexpectedRemoteRequests": not report["remoteResources"],
                     "noBrokenStaticNetworkAssets": not report["failedStaticAssets"],
                     "noUncaughtBrowserErrors": not report["runtimeErrors"],
+                    "measuredFlatSurfaceTextContrast": (
+                        report["solidSurfaceContrast"]["failedCount"] == 0
+                        and report["solidSurfaceContrast"]["unsupportedColorCount"] == 0
+                    ),
+                    "flatSurfaceCoverage": (
+                        report["solidSurfaceContrast"]["measured"] > 0
+                        and report["solidSurfaceContrast"]["unsupportedColorCount"] == 0
+                    ),
                 }
                 if width == 390 and route != "/conta/":
                     check["publicMobileNavigationOpensAndEscapes"] = all(
@@ -1504,14 +1529,6 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                         "skipLinkKeyboardNavigates": report["skipLinkDestination"],
                         "skipLinkKeyboardFocus": report["skipLinkFocusLandsOnMain"],
                         "localeSwitcherLocalizedAndPersistent": all(report["localeSwitch"].values()),
-                        "measuredFlatSurfaceTextContrast": (
-                            report["solidSurfaceContrast"]["failedCount"] == 0
-                            and report["solidSurfaceContrast"]["unsupportedColorCount"] == 0
-                        ),
-                        "flatSurfaceCoverage": (
-                            report["solidSurfaceContrast"]["measured"] > 0
-                            and report["solidSurfaceContrast"]["unsupportedColorCount"] == 0
-                        ),
                         "reducedMotionBrowserPreferenceHonored": report["reducedMotion"]["preferenceMatches"]
                           and report["reducedMotion"]["scrollingIsInstant"]
                           and not report["reducedMotion"]["activeMotion"],
@@ -1690,8 +1707,9 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     "headerBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
                     "headerBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
                     "headerBrandContentFits": report["publicHeaderBrandContentFits"],
-                    "localeSharesNavigationLine": report["publicHeaderLocaleSharesNavigationLine"],
-                    "mobileLocaleAndMenuShareACompactGroup": report["publicHeaderLocaleMenuGrouped"],
+                    "headerActionsFit": report["publicHeaderActionsFit"],
+                    "localePresentation": report["publicHeaderLocalePresentation"],
+                    "mobileLocaleIsInsideDisclosure": report["publicHeaderMobileLocaleInDisclosure"],
                     "footerFitsViewport": report["sharedFooterFitsViewport"],
                     "footerLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
                     "interactiveTargetsHaveComfortableSize": not report["undersizedInteractiveTargets"],

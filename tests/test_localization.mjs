@@ -202,7 +202,8 @@ const shellMessages = [
   publicShell.brand.name,
   publicShell.header_navigation_label,
   publicShell.footer_navigation_label,
-  ...Object.values(publicShell.profiles.actions).flatMap(items => items.map(item => item.label)),
+  ...Object.values(publicShell.profiles.actions).flatMap(items =>
+    items.flatMap(item => [item.label, ...(item.mobile_label ? [item.mobile_label] : [])])),
   ...Object.values(publicShell.profiles.navigation).flatMap(items => items.map(item => item.label)),
   ...Object.values(publicShell.profiles.footers).flatMap(footer => [
     footer.tagline,
@@ -213,7 +214,7 @@ const shellMessages = [
     const navigation = resolveShellProfile("navigation", route.navigation);
     const footer = resolveShellProfile("footers", route.footer);
     return [
-      ...actions.map(item => item.label),
+      ...actions.flatMap(item => [item.label, ...(item.mobile_label ? [item.mobile_label] : [])]),
       ...navigation.map(item => item.label),
       footer.tagline,
       ...footer.navigation.map(item => item.label),

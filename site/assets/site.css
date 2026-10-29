@@ -130,6 +130,16 @@ html body[data-page] footer.site-footer nav > a {
   text-decoration: none;
 }
 
+/* Compact labels are supplied by the public-shell contract for narrow rows. */
+.site-header [data-shell-label="mobile"] {
+  display: none;
+}
+
+/* Keep broad product-demo typography rules from changing public header labels. */
+html body[data-page] .site-header > .site-actions > .nav-cta [data-shell-label] {
+  margin: 0;
+}
+
 .site-nav > a,
 .site-nav-links > a {
   display: inline-flex;
@@ -1392,7 +1402,7 @@ html body[data-page] footer.site-footer nav {
     grid-template-columns: minmax(0, 1fr) max-content;
     grid-template-areas: "brand actions" "nav nav";
     justify-items: stretch;
-    gap: 6px 8px;
+    gap: 0 8px;
     padding: 12px clamp(12px, 4vw, 20px);
   }
 
@@ -1416,7 +1426,8 @@ html body[data-page] footer.site-footer nav {
   html body[data-page] .site-header > .site-actions {
     justify-self: end;
     flex-wrap: nowrap;
-    justify-content: center;
+    align-items: center;
+    justify-content: flex-end;
     width: auto;
     max-width: 100%;
     gap: 4px 7px;
@@ -1425,33 +1436,88 @@ html body[data-page] footer.site-footer nav {
   }
 
   html body[data-page] .site-header > .site-actions .nav-cta {
-    padding: 9px 10px;
+    padding: 9px clamp(7px, 2vw, 10px);
     gap: 8px;
     font-size: 12px;
+  }
+
+  html body[data-page] .site-header > .site-actions [data-shell-label="desktop"] {
+    display: none;
+  }
+
+  html body[data-page] .site-header > .site-actions [data-shell-label="mobile"] {
+    display: inline;
   }
 
   html body[data-page] .site-header > .site-nav {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     justify-content: stretch;
-    gap: 6px;
+    gap: 0;
     padding: 8px 0 0;
     font-size: 12px;
     text-align: left;
+  }
+
+  html body[data-page] .site-header[data-nav-enhanced="true"] > .site-nav {
+    display: none;
+  }
+
+  html body[data-page] .site-header[data-nav-enhanced="true"] > .site-nav[data-expanded="true"] {
+    position: absolute;
+    inset: calc(100% + 8px) clamp(12px, 4vw, 20px) auto auto;
+    z-index: 3;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    width: min(28rem, calc(100vw - clamp(24px, 8vw, 40px)));
+    max-height: min(70vh, 38rem);
+    overflow: auto;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    color: var(--ink);
+  }
+
+  html body[data-page] .site-header > .site-actions > .site-nav-toggle {
+    display: inline-flex;
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    padding: 8px;
   }
 
   html body[data-page] .site-header > .site-nav > .site-nav-tools {
     grid-column: 1;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 8px;
     width: 100%;
     min-width: 0;
+    padding: 2px 8px 12px;
+    border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent);
   }
 
   html body[data-page] .site-header > .site-nav > .site-nav-tools > .public-locale-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     min-height: 44px;
+  }
+
+  html body[data-page] .site-header > .site-nav[data-expanded="true"] .public-locale-switcher > .sr-only {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+    border: 0;
   }
 
   html body[data-page] .site-header > .site-nav > .site-nav-tools .public-locale-select {
@@ -1461,24 +1527,13 @@ html body[data-page] footer.site-footer nav {
     min-height: 44px;
   }
 
-  html body[data-page] .site-header[data-nav-enhanced="true"] .site-nav-toggle {
-    display: inline-flex;
-  }
-
   html body[data-page] .site-header > .site-nav > .site-nav-links {
     grid-column: 1;
+    display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
     width: 100%;
     min-width: 0;
-  }
-
-  html body[data-page] .site-header[data-nav-enhanced="true"] .site-nav:not([data-expanded="true"]) > .site-nav-links {
-    display: none;
-  }
-
-  html body[data-page] .site-header[data-nav-enhanced="true"] .site-nav[data-expanded="true"] > .site-nav-links {
-    display: grid;
   }
 
   html body[data-page] .site-header > .site-nav > a,
@@ -1506,6 +1561,10 @@ html body[data-page] footer.site-footer nav {
 }
 
 @media (max-width: 320px) {
+  html body[data-page] .site-header > .site-actions {
+    gap: 4px;
+  }
+
   html body[data-page] .site-header > .brand {
     gap: 4px;
   }
@@ -1519,8 +1578,15 @@ html body[data-page] footer.site-footer nav {
     height: 20px;
   }
 
-  html body[data-page] .site-header > .site-actions .nav-cta {
-    padding-inline: 7px;
+}
+
+@media (max-width: 400px) {
+  html body[data-page] .site-header > .site-actions .nav-cta > [aria-hidden="true"] {
+    display: none;
+  }
+
+  html body[data-page] .site-header > .site-actions > .site-nav-toggle > span {
+    display: none;
   }
 }
 

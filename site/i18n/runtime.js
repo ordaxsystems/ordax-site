@@ -220,7 +220,27 @@
       }
     }
 
-    if (header.querySelector(":scope > .site-actions")) return;
+    const addCompactRegisterLabel = () => {
+      const register = header.querySelector(':scope > .site-actions > [data-auth-nav="register"]');
+      const desktopLabel = register?.querySelector("[data-auth-nav-label]");
+      if (!register || !desktopLabel || register.querySelector('[data-shell-label="mobile"]')) return;
+
+      const compactLabel = catalog.messages[SOURCE_LOCALE]?.["site.action.signup.compact"];
+      if (typeof compactLabel !== "string") {
+        throw new Error("public-site-compact-register-label-missing");
+      }
+
+      desktopLabel.dataset.shellLabel = "desktop";
+      const mobileLabel = document.createElement("span");
+      mobileLabel.dataset.shellLabel = "mobile";
+      mobileLabel.textContent = compactLabel;
+      desktopLabel.after(mobileLabel);
+    };
+
+    if (header.querySelector(":scope > .site-actions")) {
+      addCompactRegisterLabel();
+      return;
+    }
 
     const authLinks = Array.from(navigation.querySelectorAll(":scope > [data-auth-nav]"));
     if (!authLinks.length) return;
@@ -229,6 +249,7 @@
     actions.className = "site-actions";
     header.insertBefore(actions, navigation);
     authLinks.forEach(link => actions.append(link));
+    addCompactRegisterLabel();
   }
 
   function normalizePublicFooter() {
@@ -286,12 +307,12 @@
 
   function installResponsiveNavigation(nav, linksContainer) {
     const header = nav?.closest(".site-header");
-    const tools = nav?.querySelector(":scope > .site-nav-tools");
+    const actions = header?.querySelector(":scope > .site-actions");
     const links = linksContainer
       ? Array.from(linksContainer.querySelectorAll(":scope > a"))
       : [];
-    if (!header || !tools || !linksContainer || !links.length ||
-        tools.querySelector(":scope > [data-public-nav-toggle]")) return;
+    if (!header || !actions || !nav || !linksContainer || !links.length ||
+        actions.querySelector(":scope > [data-public-nav-toggle]")) return;
 
     if (!nav.id) nav.id = "public-primary-navigation";
     if (!linksContainer.id) linksContainer.id = "public-primary-links";
@@ -300,13 +321,13 @@
     toggle.type = "button";
     toggle.className = "site-nav-toggle";
     toggle.dataset.publicNavToggle = "";
-    toggle.setAttribute("aria-controls", linksContainer.id);
+    toggle.setAttribute("aria-controls", nav.id);
     toggle.setAttribute("aria-expanded", "false");
     toggle.setAttribute("aria-label", t("site.navigation.toggle"));
     toggle.innerHTML = '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">' +
       '<path d="M4 7h16M4 12h16M4 17h16"></path></svg><span></span>';
     toggle.querySelector("span").textContent = t("site.navigation.menu");
-    tools.append(toggle);
+    actions.append(toggle);
 
     const setExpanded = expanded => {
       toggle.setAttribute("aria-expanded", String(expanded));

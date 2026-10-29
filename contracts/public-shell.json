@@ -29,7 +29,7 @@
     "/": {
       "actions": [
         { "href": "/login/", "auth": "login", "label": "Entrar" },
-        { "href": "/cadastro/", "auth": "register", "label": "Criar conta", "cta": true, "arrow": true }
+        { "href": "/cadastro/", "auth": "register", "label": "Criar conta", "mobile_label": "Cadastrar", "cta": true, "arrow": true }
       ],
       "navigation": [
         { "href": "#experimente", "label": "Experiência" },
@@ -59,7 +59,7 @@
     "/download/": {
       "actions": [
         { "href": "/login/", "auth": "login", "label": "Entrar" },
-        { "href": "/", "label": "Conheça o OrdaX", "cta": true, "arrow": true }
+        { "href": "/", "label": "Conheça o OrdaX", "mobile_label": "Início", "cta": true, "arrow": true }
       ],
       "navigation": [
         { "href": "/#experimente", "label": "Experiência" },
@@ -79,7 +79,7 @@
     },
     "/login/": {
       "actions": [
-        { "href": "/cadastro/", "auth": "register", "label": "Criar conta", "cta": true, "arrow": true }
+        { "href": "/cadastro/", "auth": "register", "label": "Criar conta", "mobile_label": "Cadastrar", "cta": true, "arrow": true }
       ],
       "navigation": { "profile": "home-only" },
       "footer": { "profile": "identity" }
@@ -102,7 +102,7 @@
     "/licencas/": {
       "actions": [
         { "href": "/login/", "auth": "login", "label": "Entrar" },
-        { "href": "/cadastro/", "auth": "register", "label": "Criar conta", "cta": true }
+        { "href": "/cadastro/", "auth": "register", "label": "Criar conta", "mobile_label": "Cadastrar", "cta": true }
       ],
       "navigation": [
         { "href": "/", "label": "Início" },
