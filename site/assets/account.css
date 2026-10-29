@@ -141,7 +141,7 @@
 .account-ui .account-entry > a { display: inline-flex; align-items: center; min-height: 44px; gap: 10px; color: var(--account-accent); font-size: 12px; white-space: nowrap; }
 .account-ui .account-legal { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--account-muted); font-size: 12px; margin-top: 8px; }
 .account-ui :is(.account-legal, .account-quicklinks) a:hover { text-decoration: underline; text-underline-offset: 4px; }
-.account-ui .account-legal a { display: inline-flex; align-items: center; min-height: 32px; }
+.account-ui .account-legal a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 32px; }
 .account-ui .site-footer p,
 .account-ui .site-footer nav { color: var(--account-muted); font-size: 12px; }
 /* Shared identity controls also serve the Web login bootstrap. */
