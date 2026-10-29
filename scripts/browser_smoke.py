@@ -556,7 +556,7 @@ def accessibility_probe(driver: Driver) -> dict:
 
 def restore_capture_state(driver: Driver, route: str) -> dict:
     """Remove keyboard-test focus and fragment before saving the normal screenshot."""
-    return driver.run(r"""const expectedRoute = '""" + route + r"""';
+    state = driver.run(r"""const expectedRoute = '""" + route + r"""';
       const skipLink = document.querySelector('.skip-link');
       const main = document.querySelector('main#conteudo');
       document.activeElement?.blur();
@@ -570,6 +570,14 @@ def restore_capture_state(driver: Driver, route: str) -> dict:
         noTestFragment: location.hash === '',
         atTop: window.scrollY === 0
       };""")
+    # The skip link animates out for 180ms after blur. Let it clear before the
+    # screenshot so the accessibility probe cannot cover the shared brand.
+    time.sleep(0.25)
+    state["skipLinkHidden"] = driver.run(r"""const link = document.querySelector('.skip-link');
+      if (!link) return true;
+      const rect = link.getBoundingClientRect();
+      return getComputedStyle(link).visibility === 'hidden' || rect.bottom <= 0;""")
+    return state
 
 
 def localization_probe(driver: Driver) -> dict:
@@ -1113,6 +1121,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                             report["captureStateRestored"]["route"] == route
                             and report["captureStateRestored"]["expectedRoute"] == route
                             and report["captureStateRestored"]["noSkipLinkFocus"]
+                            and report["captureStateRestored"]["skipLinkHidden"]
                             and report["captureStateRestored"]["mainExists"]
                             and report["captureStateRestored"]["noTestFragment"]
                             and report["captureStateRestored"]["atTop"]

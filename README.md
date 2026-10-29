@@ -86,7 +86,7 @@ Os checks são regressões técnicas; não substituem prova HTTP externa, homolo
 
 ## Fail-closed sem JavaScript e reflow de CSS (23/10/2026)
 
-O `scripts/browser_smoke.py` mantém **33 cenários normais** (11 rotas × 3 telas) e exerce duas famílias de regressões separadas:
+O `scripts/browser_smoke.py` deriva as rotas de `contracts/site-routes.json` e define as larguras em `VIEWPORTS`; as provas especializadas ficam na mesma suíte:
 
 - **6 estados sem execução de JavaScript:** login, cadastro, recuperação, redefinição de senha, Conta e Web. O Chrome bloqueia scripts **antes da navegação** e comprova que os avisos `noscript` são visíveis, links de navegação funcionam e nenhum formulário de credenciais, sessão verificada ou entrada Web fica disponível. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051439195).
 - **22 cenários de reflow:** todas as 11 rotas com viewport CSS de 640 px e 320 px em **emulação de desktop**, equivalentes à largura disponível em uma janela de 1280 px com escala de 200% e 400%. Verificam conteúdo principal, ausência de rolagem horizontal na página, demo montada, estados auth fail-closed e recursos/JavaScript sem erros. A prova detectou quatro cabeçalhos com seletor de idioma ultrapassando a largura; o **CSS Site canônico** foi corrigido para quebrar a linha em Download, Licenças, Privacidade e Termos. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051704031).

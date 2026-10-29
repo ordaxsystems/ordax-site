@@ -1196,7 +1196,7 @@
     "compliance.intro": ["Inventário, avisos e pacote de código-fonte vinculados aos mesmos bytes publicados.", "Inventory, notices, and source-code package bound to the same published bytes."],
     "release.public": ["release pública", "public release"],
     "download.empty.title": ["Nenhuma release pública disponível", "No public release available"],
-    "download.empty.detail": ["O catálogo está ativo, mas nenhuma release passou ainda pelos gates de integridade, publicação e conformidade.", "The catalog is active, but no release has yet passed the integrity, publication, and compliance gates."],
+    "download.empty.detail": ["Os downloads aparecerão aqui quando uma release for autorizada para publicação.", "Downloads will appear here when a release is authorized for publication."],
     "download.ready.title": ["Releases públicas verificadas", "Verified public releases"],
     "download.ready.detail": ["Os downloads abaixo incluem integridade e material de conformidade vinculados à mesma release.", "The downloads below include integrity and compliance material bound to the same release."],
     "download.error.title": ["Catálogo temporariamente indisponível", "Catalog temporarily unavailable"],

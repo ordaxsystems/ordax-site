@@ -30,7 +30,7 @@ O **cutover de código e artefatos Dev está integrado à `main`**. Surface #13/
 
 
 ## Gates de implementação atualmente verificados
-- Testes ChromeDriver: 11 rotas × 3 viewports; screenshots no artefato CI [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365).
+- O inventário de rotas vem de `contracts/site-routes.json`; a matriz de navegador vem de `scripts/browser_smoke.py`. Consulte `docs/AUDIT.md` para a evidência mais recente, sem manter cópias de contagens na instrução do agente.
 - Landing: somente `site/assets/playground-fixture.json`; proibido recolocar fixture inline como segundo estado.
 - `contracts/site-routes.json`: único catálogo de rotas do Site; robots, sitemap e testes o consomem.
 - `--public-origin` deve ser fornecido pelo owner de deployment (OS/Platform); nunca mover DNS ou aceitar origem definida pelo browser.

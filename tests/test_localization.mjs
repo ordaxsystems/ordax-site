@@ -325,6 +325,7 @@ const semanticIds = [
   "compliance.source.label",
   "compliance.heading",
   "download.empty.title",
+  "download.empty.detail",
   "download.ready.title",
   "download.error.title",
   "compliance.empty.title",
