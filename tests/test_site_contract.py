@@ -71,6 +71,30 @@ class SiteContractTests(unittest.TestCase):
         self.assertEqual(len(build.ROUTES), 11)
         self.assertEqual(len(set(build.ROUTES)), len(build.ROUTES))
 
+    def test_desktop_windows_is_separate_from_usb_and_public_release(self):
+        landing = (ROOT / "site/index.html").read_text(encoding="utf-8")
+        page = (ROOT / "site/download/index.html").read_text(encoding="utf-8")
+        self.assertIn('href="/download/#desktop"', landing)
+        self.assertIn('id="desktop"', page)
+        self.assertIn('id="creator"', page)
+        self.assertLess(page.index('id="desktop"'), page.index('id="creator"'))
+        self.assertIn(build.DESKTOP_EVALUATION_WORKFLOW, page)
+        self.assertEqual(page.count('href="' + build.DESKTOP_EVALUATION_WORKFLOW + '"'), 1)
+        self.assertIn('target="_blank" rel="noopener noreferrer"', page)
+        self.assertIn("não é um download público homologado", page)
+        self.assertIn("Não desative proteções do Windows", page)
+        self.assertIn("A Aura local e os aplicativos externos dependem", page)
+        self.assertIn("Windows x64", page)
+        self.assertIn("releases/catalog.json", (ROOT / "site/assets/site.js").read_text())
+        self.assertEqual(build.check_source(strict_assets=False)["source_files"] > 25, True)
+
+    def test_desktop_evaluation_link_allowlist_does_not_authorize_other_hosts(self):
+        source = (ROOT / "scripts/build.py").read_text(encoding="utf-8")
+        self.assertIn('DESKTOP_EVALUATION_WORKFLOW = "https://github.com/ordaxsystems/ordax-os/actions/workflows/windows-desktop-dev.yml?query=branch%3Amain"', source)
+        self.assertIn("if p.suffix.lower() == \".html\":", source)
+        self.assertIn("scrubbed.replace('href=\"' + DESKTOP_EVALUATION_WORKFLOW", source)
+        self.assertNotIn("https://github.com/ordaxsystems/ordax-os/releases/download/", (ROOT / "site/download/index.html").read_text(encoding="utf-8"))
+
     def test_public_headers_share_one_action_and_navigation_structure(self):
         contract = load_public_shell(load_routes())
         for route in load_routes():
