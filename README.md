@@ -41,15 +41,36 @@ python3 scripts/smoke_static.py --out out/site
 python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence
 ```
 
+Em Windows, deixe `chromedriver.exe` no `PATH` e informe o navegador instalado: `python scripts/browser_smoke.py --chrome-binary "C:\Program Files\Google\Chrome\Application\chrome.exe" --out out/site --evidence out/browser-evidence`. O CI Linux continua usando a descoberta padrão de `google-chrome`.
+
 A apresentação de planos mostra apenas **Planos em preparação — contratação indisponível**; não possui catálogo de ofertas autorizado e não exibe preços/cotas fictícios. O catálogo de downloads permanece vazio sem publicação atestada do owner. Login/Identity, pagamentos, DNS e Stable continuam bloqueados pelos gates próprios; uma prerelease Dev não é autorização de produção.
 
 ## Site SSOT, SEO e prova real de browser
 
 `contracts/site-routes.json` é o inventário único de rotas e indexação consumido por builder, testes de localização e Chrome. O domínio canônico **não** pertence a esse contrato: a origem HTTPS é injetada pelo owner de deployment por `--public-origin` (no CI candidato: `https://ordax.com.br`). O build gera canonical/OpenGraph, `robots.txt` e `sitemap.xml` apenas no artefato; Conta/Identity/entrada Web têm `noindex`.
 
+### Owners canônicos (SSOT)
+
+Cada domínio tem um owner editável; não se mantém uma cópia concorrente em páginas ou testes.
+
+| Domínio | Owner canônico | Regra |
+| --- | --- | --- |
+| Rotas e indexação | `contracts/site-routes.json` | Builder, auditorias e testes leem este inventário. |
+| Conteúdo e estrutura do header/footer público | `contracts/public-shell.json` | Perfis compartilhados cobrem rotas; desvios ficam no contrato. `scripts/public_shell.py` valida e gera o markup. |
+| Geometria e breakpoints do shell | `site/assets/site.css` | Folhas de página só podem definir tema e tipografia, nunca um segundo layout do shell. |
+| Catálogo e interação de idioma | `site/i18n/catalog.js` e `site/i18n/runtime.js` | Nomes dos idiomas permanecem nativos; o runtime aplica texto e atributos acessíveis. |
+| Conteúdo próprio de cada página | HTML da rota e seu CSS de tema | Conteúdo exclusivo continua junto da página, sem duplicar componentes globais. |
+| Navegação da Conta | `sections[]` em `site/assets/account-portal.js` | IDs, grupos, atalhos mobile e destinos de “Mais” derivam do mesmo catálogo de seções. |
+| Geometria da navegação da Conta | `site/assets/account-dashboard.css` | Uma única regra móvel cobre celulares e tablets touch; os testes detectam uma segunda definição concorrente. |
+| Demonstração visual e marca | artefatos assinados da Surface, pinados em `contracts/dev-artifact-lock.json` | O Site consome os artefatos e não mantém snapshots editáveis paralelos. |
+
+`/conta/` é a exceção intencional: `sections[]` em `site/assets/account-portal.js` é o owner dos IDs, agrupamentos e rótulos curtos móveis; menu lateral, barra mobile e destinos de “Mais” são derivados desse catálogo. `site/i18n/catalog.js` mantém as traduções e `site/assets/account-dashboard.css` mantém a geometria única da navegação da Conta. Privacidade e Termos também são exceções de fonte, pois Identity fixa os bytes HTML; o runtime normaliza a apresentação sem editar os documentos. `tests/test_site_contract.py` protege esses limites, e `scripts/browser_smoke.py` verifica reflow, conteúdo da marca, posição e visibilidade do header/footer em todas as rotas.
+
+No celular, marca, grupo visual Entrar/Cadastrar e botão de navegação compartilham uma faixa sem fundir os dois destinos de conta. O contrato `contracts/public-shell.json` mantém os rótulos completos e variantes compactas; o catálogo i18n traduz ambos. Abrir o disclosure revela um painel com o idioma identificado e os links; o seletor não ocupa uma linha separada no cabeçalho fechado. `site/assets/site.css` controla essa composição e a transição para duas linhas até 1160 px, além de isolar o shell das regras abrangentes dos artefatos de demonstração. Todos os controles continuam com nome acessível e alvos touch de pelo menos 44×44 px. A [WCAG 2.2 Target Size (Minimum)](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum) define 24×24 px como mínimo AA e 44×44 px como critério aprimorado AAA. O mesmo runtime atende páginas geradas e documentos legais fixados por hash. O idioma usa nomes nativos (“Português”, “English”), acompanha a preferência inicial do navegador e persiste a escolha manual. O disclosure usa botão nativo com `aria-expanded`/`aria-controls`, sem simular um menu ARIA; os links continuam disponíveis sem JavaScript. Essa composição segue as alternativas móveis avaliadas pela [NN/g](https://www.nngroup.com/articles/language-switching-ecommerce/) e o [padrão disclosure WAI-ARIA APG](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/).
+
 A landing lê **um** `/assets/playground-fixture.json` de mesma origem, com falha indisponível explícita. Foi removida a segunda fixture embutida na landing (~159 KB), sem copiar fonte executável da Surface. O controlador mantém um único landmark `main` para acessibilidade.
 
-CI de candidato: `python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence` usa ChromeDriver pré-instalado, exercita 11 rotas em 1440, 390 e 320 px, guarda capturas e relatório e mantém APIs de autenticação indisponíveis em loopback. A execução [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365) não substitui uma auditoria WCAG completa ou auth E2E em staging.
+CI de candidato: `python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence` usa ChromeDriver pré-instalado e a matriz de viewports definida em `scripts/browser_smoke.py` para exercitar as 11 rotas. A execução guarda capturas e relatório e mantém APIs de autenticação indisponíveis em loopback. O CI precisa passar na revisão atual; provas locais não substituem auditoria WCAG completa ou auth E2E em staging.
 
 Os snapshots históricos do OS já foram eliminados do Git do Site. Marca e Meridian são consumidas de duas prereleases Dev assinadas da Surface; não existe catálogo comercial autorizado.
 
@@ -80,7 +101,7 @@ Os checks são regressões técnicas; não substituem prova HTTP externa, homolo
 
 ## Fail-closed sem JavaScript e reflow de CSS (23/10/2026)
 
-O `scripts/browser_smoke.py` mantém **33 cenários normais** (11 rotas × 3 telas) e exerce duas famílias de regressões separadas:
+O `scripts/browser_smoke.py` deriva as rotas de `contracts/site-routes.json`, usa `VIEWPORTS` para tamanhos representativos a partir de 280 CSS px e descobre as larguras de transição das folhas CSS realmente ligadas em cada rota. Testa cada fronteira em `px` e seus vizinhos no mesmo runner, de 280 a 2560 px; mantenha breakpoints como fonte no CSS, sem uma lista paralela para a suíte. A matriz bilíngue também inclui 280 px. As provas especializadas ficam nesse runner:
 
 - **6 estados sem execução de JavaScript:** login, cadastro, recuperação, redefinição de senha, Conta e Web. O Chrome bloqueia scripts **antes da navegação** e comprova que os avisos `noscript` são visíveis, links de navegação funcionam e nenhum formulário de credenciais, sessão verificada ou entrada Web fica disponível. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051439195).
 - **22 cenários de reflow:** todas as 11 rotas com viewport CSS de 640 px e 320 px em **emulação de desktop**, equivalentes à largura disponível em uma janela de 1280 px com escala de 200% e 400%. Verificam conteúdo principal, ausência de rolagem horizontal na página, demo montada, estados auth fail-closed e recursos/JavaScript sem erros. A prova detectou quatro cabeçalhos com seletor de idioma ultrapassando a largura; o **CSS Site canônico** foi corrigido para quebrar a linha em Download, Licenças, Privacidade e Termos. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051704031).

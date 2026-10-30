@@ -190,6 +190,42 @@ for (const key of ptKeys) {
 }
 
 const sourceMessages = new Set(Object.keys(catalog.sourceIndex).map(normalize));
+const publicShell = JSON.parse(read("contracts/public-shell.json"));
+const resolveShellProfile = (group, value) => {
+  if (!value || Array.isArray(value) || typeof value !== "object" || !value.profile) return value;
+  const profile = publicShell.profiles?.[group]?.[value.profile];
+  assert(profile, `unknown public shell ${group} profile: ${value.profile}`);
+  return profile;
+};
+const shellMessages = [
+  publicShell.brand.aria_label,
+  publicShell.brand.name,
+  publicShell.header_navigation_label,
+  publicShell.footer_navigation_label,
+  ...Object.values(publicShell.profiles.actions).flatMap(items =>
+    items.flatMap(item => [item.label, ...(item.mobile_label ? [item.mobile_label] : [])])),
+  ...Object.values(publicShell.profiles.navigation).flatMap(items => items.map(item => item.label)),
+  ...Object.values(publicShell.profiles.footers).flatMap(footer => [
+    footer.tagline,
+    ...footer.navigation.map(item => item.label),
+  ]),
+  ...Object.values(publicShell.routes).flatMap(route => {
+    const actions = resolveShellProfile("actions", route.actions);
+    const navigation = resolveShellProfile("navigation", route.navigation);
+    const footer = resolveShellProfile("footers", route.footer);
+    return [
+      ...actions.flatMap(item => [item.label, ...(item.mobile_label ? [item.mobile_label] : [])]),
+      ...navigation.map(item => item.label),
+      footer.tagline,
+      ...footer.navigation.map(item => item.label),
+    ];
+  }),
+];
+for (const value of shellMessages) {
+  if (!looksPortuguese(value)) continue;
+  assert(sourceMessages.has(normalize(value)),
+    `public shell copy is outside localization owner: ${value}`);
+}
 const canonicalRoutes = JSON.parse(read("contracts/site-routes.json"));
 assert(canonicalRoutes.$schema === "ordax.site-routes/1", "public Site route contract mismatch");
 const routes = canonicalRoutes.routes.map(route => "site/" + route.source);
@@ -248,7 +284,13 @@ const localeRuntimeContext = vm.createContext({
 vm.runInContext(runtime, localeRuntimeContext, { filename: "site/i18n/runtime.js" });
 const localeRuntime = localeRuntimeContext.window.OrdaXPublicI18n;
 assert(localeRuntime.getLocale() === "en-US", "locale regression must exercise the real runtime in en-US");
+assert(localeRuntime.t("site.navigation.menu") === "Menu", "mobile navigation label must use the English catalog");
+assert(localeRuntime.t("site.navigation.toggle") === "Toggle primary navigation", "mobile navigation accessible name must use the English catalog");
+assert(localeRuntime.t("locale.selector.pt-BR") === "Português", "Portuguese name must stay self-named in English UI");
+assert(localeRuntime.t("locale.selector.en-US") === "English", "English name must stay self-named in English UI");
 for (const [source, translated] of [
+  ["Navegação principal", "Primary navigation"],
+  ["Rodapé", "Footer"],
   ["Armazenamento", "Storage"],
   ["Central de ajuda", "Help center"],
   ["IA", "AI"],
@@ -258,6 +300,10 @@ for (const [source, translated] of [
   assert(localeRuntime.fromSource(source) === translated, `account resource translation regression: ${source}`);
 }
 localeRuntime.setLocale("pt-BR");
+assert(localeRuntime.t("site.navigation.menu") === "Menu", "mobile navigation label must use the Portuguese catalog");
+assert(localeRuntime.t("site.navigation.toggle") === "Alternar navegação principal", "mobile navigation accessible name must use the Portuguese catalog");
+assert(localeRuntime.t("locale.selector.pt-BR") === "Português", "Portuguese name must stay self-named in Portuguese UI");
+assert(localeRuntime.t("locale.selector.en-US") === "English", "English name must stay self-named in Portuguese UI");
 assert(localeRuntime.fromSource("Armazenamento") === "Armazenamento", "resource label must restore pt-BR through the same runtime");
 for (const anchor of [
   'const STORAGE_KEY = "ordax.public.locale"',
@@ -286,6 +332,7 @@ const semanticIds = [
   "compliance.source.label",
   "compliance.heading",
   "download.empty.title",
+  "download.empty.detail",
   "download.ready.title",
   "download.error.title",
   "compliance.empty.title",

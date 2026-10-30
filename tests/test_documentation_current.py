@@ -55,8 +55,9 @@ class CurrentDocsTests(unittest.TestCase):
     def test_adr_ids_are_unique_and_old_runbooks_are_explicitly_archived(self):
         decisions = (ROOT / "docs/DECISIONS.md").read_text(encoding="utf-8")
         ids = re.findall(r"\*\*SITE-ADR-(\d{3})", decisions)
-        self.assertGreaterEqual(len(ids), 32)
+        self.assertGreaterEqual(len(ids), 33)
         self.assertEqual(len(ids), len(set(ids)))
+        self.assertIn("**SITE-ADR-033", decisions)
         self.assertIn("**SITE-ADR-032", decisions)
         for name in ("SITE-CUTOVER-2026-10-24.md", "SITE-AUDIT-2026-10-24.md"):
             text = (ROOT / "docs/history" / name).read_text(encoding="utf-8")

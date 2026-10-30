@@ -11,26 +11,181 @@ import base64
 import hashlib
 import http.server
 import json
+import math
 import os
+import posixpath
+import re
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
 import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import unquote, urljoin, urlsplit
+
 from site_routes import PATHS as ROUTES
-VIEWPORTS = ((1440, 900), (390, 844), (320, 740))
+VIEWPORTS = ((1440, 900), (1024, 900), (768, 900), (760, 900),
+             (430, 900), (390, 844), (360, 800), (320, 740), (280, 740))
+# Touch-first tablets retain a desktop CSS viewport while using coarse input.
+# Sample both sides of shared-shell and account-app layout boundaries.
+TOUCH_VIEWPORTS = (641, 760, 761, 1100, 1101, 1180, 1181)
+LOCALIZATION_VIEWPORTS = (280, 320, 360, 390, 430, 600, 641, 768, 980, 1024, 1100, 1180, 1280, 1440)
 NO_SCRIPT_ROUTES = ("/login/", "/cadastro/", "/recuperar/",
                     "/recuperar/nova-senha/", "/conta/", "/web/")
 # 1280px layout viewed through 200% and 400% effective CSS viewports.
 # This checks responsive reflow, not real browser zoom or text magnification.
 REFLOW_WIDTHS = ((640, 200), (320, 400))
+BREAKPOINT_WIDTH_RANGE = (280, 2560)
+SURFACE_OWNED_STYLESHEETS = frozenset({"playground.css", "surface-snapshot.css"})
+
+
+class StylesheetLinkCollector(HTMLParser):
+    """Collect stylesheet links from the built route, including rel token lists."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.hrefs = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() != "link":
+            return
+        attributes = {name.lower(): value for name, value in attrs}
+        rel = set((attributes.get("rel") or "").lower().split())
+        href = attributes.get("href")
+        if "stylesheet" in rel and href:
+            self.hrefs.append(href)
+
+
+def responsive_breakpoint_audit(root: Path, route: str) -> dict:
+    """Derive viewport checks from CSS actually linked by one built route."""
+    route_file = root / ("index.html" if route == "/" else f"{route.strip('/')}/index.html")
+    if not route_file.is_file():
+        raise BrowserProofError(f"built route is missing while reading responsive CSS: {route}")
+
+    html = route_file.read_text(encoding="utf-8")
+    collector = StylesheetLinkCollector()
+    collector.feed(html)
+    base_url = urljoin("http://ordax.local/", route.lstrip("/"))
+    pending = [(href, base_url) for href in collector.hrefs]
+    visited: set[str] = set()
+    owner_stylesheets: set[str] = set()
+    thresholds: set[float] = set()
+    root_resolved = root.resolve()
+
+    while pending:
+        href, source_url = pending.pop()
+        stylesheet_url = urljoin(source_url, href)
+        parsed = urlsplit(stylesheet_url)
+        if (parsed.scheme not in ("http", "https") or parsed.netloc != "ordax.local"
+                or not parsed.path.lower().endswith(".css")):
+            continue
+
+        css_url_path = posixpath.normpath(unquote(parsed.path))
+        if not css_url_path.startswith("/"):
+            continue
+        css_name = Path(css_url_path).name.lower()
+        if css_name in SURFACE_OWNED_STYLESHEETS:
+            owner_stylesheets.add(css_url_path)
+        if css_url_path in visited:
+            continue
+
+        css_path = (root / Path(css_url_path.lstrip("/")).as_posix()).resolve()
+        if not css_path.is_relative_to(root_resolved):
+            raise BrowserProofError(f"stylesheet escapes built candidate: {css_url_path}")
+        if not css_path.is_file():
+            raise BrowserProofError(f"route links a missing local stylesheet: {css_url_path}")
+        visited.add(css_url_path)
+        css = re.sub(r"/\*.*?\*/", "", css_path.read_text(encoding="utf-8"), flags=re.S)
+
+        for imported in re.findall(
+                r"@import\s+(?:url\(\s*)?['\"]?([^'\"\s)]+)", css, flags=re.I):
+            pending.append((imported, stylesheet_url))
+
+        for media_query in re.findall(r"@media\s*([^{}]*)\{", css, flags=re.I):
+            for value in re.findall(
+                    r"\b(?:max|min)-width\s*:\s*(\d+(?:\.\d+)?)\s*px\b",
+                    media_query, flags=re.I):
+                thresholds.add(float(value))
+
+    lower, upper = BREAKPOINT_WIDTH_RANGE
+    centers = {center for threshold in thresholds
+               for center in (math.floor(threshold), math.ceil(threshold))
+               if lower - 1 <= center <= upper + 1}
+    candidates = {center + delta for center in centers for delta in (-1, 0, 1)}
+    candidates = {width for width in candidates if lower <= width <= upper}
+    representative_widths = {width for width, _height in VIEWPORTS}
+    return {
+        "thresholdsPx": [int(value) if value.is_integer() else value
+                         for value in sorted(thresholds)],
+        "stylesheets": sorted(visited),
+        "ownerStylesheets": sorted(owner_stylesheets),
+        "testedWidths": sorted(candidates - representative_widths),
+    }
+
+
+def responsive_shell_checks(report: dict, width: int, route: str,
+                            coarse_pointer: bool = False) -> dict:
+    """Keep the shared responsive contract identical across viewport audits."""
+    checks = {
+        "routeRendered": report["complete"] and report["pathname"] == route
+            and report["mainCount"] == 1,
+        "noHorizontalOverflow": report["noOverflow"],
+        "noUnexpectedRemoteRequests": not report["remoteResources"],
+        "noBrokenStaticAssets": not report["failedStaticAssets"],
+        "noUncaughtBrowserErrors": not report["runtimeErrors"],
+        "siteTargetsMeetMinimumSize": not report["undersizedAAInteractiveTargets"],
+        "mobileTargetsRemainComfortable": width > 640
+            or not report["undersizedInteractiveTargets"],
+        "publicHeaderRegionsReady": report["publicHeaderRegionsReady"],
+        "publicHeaderRegionsVisible": report["publicHeaderRegionsVisible"],
+        "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
+        "publicHeaderBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
+        "publicHeaderBrandContentFits": report["publicHeaderBrandContentFits"],
+        "publicHeaderActionsFit": report["publicHeaderActionsFit"],
+        "publicHeaderLocalePresentation": report["publicHeaderLocalePresentation"],
+        "publicHeaderMobileLocaleInDisclosure": report["publicHeaderMobileLocaleInDisclosure"],
+        "publicPageStartSpacing": report["publicPageStartSpacingReady"],
+        "sharedFooterContract": report["sharedFooterContract"],
+        "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
+        "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
+        "sharedFooterLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
+    }
+    if route != "/conta/":
+        checks["publicMobileNavigationDisclosureReady"] = (
+            report["publicMobileNavigationDisclosureReady"]
+        )
+    if coarse_pointer:
+        checks["coarsePointerTargetsRemainComfortable"] = (
+            not report["undersizedInteractiveTargets"]
+        )
+    if route == "/conta/":
+        checks["accountShellPresent"] = report["accountPortal"]
+        checks["accountTopbarFitsViewport"] = report["accountTopbarFitsViewport"]
+        checks["accountMobileNavigationLabelsFit"] = report["accountMobileNavigationLabelsFit"]
+        checks["noInventedVerifiedUser"] = not report["accountHasVerifiedUser"]
+        if report["accountMobileFooterClearance"]["checked"]:
+            checks["accountMobileFooterClearOfNavigation"] = (
+                report["accountMobileFooterClearance"]["clear"]
+            )
+    return checks
 
 
 class BrowserProofError(RuntimeError):
     pass
+
+
+class LocalProofHTTPServer(http.server.ThreadingHTTPServer):
+    """Ignore expected socket closes when Chrome moves between test routes."""
+
+    def handle_error(self, request, client_address):
+        error = sys.exc_info()[1]
+        if isinstance(error, (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -238,15 +393,18 @@ class Driver:
             raise BrowserProofError(str(result["value"]))
         return result.get("value")
 
-    def create(self):
+    def create(self, chrome_binary: str | None = None):
+        chrome_options = {"args": [
+            "--headless=new", "--no-sandbox", "--disable-dev-shm-usage",
+            "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+            "--window-size=1440,900",
+        ]}
+        if chrome_binary:
+            chrome_options["binary"] = chrome_binary
         response = self.command("POST", "/session", {
             "capabilities": {"alwaysMatch": {
                 "browserName": "chrome",
-                "goog:chromeOptions": {"args": [
-                    "--headless=new", "--no-sandbox", "--disable-dev-shm-usage",
-                    "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-                    "--window-size=1440,900",
-                ]},
+                "goog:chromeOptions": chrome_options,
             }}
         })
         # W3C response returns {sessionId,capabilities} under value.
@@ -314,6 +472,182 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const $ = s => document.querySelector(s);
       const body = document.body;
       const main = $('main');
+      const header = $('header.site-header');
+      const heroCopy = route === '/' ? $('.hero-copy') : null;
+      const heroCopyStyle = heroCopy ? getComputedStyle(heroCopy) : null;
+      const landingPhoneEntrance = route !== '/' ? null : (() => {
+        const phone = $('.playground .phone-device');
+        const animation = phone?.getAnimations().find(item =>
+          item.animationName === 'phone-enter');
+        if (!phone || !animation) return {checked: false, fits: false};
+        const previousTime = animation.currentTime;
+        const previousState = animation.playState;
+        animation.pause();
+        animation.currentTime = 0;
+        const rect = phone.getBoundingClientRect();
+        const viewportWidth = visualViewport?.width || innerWidth;
+        const documentWidth = document.documentElement.scrollWidth;
+        const result = {
+          checked: true,
+          fits: rect.left >= -1 && rect.right <= viewportWidth + 1 &&
+            documentWidth <= viewportWidth + 1,
+          phoneLeft: Math.round(rect.left * 10) / 10,
+          phoneRight: Math.round(rect.right * 10) / 10,
+          viewportWidth,
+          documentWidth
+        };
+        if (previousTime !== null) animation.currentTime = previousTime;
+        if (previousState === 'running') animation.play();
+        else if (previousState === 'finished') animation.finish();
+        else animation.pause();
+        return result;
+      })();
+      const headerBrand = header?.querySelector(':scope > .brand') ||
+        header?.querySelector(':scope > a:first-child');
+      const headerActions = header?.querySelector(':scope > .site-actions');
+      const headerNav = header?.querySelector(':scope > .site-nav');
+      const headerTools = headerNav?.querySelector(':scope > .site-nav-tools');
+      const navLinksContainer = headerNav?.querySelector(':scope > .site-nav-links');
+      const localeSelect = header?.querySelector('[data-public-locale-select]');
+      const navToggle = headerActions?.querySelector(':scope > [data-public-nav-toggle]');
+      const headerBrandBox = headerBrand?.getBoundingClientRect();
+      const headerActionsBox = headerActions?.getBoundingClientRect();
+      const localeBox = localeSelect?.getBoundingClientRect();
+      const compactHeader = !!navToggle && getComputedStyle(navToggle).display !== 'none';
+      const pageIntro = main?.matches('.page-shell')
+        ? main.querySelector(':scope > .page-hero > .eyebrow') : null;
+      const publicPageStartGap = pageIntro && header
+        ? Math.round(pageIntro.getBoundingClientRect().top - header.getBoundingClientRect().bottom)
+        : null;
+      const renderedInsideViewport = element => {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.display !== 'none' &&
+          style.visibility === 'visible' && Number(style.opacity) > 0 &&
+          rect.left >= -2 && rect.right <= innerWidth + 2 &&
+          rect.top >= -2 && rect.bottom <= innerHeight + 2;
+      };
+      const headerBrandText = headerBrand?.querySelector('.brand-name');
+      const publicHeaderRegionsVisible = route === '/conta/' || !header ||
+        (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerBrandText) &&
+          !!headerBrandText.textContent.trim() && renderedInsideViewport(headerActions) &&
+          (compactHeader
+            ? renderedInsideViewport(navToggle) && getComputedStyle(headerNav).display === 'none'
+            : renderedInsideViewport(headerNav) && renderedInsideViewport(localeSelect) &&
+              renderedInsideViewport(navLinksContainer)));
+      const box = element => {
+        if (!element) return null;
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return {
+          top: Math.round(rect.top), left: Math.round(rect.left),
+          width: Math.round(rect.width), height: Math.round(rect.height),
+          display: style.display, visibility: style.visibility, color: style.color,
+          background: style.backgroundColor
+        };
+      };
+      const publicHeaderLocalePresentation = route === '/conta/' || !header ||
+        (compactHeader
+          ? headerNav.contains(localeSelect) && getComputedStyle(headerNav).display === 'none' &&
+            !renderedInsideViewport(localeSelect)
+          : renderedInsideViewport(localeSelect) && renderedInsideViewport(navLinksContainer) &&
+            [...navLinksContainer.querySelectorAll(':scope > a')].some(link => {
+          const box = link.getBoundingClientRect();
+          return Math.abs((box.top + box.height / 2) - (localeBox.top + localeBox.height / 2)) <= 4;
+        }));
+      const publicHeaderMobileLocaleInDisclosure = route === '/conta/' || !header || !compactHeader ||
+        (headerNav.contains(localeSelect) && navToggle.parentElement === headerActions);
+      const publicHeaderBrandActionsDoNotOverlap = route === '/conta/' || !header ||
+        (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerActions) &&
+          !!headerBrandBox && !!headerActionsBox &&
+          headerActionsBox.left - headerBrandBox.right >= 4);
+      const publicHeaderBrandContentFits = route === '/conta/' || !header || (() => {
+        if (!headerBrand || headerBrand.scrollWidth > headerBrand.clientWidth + 1) return false;
+        const brandBox = headerBrand.getBoundingClientRect();
+        return [...headerBrand.children].every(child => {
+          const rect = child.getBoundingClientRect();
+          return rect.left >= brandBox.left - 1 && rect.right <= brandBox.right + 1 &&
+            child.scrollWidth <= child.clientWidth + 1;
+        });
+      })();
+      const publicHeaderActionsFit = route === '/conta/' || !header || (() => {
+        if (!headerActions || headerActions.scrollWidth > headerActions.clientWidth + 1) return false;
+        const actionsBox = headerActions.getBoundingClientRect();
+        return [...headerActions.children].filter(child => getComputedStyle(child).display !== 'none')
+          .every(child => {
+            const rect = child.getBoundingClientRect();
+            const children = child.matches('.site-auth-actions') ? [...child.children] : [];
+            const groupBox = child.getBoundingClientRect();
+            return rect.left >= actionsBox.left - 1 && rect.right <= actionsBox.right + 1 &&
+              child.scrollWidth <= child.clientWidth + 1 && children.every(link => {
+                const linkBox = link.getBoundingClientRect();
+                return linkBox.left >= groupBox.left - 1 && linkBox.right <= groupBox.right + 1 &&
+                  link.scrollWidth <= link.clientWidth + 1;
+              });
+          });
+      })();
+      const mobileNavigationDisclosureReady = route === '/conta/' || !header || !compactHeader ||
+        (renderedInsideViewport(navToggle) && navLinksContainer &&
+          navToggle.parentElement === headerActions &&
+          navToggle.getAttribute('aria-controls') === headerNav.id &&
+          navToggle.getAttribute('aria-expanded') === 'false' &&
+          headerNav.dataset.expanded === 'false' &&
+          getComputedStyle(headerNav).display === 'none' &&
+          !renderedInsideViewport(localeSelect));
+      const accountTopbar = route === '/conta/' ? body.querySelector('.topbar') : null;
+      const accountTopbarActions = accountTopbar?.querySelector('.topbar-actions');
+      const accountTopbarFitsViewport = !accountTopbar || (() => {
+        const topbarBox = accountTopbar.getBoundingClientRect();
+        const actionsBox = accountTopbarActions?.getBoundingClientRect();
+        return !!actionsBox && topbarBox.left >= -1 && topbarBox.right <= innerWidth + 1 &&
+          actionsBox.left >= topbarBox.left - 1 && actionsBox.right <= topbarBox.right + 1 &&
+          actionsBox.top >= topbarBox.top - 1 && actionsBox.bottom <= topbarBox.bottom + 1 &&
+          accountTopbar.scrollWidth <= accountTopbar.clientWidth + 1;
+      })();
+      const accountMobileNavigationLabelsFit = route !== '/conta/' || (() => {
+        const nav = body.querySelector('.mobile-nav');
+        if (!nav || getComputedStyle(nav).display === 'none') return true;
+        const items = [...nav.querySelectorAll(':scope > a, :scope > button')];
+        const boxes = items.map(item => {
+          const label = item.querySelector(':scope > span');
+          if (!label) return null;
+          const target = item.getBoundingClientRect();
+          const text = label.getBoundingClientRect();
+          return {target, text};
+        });
+        return boxes.length === 5 && boxes.every(box => box &&
+          box.target.width >= 44 && box.target.height >= 44 && box.text.width > 0 &&
+          box.text.left >= box.target.left - 1 &&
+          box.text.right <= box.target.right + 1) &&
+          boxes.slice(1).every((box, index) =>
+            boxes[index].text.right <= box.text.left + 1);
+      })();
+      const accountMobileFooterClearance = route !== '/conta/' ? null : (() => {
+        const nav = body.querySelector('.mobile-nav');
+        const footer = body.querySelector('.page-footer');
+        const expected = innerWidth <= 640 ||
+          (matchMedia('(any-pointer: coarse)').matches && innerWidth <= 1180);
+        if (!expected) return {checked:false, clear:true, clearance:null};
+        if (!nav || !footer || getComputedStyle(nav).display === 'none') {
+          return {checked:true, clear:false, clearance:null};
+        }
+        const navStyle = getComputedStyle(nav);
+        const navBox = nav.getBoundingClientRect();
+        const footerBox = footer.getBoundingClientRect();
+        const maximumScrollY = Math.max(0,
+          document.documentElement.scrollHeight - innerHeight);
+        const footerBottomAtPageEnd = footerBox.bottom + scrollY - maximumScrollY;
+        const clearance = navBox.top - footerBottomAtPageEnd;
+        return {
+          checked:true,
+          clear:navStyle.position === 'fixed' && navBox.height > 0 && clearance >= -1,
+          clearance:Math.round(clearance),
+        };
+      })();
+      const footer = $('footer.site-footer');
+      const footerLinks = footer ? [...footer.querySelectorAll('a')] : [];
+      const footerBox = footer?.getBoundingClientRect();
       const forms = [...document.querySelectorAll('form.identity-form')];
       const visibleAuthForms = forms.filter(x => !x.hidden);
       const readyControls = forms.flatMap(f => [...f.querySelectorAll('input[type=password],button[type=submit]')]).filter(x => !x.disabled);
@@ -322,6 +656,28 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const controls = [...document.querySelectorAll('a[href],button,input,select,textarea')].filter(e => {
         const box = e.getBoundingClientRect();
         return box.width > 0 && box.height > 0 && getComputedStyle(e).visibility !== 'hidden';
+      });
+      const undersizedInteractiveTargets = controls.filter(e => {
+        const style = getComputedStyle(e);
+        const inlineTextLink = e.matches('a[href]') && style.display === 'inline' && e.closest('p');
+        return !e.closest('.playground, [hidden], [aria-hidden="true"], dialog:not([open]), details:not([open])') &&
+          !e.disabled && !inlineTextLink &&
+          (e.getBoundingClientRect().width < 44 || e.getBoundingClientRect().height < 44);
+      }).slice(0, 8).map(e => {
+        const rect = e.getBoundingClientRect();
+        return {tag: e.tagName.toLowerCase(), text: e.textContent.trim().slice(0, 60),
+          width: Math.round(rect.width), height: Math.round(rect.height)};
+      });
+      const undersizedAAInteractiveTargets = controls.filter(e => {
+        const style = getComputedStyle(e);
+        const inlineTextLink = e.matches('a[href]') && style.display === 'inline' && e.closest('p');
+        return !e.closest('.playground, [hidden], [aria-hidden="true"], dialog:not([open]), details:not([open])') &&
+          !e.disabled && !inlineTextLink &&
+          (e.getBoundingClientRect().width < 24 || e.getBoundingClientRect().height < 24);
+      }).slice(0, 8).map(e => {
+        const rect = e.getBoundingClientRect();
+        return {tag: e.tagName.toLowerCase(), text: e.textContent.trim().slice(0, 60),
+          width: Math.round(rect.width), height: Math.round(rect.height)};
       });
       const nameless = controls.filter(e => {
         if (e.getAttribute('aria-hidden') === 'true' || e.disabled) return false;
@@ -365,7 +721,52 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
         main: !!main,
         mainCount: document.querySelectorAll('main').length,
         mainH1Count: [...document.querySelectorAll('main h1')].filter(h => !h.closest('.playground, [aria-hidden="true"]')).length,
+        landingHeroCopyVisible: !heroCopy || (heroCopyStyle.opacity === '1' &&
+          heroCopyStyle.visibility === 'visible' && heroCopyStyle.display !== 'none'),
+        landingHeroCopyHasNoEntranceAnimation: !heroCopy || heroCopyStyle.animationName === 'none',
+        landingPhoneEntrance,
         skip: !!$('.skip-link[href^="#"]'),
+        publicHeaderRegionsReady: route === '/conta/' || !header ||
+          (!!headerBrand && !!headerActions && !!headerNav && !!navLinksContainer && !!localeSelect),
+        publicHeaderRegionsVisible,
+        accountTopbarFitsViewport,
+        accountMobileNavigationLabelsFit,
+        accountMobileFooterClearance,
+        publicHeaderBrandActionsShareRow: route === '/conta/' || !header ||
+          (renderedInsideViewport(headerBrand) && renderedInsideViewport(headerActions) &&
+            !!headerBrandBox && !!headerActionsBox &&
+            Math.abs((headerBrandBox.top + headerBrandBox.height / 2) -
+              (headerActionsBox.top + headerActionsBox.height / 2)) <= 6),
+        publicHeaderBrandActionsDoNotOverlap,
+        publicHeaderBrandContentFits,
+        publicHeaderActionsFit,
+        publicHeaderLocalePresentation,
+        publicHeaderMobileLocaleInDisclosure,
+        publicMobileNavigationDisclosureReady: mobileNavigationDisclosureReady,
+        publicPageStartGap,
+        publicPageStartSpacingReady: publicPageStartGap === null ||
+          (publicPageStartGap >= 0 && publicPageStartGap <= 64),
+        publicHeaderLayout: !header ? null : {
+          header: box(header), brand: box(headerBrand), actions: box(headerActions),
+          brandActionsGap: headerBrandBox && headerActionsBox
+            ? Math.round(headerActionsBox.left - headerBrandBox.right) : null,
+          navigation: box(headerNav),
+          tools: box(headerTools),
+          locale: box(localeSelect), toggle: box(navToggle),
+          links: box(navLinksContainer), expanded: headerNav?.dataset.expanded
+        },
+        sharedFooterContract: route === '/conta/'
+          ? !footer && !!$('footer.page-footer')
+          : !!footer,
+        sharedFooterLayout: footer ? getComputedStyle(footer).display : null,
+        sharedFooterResponsiveLayout: !footer || getComputedStyle(footer).display ===
+          (innerWidth <= 600 ? 'grid' : 'flex'),
+        sharedFooterFitsViewport: !footer || (footerBox.left >= -2 && footerBox.right <= innerWidth + 2
+          && footer.scrollWidth <= footer.clientWidth + 2),
+        sharedFooterLinksHaveComfortableTargets: !footer || footerLinks.every(link =>
+          link.getBoundingClientRect().width >= 44 && link.getBoundingClientRect().height >= 44),
+        undersizedInteractiveTargets,
+        undersizedAAInteractiveTargets,
         noOverflow: document.documentElement.scrollWidth <= innerWidth + 2,
         scrollWidth: document.documentElement.scrollWidth,
         overflowElements,
@@ -436,39 +837,195 @@ def accessibility_probe(driver: Driver) -> dict:
     }
 
 
-def localization_probe(driver: Driver) -> dict:
-    """Exercise the actual language selector, including DOM and locale persistence."""
+def restore_capture_state(driver: Driver, route: str) -> dict:
+    """Remove keyboard-test focus and fragment before saving the normal screenshot."""
+    state = driver.run(r"""const expectedRoute = '""" + route + r"""';
+      const skipLink = document.querySelector('.skip-link');
+      const main = document.querySelector('main#conteudo');
+      document.activeElement?.blur();
+      if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+      window.scrollTo({left: 0, top: 0, behavior: 'instant'});
+      return {
+        route: location.pathname,
+        expectedRoute,
+        noSkipLinkFocus: !skipLink || !skipLink.matches(':focus'),
+        mainExists: !!main,
+        noTestFragment: location.hash === '',
+        atTop: window.scrollY === 0
+      };""")
+    # The skip link animates out for 180ms after blur. Let it clear before the
+    # screenshot so the accessibility probe cannot cover the shared brand.
+    time.sleep(0.25)
+    state["skipLinkHidden"] = driver.run(r"""const link = document.querySelector('.skip-link');
+      if (!link) return true;
+      const rect = link.getBoundingClientRect();
+      return getComputedStyle(link).visibility === 'hidden' || rect.bottom <= 0;""")
+    return state
+
+
+def apply_public_locale(driver: Driver, locale: str) -> dict:
+    """Select a supported language and report its native labels and lang tags."""
+    requested = json.dumps(locale)
     return driver.run(r"""return (() => {
+      const requested = """ + requested + r""";
       const selector = document.querySelector('[data-public-locale-select]');
       const runtime = window.OrdaXPublicI18n;
-      if (!selector || !runtime) return {
-        selector: false, english: false, portuguese: false, persistence: false
-      };
-      const apply = value => {
-        selector.value = value;
-        selector.dispatchEvent(new Event('change', {bubbles:true}));
-        return {
-          language: document.documentElement.lang,
-          stored: localStorage.getItem('ordax.public.locale'),
-          selector: selector.value,
-          skip: document.querySelector('.skip-link')?.textContent?.trim(),
-        };
-      };
-      const english = apply('en-US');
-      const portuguese = apply('pt-BR');
+      const toggle = document.querySelector('[data-public-nav-toggle]');
+      if (!selector || !runtime) return {ready:false};
+      selector.value = requested;
+      selector.dispatchEvent(new Event('change', {bubbles:true}));
+      const options = [...selector.options].map(option => ({
+        value: option.value, lang: option.lang, label: option.textContent.trim(),
+      }));
+      const expected = [
+        {value:'pt-BR', lang:'pt-BR', label:'Português'},
+        {value:'en-US', lang:'en-US', label:'English'},
+      ];
       return {
-        selector: true,
-        english: english.language === 'en-US' &&
-          english.stored === 'en-US' &&
-          english.selector === 'en-US' &&
-          english.skip === 'Skip to content',
-        portuguese: portuguese.language === 'pt-BR' &&
-          portuguese.stored === 'pt-BR' &&
-          portuguese.selector === 'pt-BR' &&
-          portuguese.skip === 'Ir para o conteúdo',
-        persistence: localStorage.getItem('ordax.public.locale') === 'pt-BR'
+        ready:true,
+        language:document.documentElement.lang,
+        stored:localStorage.getItem('ordax.public.locale'),
+        selected:selector.value,
+        accessibleName:selector.getAttribute('aria-label'),
+        navigationLabels: {
+          primary:document.querySelector('header.site-header > nav.site-nav')?.getAttribute('aria-label') || null,
+          footer:document.querySelector('footer.site-footer nav')?.getAttribute('aria-label') || null,
+        },
+        skip:document.querySelector('.skip-link')?.textContent?.trim(),
+        menu:toggle?.querySelector('span')?.textContent?.trim(),
+        toggleLabel:toggle?.getAttribute('aria-label'),
+        languageNamesAndTags:options.length === expected.length &&
+          expected.every(wanted => options.some(option =>
+            option.value === wanted.value && option.lang === wanted.lang &&
+            option.label === wanted.label)),
       };
     })();""")
+
+
+def localization_probe(driver: Driver) -> dict:
+    """Exercise real locale changes, self-named languages, and accessibility labels."""
+    english = apply_public_locale(driver, "en-US")
+    portuguese = apply_public_locale(driver, "pt-BR")
+    account_route = driver.run("return location.pathname === '/conta/'")
+    return {
+        "selector": english.get("ready") and portuguese.get("ready"),
+        "english": english.get("language") == "en-US"
+            and english.get("selected") == "en-US"
+            and english.get("stored") == "en-US"
+            and english.get("accessibleName") == "Language"
+            and english.get("skip") == "Skip to content",
+        "portuguese": portuguese.get("language") == "pt-BR"
+            and portuguese.get("selected") == "pt-BR"
+            and portuguese.get("stored") == "pt-BR"
+            and portuguese.get("accessibleName") == "Idioma"
+            and portuguese.get("skip") == "Ir para o conteúdo",
+        "persistence": portuguese.get("stored") == "pt-BR",
+        "languageNamesAndTags": english.get("languageNamesAndTags")
+            and portuguese.get("languageNamesAndTags"),
+        "menuEnglish": account_route or (english.get("menu") == "Menu"
+            and english.get("toggleLabel") == "Toggle primary navigation"),
+        "menuPortuguese": account_route or (portuguese.get("menu") == "Menu"
+            and portuguese.get("toggleLabel") == "Alternar navegação principal"),
+    }
+
+
+def mobile_navigation_interaction_probe(driver: Driver) -> dict:
+    """Exercise the mobile disclosure, locale control, Escape, and focus restoration."""
+    return driver.run(r"""return (() => {
+      const nav = document.querySelector('.site-header > .site-nav');
+      const linksContainer = nav?.querySelector(':scope > .site-nav-links');
+      const actions = document.querySelector('.site-header > .site-actions');
+      const button = actions?.querySelector(':scope > [data-public-nav-toggle]');
+      const locale = nav?.querySelector('[data-public-locale-select]');
+      const localeLabel = nav?.querySelector('[data-public-locale-label]');
+      const links = linksContainer ? [...linksContainer.querySelectorAll(':scope > a')] : [];
+      if (!nav || !linksContainer || !actions || !button || !locale || !links.length) return {
+        buttonPresent: false, startsCollapsed: false, opensLinks: false,
+        localeLivesInDisclosure: false, localeLabelVisibleWhenOpen: false,
+        localeCanSwitchInsideDisclosure: false, menuPanelFitsViewport: false,
+        escapeClosesAndRestoresFocus: false
+      };
+      const startsCollapsed = button.parentElement === actions &&
+        button.getAttribute('aria-controls') === nav.id &&
+        button.getAttribute('aria-expanded') === 'false' && nav.dataset.expanded === 'false' &&
+        getComputedStyle(nav).display === 'none' && locale.getBoundingClientRect().width === 0;
+      button.focus();
+      button.click();
+      const opensLinks = button.getAttribute('aria-expanded') === 'true' && nav.dataset.expanded === 'true' &&
+        getComputedStyle(nav).display !== 'none' && getComputedStyle(linksContainer).display === 'grid' &&
+        links.every(link => getComputedStyle(link).display !== 'none');
+      const navBox = nav.getBoundingClientRect();
+      const menuPanelFitsViewport = navBox.left >= -1 &&
+        navBox.right <= document.documentElement.clientWidth + 1 &&
+        nav.scrollWidth <= nav.clientWidth + 1;
+      const localeLivesInDisclosure = nav.contains(locale) && locale.getBoundingClientRect().width > 0;
+      const localeLabelVisibleWhenOpen = !!localeLabel &&
+        getComputedStyle(localeLabel).position !== 'absolute' &&
+        localeLabel.getBoundingClientRect().width > 0 && localeLabel.textContent.trim().length > 0;
+      const initialLocale = document.documentElement.lang;
+      locale.value = initialLocale === 'en-US' ? 'pt-BR' : 'en-US';
+      locale.dispatchEvent(new Event('change', {bubbles: true}));
+      const localeCanSwitchInsideDisclosure = document.documentElement.lang === locale.value;
+      locale.value = initialLocale;
+      locale.dispatchEvent(new Event('change', {bubbles: true}));
+      links[0].focus();
+      links[0].dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+      const escapeClosesAndRestoresFocus = button.getAttribute('aria-expanded') === 'false' &&
+        nav.dataset.expanded === 'false' && document.activeElement === button &&
+        getComputedStyle(nav).display === 'none';
+      return {buttonPresent: true, startsCollapsed, opensLinks, localeLivesInDisclosure,
+        localeLabelVisibleWhenOpen, localeCanSwitchInsideDisclosure, menuPanelFitsViewport,
+        escapeClosesAndRestoresFocus};
+    })();""")
+
+
+def mobile_account_navigation_interaction_probe(driver: Driver) -> dict:
+    """Exercise the account overflow dialog with hardware keyboard input."""
+    before = driver.run("""const button=document.querySelector('#more-toggle');
+      const dialog=document.querySelector('#more-dialog');
+      return {buttonPresent:!!button, dialogPresent:!!dialog,
+        startsCollapsed:!!button && !!dialog && !dialog.open &&
+          button.getAttribute('aria-expanded')==='false',
+        controlsDialog:!!button && !!dialog && button.getAttribute('aria-controls')===dialog.id,
+        dialogNamed:!!dialog && dialog.getAttribute('aria-labelledby')==='more-title' &&
+          !!document.getElementById('more-title')?.textContent.trim()};""")
+    if not before["buttonPresent"] or not before["dialogPresent"]:
+        return {**before, "keyboardOpensDialog": False,
+                "focusMovesIntoDialog": False, "hasOverflowLinks": False,
+                "escapeClosesAndRestoresFocus": False}
+
+    driver.run("document.querySelector('#more-toggle').focus()")
+    driver.press("\uE007")
+    opened = {}
+    for _ in range(20):
+        opened = driver.run("""const button=document.querySelector('#more-toggle');
+          const dialog=document.querySelector('#more-dialog');
+          return {open:dialog.open, expanded:button.getAttribute('aria-expanded'),
+            focusInside:dialog.contains(document.activeElement),
+            links:dialog.querySelectorAll('#more-navigation a').length};""")
+        if opened["open"]:
+            break
+        time.sleep(0.05)
+
+    driver.press("\uE00C")
+    closed = {}
+    for _ in range(20):
+        closed = driver.run("""const button=document.querySelector('#more-toggle');
+          const dialog=document.querySelector('#more-dialog');
+          return {open:dialog.open, expanded:button.getAttribute('aria-expanded'),
+            focusRestored:document.activeElement===button};""")
+        if not closed["open"] and closed["expanded"] == "false":
+            break
+        time.sleep(0.05)
+
+    return {
+        **before,
+        "keyboardOpensDialog": opened.get("open") is True and opened.get("expanded") == "true",
+        "focusMovesIntoDialog": opened.get("focusInside") is True,
+        "hasOverflowLinks": opened.get("links", 0) > 0,
+        "escapeClosesAndRestoresFocus": not closed.get("open", True)
+            and closed.get("expanded") == "false" and closed.get("focusRestored") is True,
+    }
 
 
 def solid_surface_contrast_probe(driver: Driver) -> dict:
@@ -479,8 +1036,28 @@ def solid_surface_contrast_probe(driver: Driver) -> dict:
     """
     return driver.run(r"""return (() => {
       const parse = raw => {
-        const m = String(raw).match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s\/]+([\d.]+))?\s*\)$/i);
-        return m ? [+m[1], +m[2], +m[3], m[4] == null ? 1 : +m[4]] : null;
+        const value = String(raw).trim();
+        const legacy = value.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s\/]+([\d.]+))?\s*\)$/i);
+        if (legacy) return [+legacy[1], +legacy[2], +legacy[3], legacy[4] == null ? 1 : +legacy[4]];
+
+        // Modern browsers may serialize computed RGB colors as color(srgb ...).
+        // CSS Color 4 also defines srgb-linear; convert it to encoded sRGB before
+        // applying the WCAG relative-luminance formula below.
+        const modern = value.match(/^color\(\s*(srgb|srgb-linear)\s+(.+)\)$/i);
+        if (!modern) return null;
+        const [components, alphaValue] = modern[2].split('/').map(part => part.trim());
+        const channels = components.split(/\s+/);
+        if (channels.length !== 3 || channels.some(channel => !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?$/.test(channel))) return null;
+        if (alphaValue != null && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?$/.test(alphaValue)) return null;
+        const normalized = channels.map(channel => {
+          const parsed = Number.parseFloat(channel);
+          return Math.max(0, Math.min(1, channel.endsWith('%') ? parsed / 100 : parsed));
+        });
+        const encoded = modern[1].toLowerCase() === 'srgb-linear'
+          ? normalized.map(channel => channel <= 0.0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - 0.055)
+          : normalized;
+        const alpha = alphaValue == null ? 1 : Number.parseFloat(alphaValue) / (alphaValue.endsWith('%') ? 100 : 1);
+        return [...encoded.map(channel => channel * 255), Math.max(0, Math.min(1, alpha))];
       };
       const blend = (front, back) => {
         const a = front[3];
@@ -498,42 +1075,61 @@ def solid_surface_contrast_probe(driver: Driver) -> dict:
         const [high,low]=[luminance(a),luminance(b)].sort((x,y)=>y-x);
         return (high+0.05)/(low+0.05);
       };
-      const selectors = [
-        '.site-header a', '.site-header button',
-        '.site-header select', '.page-shell h1', '.page-shell h2',
-        '.page-shell p', '.page-shell a', '.download-container h2',
-        '.download-container p', '.download-container a',
-        '.account-ui h1', '.account-ui h2', '.account-ui a',
-        '.account-ui p', '.account-ui label',
-        '.topbar-center a', '.breadcrumb a', '.page-footer a'
-      ];
-      const nodes = [...new Set(selectors.flatMap(s => [...document.querySelectorAll(s)]))];
-      const failed = [], unchecked = {};
+      // Audit every visible DOM text owner, rather than maintaining a selector
+      // list that can silently miss newly added headings, labels, or notices.
+      const nodes = [...document.querySelectorAll('body *')];
+      const failed = [], unchecked = {}, uncheckedItems = [];
+      const uncheckedExampleLimit = 24;
       let measured = 0;
-      const skip = why => {unchecked[why] = (unchecked[why] || 0) + 1};
+      const describe = el => ({
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        classes: typeof el.className === 'string' ? el.className.trim().split(/\s+/).slice(0,5) : [],
+        text: el.textContent.trim().replace(/\s+/g, ' ').slice(0,90),
+      });
+      const skip = (why, el, details={}) => {
+        unchecked[why] = (unchecked[why] || 0) + 1;
+        if (uncheckedItems.length < uncheckedExampleLimit) {
+          const style = getComputedStyle(el);
+          uncheckedItems.push({reason:why, ...describe(el), foreground:style.color, ...details});
+        }
+      };
       for (const el of nodes) {
         if (!Array.from(el.childNodes).some(n => n.nodeType===Node.TEXT_NODE && n.textContent.trim())) continue;
         const style=getComputedStyle(el);
         const rect=el.getBoundingClientRect();
         if (el.closest('[hidden], [aria-hidden="true"], .demo-native, .playground') ||
             rect.width<1 || rect.height<1 || style.visibility!=='visible' ||
-            style.display==='none' || Number(style.opacity)<1) continue;
+            style.display==='none' || Number(style.opacity)<1 ||
+            rect.right<=0 || rect.bottom<=0 || rect.left>=innerWidth || rect.top>=innerHeight) continue;
         const chain=[];
         for(let p=el; p; p=p.parentElement) chain.unshift(p);
         let background=[255,255,255,1], unmeasurable=false;
         for (const n of chain) {
           const css=getComputedStyle(n);
-          if (css.backgroundImage!=='none') {skip('image-or-gradient');unmeasurable=true;break}
+          if (css.backgroundImage!=='none') {
+            skip('image-or-gradient', el, {
+              backgroundOwner: describe(n),
+              backgroundImage: css.backgroundImage.slice(0,180),
+            });
+            unmeasurable=true;break;
+          }
           if (Number(css.opacity)<1 || css.mixBlendMode!=='normal' || css.filter!=='none') {
-            skip('layer-compositing');unmeasurable=true;break;
+            skip('layer-compositing', el, {
+              compositingOwner: describe(n),
+              opacity: css.opacity,
+              mixBlendMode: css.mixBlendMode,
+              filter: css.filter,
+            });
+            unmeasurable=true;break;
           }
           const bg=parse(css.backgroundColor);
-          if (!bg){skip('unknown-background');unmeasurable=true;break}
+          if (!bg){skip('unknown-background', el, {backgroundOwner:describe(n)});unmeasurable=true;break}
           background=blend(bg,background);
         }
         if (unmeasurable) continue;
         const text=parse(style.color);
-        if (!text) {skip('unknown-foreground');continue}
+        if (!text) {skip('unknown-foreground', el);continue}
         const foreground=blend(text,background);
         const px=parseFloat(style.fontSize)||0;
         const weight=parseInt(style.fontWeight,10)||400;
@@ -550,8 +1146,13 @@ def solid_surface_contrast_probe(driver: Driver) -> dict:
           minimum:threshold,
         });
       }
+      const uncheckedCount = Object.values(unchecked).reduce((sum,count)=>sum+count,0);
+      const unsupportedColorCount = (unchecked['unknown-foreground'] || 0) +
+        (unchecked['unknown-background'] || 0);
       return {measured, failed:failed.slice(0,16), failedCount:failed.length,
-              unchecked, scope:'flat-color foreground/background with no image or compositing'};
+              unsupportedColorCount,
+              unchecked, uncheckedItems, uncheckedItemsCapped:Math.max(0,uncheckedCount-uncheckedItems.length),
+              scope:'flat-color foreground/background with no image or compositing'};
     })();""")
 
 
@@ -784,13 +1385,17 @@ def wait_for_route(driver: Driver, route: str) -> None:
             time.sleep(0.1)
 
 
-def run(root: Path, evidence: Path) -> dict:
+def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
     if not (root / "public-site-manifest.json").is_file():
         raise BrowserProofError("build candidate missing; never browse unpackaged source")
-    if not shutil.which("chromedriver") or not shutil.which("google-chrome"):
-        raise BrowserProofError("Chrome + ChromeDriver required on pinned CI runner")
+    chrome_binary = (str(Path(chrome_binary).resolve()) if chrome_binary
+                     else shutil.which("google-chrome"))
+    if (not shutil.which("chromedriver") or not chrome_binary
+            or not Path(chrome_binary).is_file()):
+        raise BrowserProofError(
+            "Chrome + ChromeDriver required; pass --chrome-binary when Chrome is not on PATH")
     evidence.mkdir(parents=True, exist_ok=True)
-    server = http.server.ThreadingHTTPServer(
+    server = LocalProofHTTPServer(
         ("127.0.0.1", 0),
         lambda *a, **k: Handler(*a, root=root, **k),
     )
@@ -815,6 +1420,10 @@ def run(root: Path, evidence: Path) -> dict:
     child = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     driver = Driver(webdriver_port)
     results = []
+    responsive_breakpoint_results = []
+    responsive_breakpoint_routes = {}
+    localized_responsive_results = []
+    touch_results = []
     reflow_results = []
     text_enlargement_results = []
     text_spacing_results = []
@@ -837,7 +1446,7 @@ def run(root: Path, evidence: Path) -> dict:
                 time.sleep(0.1)
         else:
             raise BrowserProofError("ChromeDriver did not start")
-        driver.create()
+        driver.create(chrome_binary)
         for route in ROUTES:
             for width, height in VIEWPORTS:
                 driver.cdp("Emulation.setDeviceMetricsOverride", {
@@ -850,13 +1459,13 @@ def run(root: Path, evidence: Path) -> dict:
                 # backend requests remain fail-closed on loopback.
                 wait_for_route(driver, route)
                 report = probe(driver, route, width, height)
+                report["solidSurfaceContrast"] = solid_surface_contrast_probe(driver)
                 # The viewport and browser accessibility tree are audited on
                 # every route. Keyboard travel is tested on desktop only:
                 # the same page markup and tab order is shared with mobile.
                 if width == VIEWPORTS[0][0]:
                     report.update(accessibility_probe(driver))
                     report["localeSwitch"] = localization_probe(driver)
-                    report["solidSurfaceContrast"] = solid_surface_contrast_probe(driver)
                     driver.cdp("Emulation.setEmulatedMedia", {"features": [
                         {"name": "prefers-reduced-motion", "value": "reduce"}
                     ]})
@@ -879,10 +1488,18 @@ def run(root: Path, evidence: Path) -> dict:
                         driver.cdp("Emulation.setEmulatedMedia", {"features": [
                             {"name": "forced-colors", "value": "none"}
                         ]})
+                    report["captureStateRestored"] = restore_capture_state(driver, route)
                 short = route.strip("/").replace("/", "-") or "home"
                 filename = f"{short}-{width}x{height}.png"
                 driver.shot(evidence / filename)
                 report.update({"expectedRoute": route, "screenshot": filename})
+                if width == 390:
+                    if route == "/conta/":
+                        report["accountMobileNavigationInteraction"] = (
+                            mobile_account_navigation_interaction_probe(driver)
+                        )
+                    else:
+                        report["mobileNavigationInteraction"] = mobile_navigation_interaction_probe(driver)
                 results.append(report)
                 check = {
                     "loaded": report["complete"] and report["pathname"] == route and report["mainCount"] == 1,
@@ -890,6 +1507,22 @@ def run(root: Path, evidence: Path) -> dict:
                     "namedDocument": bool(report["title"]),
                     "mainHasSinglePrimaryHeading": report["mainH1Count"] == 1,
                     "skipNavigation": report["skip"],
+                    "publicHeaderRegionsReady": report["publicHeaderRegionsReady"],
+                    "publicHeaderRegionsVisible": report["publicHeaderRegionsVisible"],
+                    "publicHeaderBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
+                    "publicHeaderBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
+                    "publicHeaderBrandContentFits": report["publicHeaderBrandContentFits"],
+                    "publicHeaderActionsFit": report["publicHeaderActionsFit"],
+                    "publicHeaderLocalePresentation": report["publicHeaderLocalePresentation"],
+                    "publicHeaderMobileLocaleInDisclosure": report["publicHeaderMobileLocaleInDisclosure"],
+                    "publicMobileNavigationDisclosureReady": report["publicMobileNavigationDisclosureReady"],
+                    "publicPageStartSpacing": report["publicPageStartSpacingReady"],
+                    "sharedFooterContract": report["sharedFooterContract"],
+                    "sharedFooterResponsiveLayout": report["sharedFooterResponsiveLayout"],
+                    "sharedFooterFitsViewport": report["sharedFooterFitsViewport"],
+                    "sharedFooterLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
+                    "siteInteractiveTargetsHaveComfortableSize": width > 640 or not report["undersizedInteractiveTargets"],
+                    "siteInteractiveTargetsMeetMinimumSize": not report["undersizedAAInteractiveTargets"],
                     "noHorizontalOverflow": report["noOverflow"],
                     "uniqueElementIds": not report["duplicateIds"],
                     "accessibleInteractiveNames": not report["nameless"],
@@ -897,7 +1530,19 @@ def run(root: Path, evidence: Path) -> dict:
                     "noUnexpectedRemoteRequests": not report["remoteResources"],
                     "noBrokenStaticNetworkAssets": not report["failedStaticAssets"],
                     "noUncaughtBrowserErrors": not report["runtimeErrors"],
+                    "measuredFlatSurfaceTextContrast": (
+                        report["solidSurfaceContrast"]["failedCount"] == 0
+                        and report["solidSurfaceContrast"]["unsupportedColorCount"] == 0
+                    ),
+                    "flatSurfaceCoverage": (
+                        report["solidSurfaceContrast"]["measured"] > 0
+                        and report["solidSurfaceContrast"]["unsupportedColorCount"] == 0
+                    ),
                 }
+                if width == 390 and route != "/conta/":
+                    check["publicMobileNavigationOpensAndEscapes"] = all(
+                        report["mobileNavigationInteraction"].values()
+                    )
                 if width == VIEWPORTS[0][0]:
                     check.update({
                         "accessibilityTreeNames": not report["accessibilityTreeUnnamedControls"],
@@ -906,8 +1551,6 @@ def run(root: Path, evidence: Path) -> dict:
                         "skipLinkKeyboardNavigates": report["skipLinkDestination"],
                         "skipLinkKeyboardFocus": report["skipLinkFocusLandsOnMain"],
                         "localeSwitcherLocalizedAndPersistent": all(report["localeSwitch"].values()),
-                        "measuredFlatSurfaceTextContrast": report["solidSurfaceContrast"]["failedCount"] == 0,
-                        "flatSurfaceCoverage": route == "/" or report["solidSurfaceContrast"]["measured"] > 0,
                         "reducedMotionBrowserPreferenceHonored": report["reducedMotion"]["preferenceMatches"]
                           and report["reducedMotion"]["scrollingIsInstant"]
                           and not report["reducedMotion"]["activeMotion"],
@@ -917,14 +1560,38 @@ def run(root: Path, evidence: Path) -> dict:
                                 "skipFocusIndicator", "noHorizontalOverflow"
                             )
                         ),
+                        "visualScreenshotRestoredAfterKeyboardProbe": (
+                            report["captureStateRestored"]["route"] == route
+                            and report["captureStateRestored"]["expectedRoute"] == route
+                            and report["captureStateRestored"]["noSkipLinkFocus"]
+                            and report["captureStateRestored"]["skipLinkHidden"]
+                            and report["captureStateRestored"]["mainExists"]
+                            and report["captureStateRestored"]["noTestFragment"]
+                            and report["captureStateRestored"]["atTop"]
+                        ),
                     })
                 if route in ("/login/", "/cadastro/", "/recuperar/", "/recuperar/nova-senha/"):
                     check.update({"formsFailClosed": not report["exposedAuthForms"] and not report["enabledCredentials"]})
                 if route == "/conta/":
                     check.update({"accountShellPresent": report["accountPortal"],
+                                  "accountTopbarFitsViewport": report["accountTopbarFitsViewport"],
                                   "noInventedVerifiedUser": not report["accountHasVerifiedUser"]})
+                    if width == 390:
+                        check["accountMobileNavigationOpensAndEscapes"] = all(
+                            report["accountMobileNavigationInteraction"].values()
+                        )
+                    if report["accountMobileFooterClearance"]["checked"]:
+                        check["accountMobileFooterClearOfNavigation"] = (
+                            report["accountMobileFooterClearance"]["clear"]
+                        )
                 if route == "/":
-                    check["landingFixturePresent"] = report["landingFixturePresent"]
+                    check.update({
+                        "landingFixturePresent": report["landingFixturePresent"],
+                        "landingHeroCopyVisibleOnFirstRender": report["landingHeroCopyVisible"],
+                        "landingHeroCopyHasNoEntranceAnimation": report["landingHeroCopyHasNoEntranceAnimation"],
+                        "landingPhoneEntranceFitsViewport": report["landingPhoneEntrance"]["checked"]
+                          and report["landingPhoneEntrance"]["fits"],
+                    })
                 for name, success in check.items():
                     if not success:
                         failures.append({"route": route, "viewport": width, "rule": name,
@@ -934,6 +1601,163 @@ def run(root: Path, evidence: Path) -> dict:
                                                      if name == "reducedMotionBrowserPreferenceHonored"
                                                      else {"forcedColors": report["forcedColors"]}
                                                      if name == "nativeForcedColorsAndSkipFocus" else report)})
+        # CSS remains the source of truth for each route's breakpoints. Read
+        # the candidate's linked stylesheets and probe immediately around
+        # every authored min/max-width boundary rather than duplicating them
+        # in a second hand-maintained viewport list.
+        for route in ROUTES:
+            route_audit = responsive_breakpoint_audit(root, route)
+            responsive_breakpoint_routes[route] = route_audit
+            for width in route_audit["testedWidths"]:
+                driver.cdp("Emulation.setDeviceMetricsOverride", {
+                    "width": width, "height": 900, "deviceScaleFactor": 1,
+                    "mobile": width <= 430,
+                })
+                driver.navigate(f"http://127.0.0.1:{server.server_port}{route}")
+                wait_for_route(driver, route)
+                report = probe(driver, route, width, 900)
+                checks = responsive_shell_checks(report, width, route)
+                report["breakpointChecks"] = checks
+                failed = [name for name, success in checks.items() if not success]
+                if failed:
+                    short = route.strip("/").replace("/", "-") or "home"
+                    screenshot = f"breakpoint-{short}-{width}px.png"
+                    driver.shot(evidence / screenshot)
+                    report["screenshot"] = screenshot
+                    for name in failed:
+                        failures.append({"route": route, "viewport": f"breakpoint-{width}",
+                                         "rule": name, "summary": report})
+                responsive_breakpoint_results.append(report)
+        # Validate language-dependent wrapping and touch targets in both real
+        # locales across every public route. The representative locale widths
+        # live here once; the route inventory still comes from the route contract.
+        driver.cdp("Emulation.setTouchEmulationEnabled", {
+            "enabled": True, "maxTouchPoints": 1,
+        })
+        for width in LOCALIZATION_VIEWPORTS:
+            driver.cdp("Emulation.setDeviceMetricsOverride", {
+                "width": width, "height": 900, "deviceScaleFactor": 1,
+                "mobile": width <= 430,
+            })
+            for route in ROUTES:
+                driver.navigate(f"http://127.0.0.1:{server.server_port}{route}")
+                wait_for_route(driver, route)
+                for locale in ("pt-BR", "en-US"):
+                    locale_state = apply_public_locale(driver, locale)
+                    report = probe(driver, route, width, 900)
+                    report["locale"] = locale
+                    report["localeState"] = locale_state
+                    report["coarsePointer"] = driver.run(
+                        "return matchMedia('(any-pointer: coarse)').matches"
+                    )
+                    checks = responsive_shell_checks(
+                        report, width, route, coarse_pointer=True
+                    )
+                    checks["coarsePointerProfileActive"] = report["coarsePointer"]
+                    checks["localeAppliedAndRemembered"] = (
+                        locale_state.get("ready")
+                        and locale_state.get("language") == locale
+                        and locale_state.get("selected") == locale
+                        and locale_state.get("stored") == locale
+                    )
+                    checks["languageNamesRemainNativeAndTagged"] = (
+                        locale_state.get("languageNamesAndTags") is True
+                    )
+                    if route != "/conta/":
+                        expected_landmarks = {
+                            "pt-BR": ("Navegação principal", "Rodapé"),
+                            "en-US": ("Primary navigation", "Footer"),
+                        }[locale]
+                        checks["navigationLandmarksMatchLocale"] = (
+                            locale_state.get("navigationLabels") == {
+                                "primary": expected_landmarks[0],
+                                "footer": expected_landmarks[1],
+                            }
+                        )
+                    checks["selectorAccessibleNameMatchesLocale"] = (
+                        locale_state.get("accessibleName") == {
+                            "pt-BR": "Idioma", "en-US": "Language"
+                        }[locale]
+                    )
+                    if route != "/conta/":
+                        checks["navigationLabelMatchesLocale"] = (
+                            locale_state.get("menu") == "Menu"
+                            and locale_state.get("toggleLabel") == {
+                                "pt-BR": "Alternar navegação principal",
+                                "en-US": "Toggle primary navigation",
+                            }[locale]
+                        )
+                    report["localizedResponsiveChecks"] = checks
+                    short = route.strip("/").replace("/", "-") or "home"
+                    failed = [name for name, success in checks.items() if not success]
+                    screenshot = None
+                    if failed or (width in (280, 320) and locale == "en-US"):
+                        screenshot = f"localized-{locale}-{short}-{width}.png"
+                        driver.shot(evidence / screenshot)
+                        report["screenshot"] = screenshot
+                    for name in failed:
+                        failures.append({"route": route,
+                                         "viewport": f"{locale}-{width}-coarse",
+                                         "rule": name, "summary": report})
+                    localized_responsive_results.append(report)
+        driver.cdp("Emulation.setTouchEmulationEnabled", {"enabled": False})
+        apply_public_locale(driver, "pt-BR")
+        # Verify the desktop-CSS layouts used by tablets and hybrid touch
+        # devices. This exercises any-pointer: coarse independently from the
+        # narrow mobile viewport matrix above.
+        driver.cdp("Emulation.setTouchEmulationEnabled", {
+            "enabled": True, "maxTouchPoints": 1,
+        })
+        for route in ROUTES:
+            for width in TOUCH_VIEWPORTS:
+                driver.cdp("Emulation.setDeviceMetricsOverride", {
+                    "width": width, "height": 900, "deviceScaleFactor": 1,
+                    "mobile": False,
+                })
+                driver.navigate(f"http://127.0.0.1:{server.server_port}{route}")
+                wait_for_route(driver, route)
+                report = probe(driver, route, width, 900)
+                report["coarsePointer"] = driver.run(
+                    "return matchMedia('(any-pointer: coarse)').matches"
+                )
+                touch_results.append(report)
+                checks = {
+                    "coarsePointerProfileActive": report["coarsePointer"],
+                    "routeRendered": report["complete"] and report["pathname"] == route
+                        and report["mainCount"] == 1,
+                    "noHorizontalOverflow": report["noOverflow"],
+                    "headerBrandActionsShareRow": report["publicHeaderBrandActionsShareRow"],
+                    "headerBrandActionsDoNotOverlap": report["publicHeaderBrandActionsDoNotOverlap"],
+                    "headerBrandContentFits": report["publicHeaderBrandContentFits"],
+                    "headerActionsFit": report["publicHeaderActionsFit"],
+                    "localePresentation": report["publicHeaderLocalePresentation"],
+                    "mobileLocaleIsInsideDisclosure": report["publicHeaderMobileLocaleInDisclosure"],
+                    "publicPageStartSpacing": report["publicPageStartSpacingReady"],
+                    "footerFitsViewport": report["sharedFooterFitsViewport"],
+                    "footerLinksHaveComfortableTargets": report["sharedFooterLinksHaveComfortableTargets"],
+                    "interactiveTargetsHaveComfortableSize": not report["undersizedInteractiveTargets"],
+                }
+                if route == "/conta/" and report["accountMobileFooterClearance"]["checked"]:
+                    checks["accountMobileFooterClearOfNavigation"] = (
+                        report["accountMobileFooterClearance"]["clear"]
+                    )
+                if route != "/conta/":
+                    checks["mobileDisclosureReady"] = report["publicMobileNavigationDisclosureReady"]
+                if route == "/conta/":
+                    checks["accountShellPresent"] = report["accountPortal"]
+                    checks["accountTopbarFitsViewport"] = report["accountTopbarFitsViewport"]
+                    checks["accountMobileNavigationLabelsFit"] = report["accountMobileNavigationLabelsFit"]
+                    checks["noInventedVerifiedUser"] = not report["accountHasVerifiedUser"]
+                if route == "/":
+                    checks["landingPhoneEntranceFitsViewport"] = (
+                        report["landingPhoneEntrance"]["checked"]
+                        and report["landingPhoneEntrance"]["fits"]
+                    )
+                for name, success in checks.items():
+                    if not success:
+                        failures.append({"route": route, "viewport": f"touch-{width}",
+                                         "rule": name, "summary": report})
+        driver.cdp("Emulation.setTouchEmulationEnabled", {"enabled": False})
         # Simulate the CSS layout viewport available when a 1280px desktop
         # is viewed at 200% and 400% scale. Keep mobile=False so responsive
         # rules are exercised in desktop emulation, distinct from the 320px
@@ -1326,8 +2150,17 @@ def run(root: Path, evidence: Path) -> dict:
                 if not good:
                     failures.append({"route": route, "viewport": "noscript",
                                      "rule": rule, "summary": report})
-        output = {"schema": "ordax.site-browser-proof/2", "routeCount": len(ROUTES),
+        output = {"schema": "ordax.site-browser-proof/3", "routeCount": len(ROUTES),
                   "viewportCount": len(VIEWPORTS), "checks": len(results),
+                  "breakpointResponsiveChecks": len(responsive_breakpoint_results),
+                  "breakpointResponsiveViewports": sum(
+                      len(item["testedWidths"]) for item in responsive_breakpoint_routes.values()
+                  ),
+                  "breakpointResponsiveRoutes": responsive_breakpoint_routes,
+                  "localizedResponsiveChecks": len(localized_responsive_results),
+                  "localizedResponsiveViewports": len(LOCALIZATION_VIEWPORTS),
+                  "localizedResponsiveLocales": ["pt-BR", "en-US"],
+                  "touchResponsiveChecks": len(touch_results),
                   "reflowChecks": len(reflow_results), "textEnlargementChecks": len(text_enlargement_results),
                   "textSpacingChecks": len(text_spacing_results),
                   "noScriptChecks": len(no_script_results),
@@ -1338,6 +2171,9 @@ def run(root: Path, evidence: Path) -> dict:
                   "sameEmailUsageChecks": len(same_email_usage_results),
                   "legacyFragmentChecks": len(legacy_fragment_results),
                   "failures": failures, "results": results,
+                  "breakpointResponsiveResults": responsive_breakpoint_results,
+                  "localizedResponsiveResults": localized_responsive_results,
+                  "touchResults": touch_results,
                   "reflowResults": reflow_results, "textEnlargementResults": text_enlargement_results,
                   "textSpacingResults": text_spacing_results,
                   "noScriptResults": no_script_results,
@@ -1389,9 +2225,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default="out/site")
     parser.add_argument("--evidence", default="out/browser-evidence")
+    parser.add_argument(
+        "--chrome-binary",
+        help="Path to Chrome/Chromium when it is not named google-chrome on PATH",
+    )
     args = parser.parse_args()
-    output = run(Path(args.out).resolve(), Path(args.evidence).resolve())
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
+    output = run(Path(args.out).resolve(), Path(args.evidence).resolve(), args.chrome_binary)
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} cssBreakpointViewports={output['breakpointResponsiveViewports']} cssBreakpointChecks={output['breakpointResponsiveChecks']} localeResponsive={output['localizedResponsiveChecks']} localeViewports={output['localizedResponsiveViewports']} touch={output['touchResponsiveChecks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
 
 
 if __name__ == "__main__":

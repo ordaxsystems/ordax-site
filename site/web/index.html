@@ -9,31 +9,22 @@
 
   <link rel="stylesheet" href="/assets/site.css">
   <link rel="stylesheet" href="/assets/ordax-font.css">
-  <link rel="stylesheet" href="/assets/account.css?v=identity-meridian-4">
+  <link rel="stylesheet" href="/assets/account.css?v=identity-shell-9">
   <link rel="stylesheet" href="/assets/web-entry.css">
-  <script src="/i18n/catalog.js" defer></script>
+  <script src="/i18n/catalog.js?v=6f6f6e9ae470" defer></script>
   <script src="/i18n/runtime.js" defer></script>
   <script src="/assets/site.js" defer></script>
 </head>
 <body data-page="web" data-meridian data-material="paper" class="account-ui web-entry">
   <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
-  <header class="site-header account-header">
-    <a class="brand" href="/" aria-label="OrdaX — início"><img class="brand-mark" src="/assets/ordax-symbol.png" width="48" height="30" alt=""><span class="brand-name">OrdaX</span></a>
-    <nav class="account-nav-actions" aria-label="Navegação principal"><span class="account-locale-slot" data-public-locale-slot></span><a href="/">Início</a><a href="/download/">Download</a><a class="nav-cta" href="/login/" data-auth-nav="login"><span data-auth-nav-label>Entrar</span> <span aria-hidden="true">↗</span></a></nav>
-  </header>
+  <!-- ORDAX_PUBLIC_HEADER -->
   <main id="conteudo" class="account-stage" tabindex="-1">
     <section class="account-story" aria-labelledby="web-story-title">
       <div class="story-copy">
         <p class="eyebrow">ORDAX WEB</p>
         <h1 id="web-story-title">Seu sistema.<br><span>Um novo ponto de acesso.</span></h1>
         <p class="story-lead">Entre no seu espaço OrdaX pelo navegador, com a mesma identidade e os recursos disponíveis para sua conta.</p>
-        <ul class="account-benefits" aria-label="OrdaX Web">
-          <li><strong>Uma identidade</strong><span>A mesma Conta OrdaX, sem um cadastro separado para o Web.</span></li>
-          <li><strong>Recursos do seu espaço</strong><span>Cada serviço mantém suas permissões e sua disponibilidade.</span></li>
-          <li><strong>Trabalho conectado</strong><span>Operações em arquivos locais exigem um dispositivo autorizado e online.</span></li>
-        </ul>
       </div>
-      <div class="account-promise"><span class="account-promise-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6ZM8 12l3 3 5-6"/></svg></span><div><p>Acesso ao Web não dá controle automático sobre seus dispositivos.</p></div></div>
     </section>
     <section class="account-access" aria-labelledby="web-access-title">
       <div class="account-card">
@@ -50,7 +41,15 @@
         <nav class="account-legal" aria-label="Informações do site"><a href="/privacidade/">Privacidade</a><a href="/termos/">Termos</a></nav>
       </div>
     </section>
+    <div class="web-details">
+      <ul class="account-benefits" aria-label="OrdaX Web">
+        <li><strong>Uma identidade</strong><span>A mesma Conta OrdaX, sem um cadastro separado para o Web.</span></li>
+        <li><strong>Recursos do seu espaço</strong><span>Cada serviço mantém suas permissões e sua disponibilidade.</span></li>
+        <li><strong>Trabalho conectado</strong><span>Operações em arquivos locais exigem um dispositivo autorizado e online.</span></li>
+      </ul>
+      <div class="account-promise"><span class="account-promise-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6ZM8 12l3 3 5-6"/></svg></span><div><p>Acesso ao Web não dá controle automático sobre seus dispositivos.</p></div></div>
+    </div>
   </main>
-  <footer class="site-footer"><div><a class="brand" href="/" aria-label="OrdaX — início"><img class="brand-mark" src="/assets/ordax-symbol.png" width="48" height="30" alt=""><span class="brand-name">OrdaX</span></a><p>Uma conta. Seu espaço de trabalho.</p></div><nav aria-label="Rodapé"><a href="/">Início</a><a href="/download/">Download</a><a href="/privacidade/">Privacidade</a><a href="/termos/">Termos</a></nav></footer>
+  <!-- ORDAX_PUBLIC_FOOTER -->
 </body>
 </html>

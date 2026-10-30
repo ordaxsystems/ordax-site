@@ -30,7 +30,7 @@ O **cutover de código e artefatos Dev está integrado à `main`**. Surface #13/
 
 
 ## Gates de implementação atualmente verificados
-- Testes ChromeDriver: 11 rotas × 3 viewports; screenshots no artefato CI [PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40041263365).
+- O inventário de rotas vem de `contracts/site-routes.json`; a matriz de navegador vem de `scripts/browser_smoke.py`. Consulte `docs/AUDIT.md` para a evidência mais recente, sem manter cópias de contagens na instrução do agente.
 - Landing: somente `site/assets/playground-fixture.json`; proibido recolocar fixture inline como segundo estado.
 - `contracts/site-routes.json`: único catálogo de rotas do Site; robots, sitemap e testes o consomem.
 - `--public-origin` deve ser fornecido pelo owner de deployment (OS/Platform); nunca mover DNS ou aceitar origem definida pelo browser.
@@ -61,7 +61,7 @@ O **cutover de código e artefatos Dev está integrado à `main`**. Surface #13/
 
 ## Reflow e no-JavaScript — regressões obrigatórias
 
-- A suite `scripts/browser_smoke.py` inclui 33 provas regulares, **22 reflows de CSS em modo desktop** (640/320 px) e **6 estados sem execução de JavaScript**, capturados em `out/browser-evidence`. O controle auth permanece desativado também sem scripts. [CI PASS](https://github.com/ordaxsystems/ordax-site/actions/runs/40051704031).
+- `scripts/browser_smoke.py` é o único runner Chrome do Site. Ele deriva rotas de `contracts/site-routes.json`, usa viewports representativos e lê os breakpoints `@media` das folhas carregadas por cada rota no candidato, verificando também os pixels adjacentes. Não copie os valores de breakpoint para outra matriz; consulte os counts e o estado mais recente em `docs/AUDIT.md`. O conteúdo da Conta e os artefatos da Surface mantêm seus owners.
 - **Não esconder horizontal overflow com `overflow-x:hidden` global.** O problema identificado era o seletor de idioma anexado ao `.site-nav` excedendo a largura em quatro rotas. A correção é `flex-wrap` e linha própria para `.public-locale-switcher` em largura estreita, no único `site/assets/site.css`.
 - Não declarar testado o zoom real ou WCAG completo: o reflow usa viewports CSS equivalentes a 200/400% de uma janela de 1280 px. Text-only zoom, contraste, leitores de tela e gateway real continuam pendentes.
 

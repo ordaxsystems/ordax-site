@@ -7,6 +7,7 @@
 - Rotas: iterar o `contracts/site-routes.json` da **mesma revisão** usada para gerar o build candidato; não manter lista duplicada de rotas neste documento.
 - Build: usar o bundle estático verificado pelo `scripts/build.py` com `--dev-lock contracts/dev-artifact-lock.json`, usando as duas prereleases Dev assinadas do owner Surface. Verificar o manifesto do próprio candidato e registrar o SHA exato; não confundir o deployment protegido `ordax-site-dev` com autorização de publicação pública.
 - Prova automática existente: `scripts/browser_smoke.py` cobre teclado/AX, contraste medível de superfícies planas, reflow, sem JS, `forced-colors`, ampliação **simulada** de texto a 200% e espaçamento WCAG 1.4.12 em PT-BR/EN-US (22 cenários). Os testes `text200` e `spacing` são **regressões parciais de DOM**, não zoom nativo nem aprovação visual/manual.
+- Evidências variáveis do navegador (commit, digest, contagens, falhas e superfícies excluídas) têm um único registro vigente em [`AUDIT.md`](AUDIT.md), junto ao relatório e às capturas do mesmo candidato. Consulte esse registro ao executar o gate; não copie métricas de uma revisão anterior para este protocolo. A prova automatizada continua parcial: zoom nativo, ampliação nativa somente de texto, leitores de tela e contraste de fundos compostos ainda exigem inspeção manual.
 - Fonte visual de demonstração `.playground`: avalie-a como conteúdo exibido ao usuário, mas encaminhe ajustes de seus artefatos canônicos ao owner Surface. Não introduza CSS espelho no Site.
 
 ## Evidência obrigatória por rota

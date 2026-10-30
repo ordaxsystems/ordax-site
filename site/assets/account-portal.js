@@ -163,28 +163,33 @@
 
   // One catalog owns routes, navigation, descriptions and unavailable service presentation.
   const sections = Object.freeze([
-    { id: "visao-geral", sessionDependent: true, title: "Visão geral", icon: "dashboard", description: "Sua identidade, assinatura e recursos em um só lugar." },
-    { id: "dados-pessoais", sessionDependent: true, title: "Dados pessoais", icon: "user", description: "Seu perfil e suas informações cadastrais.", owner: "Identidade OrdaX", capabilities: ["accountEmail", "profileEdit", "profilePhoto"] },
-    { id: "assinatura", title: "Plano e assinatura", icon: "crown", description: "Seu plano, benefícios e opções de assinatura.", owner: "Direitos e assinaturas OrdaX", capabilities: ["subscription", "planCatalog", "subscriptionChange"] },
-    { id: "consumo", title: "Consumo e limites", icon: "chart", description: "Acompanhe seus recursos em todo o ecossistema OrdaX.", owner: "Medição de uso OrdaX", capabilities: ["aiUsage", "storageUsage", "apiUsage", "usageHistory", "usageExport"] },
-    { id: "faturamento", title: "Pagamentos e faturas", icon: "card", description: "Métodos de pagamento, cobranças e documentos fiscais.", owner: "Faturamento OrdaX", capabilities: ["upcomingCharge", "paymentMethods", "invoices", "fiscalDetails"] },
-    { id: "seguranca", sessionDependent: true, title: "Segurança e acesso", icon: "shield", description: "Proteja sua identidade e controle o acesso à sua conta.", owner: "Identidade OrdaX", capabilities: ["browserSession", "password", "twoFactor", "recovery", "accessEvents"] },
-    { id: "dispositivos", sessionDependent: true, title: "Meus dispositivos", icon: "devices", description: "Dispositivos e sessões vinculados à sua conta.", owner: "Sessões e dispositivos OrdaX", capabilities: ["deviceSessions", "osDevices", "remoteSignOut"] },
-    { id: "privacidade", title: "Dados e privacidade", icon: "fingerprint", description: "Seus dados, suas escolhas. Você está no controle.", owner: "Privacidade OrdaX", capabilities: ["dataExport", "consents", "accountDeletion"] },
-    { id: "integracoes", title: "Integrações", icon: "globe", description: "Contas conectadas e autorizações de aplicativos.", owner: "Integrações OrdaX", capabilities: ["connections", "connectionRevocation"] },
-    { id: "preferencias", title: "Preferências", icon: "sliders", description: "Personalize a experiência da sua conta.", owner: "Preferências OrdaX", capabilities: ["portalLocale", "portalAppearance", "communications"] },
-    { id: "atividade", title: "Atividade da conta", icon: "history", description: "Histórico de acesso e alterações importantes.", owner: "Auditoria da conta OrdaX", capabilities: ["accessEvents", "accountChanges", "activityPeriod"] },
-    { id: "suporte", title: "Central de ajuda", icon: "help", description: "Encontre respostas e cuide da sua experiência OrdaX.", capabilities: ["supportChannel"] }
+    { id: "visao-geral", navigationGroup: "account", mobileLabel: "Resumo", sessionDependent: true, title: "Visão geral", icon: "dashboard", description: "Sua identidade, assinatura e recursos em um só lugar." },
+    { id: "dados-pessoais", navigationGroup: "account", sessionDependent: true, title: "Dados pessoais", icon: "user", description: "Seu perfil e suas informações cadastrais.", owner: "Identidade OrdaX", capabilities: ["accountEmail", "profileEdit", "profilePhoto"] },
+    { id: "assinatura", navigationGroup: "services", mobileLabel: "Plano", title: "Plano e assinatura", icon: "crown", description: "Seu plano, benefícios e opções de assinatura.", owner: "Direitos e assinaturas OrdaX", capabilities: ["subscription", "planCatalog", "subscriptionChange"] },
+    { id: "consumo", navigationGroup: "services", mobileLabel: "Consumo", title: "Consumo e limites", icon: "chart", description: "Acompanhe seus recursos em todo o ecossistema OrdaX.", owner: "Medição de uso OrdaX", capabilities: ["aiUsage", "storageUsage", "apiUsage", "usageHistory", "usageExport"] },
+    { id: "faturamento", navigationGroup: "services", title: "Pagamentos e faturas", icon: "card", description: "Métodos de pagamento, cobranças e documentos fiscais.", owner: "Faturamento OrdaX", capabilities: ["upcomingCharge", "paymentMethods", "invoices", "fiscalDetails"] },
+    { id: "seguranca", navigationGroup: "security", mobileLabel: "Segurança", sessionDependent: true, title: "Segurança e acesso", icon: "shield", description: "Proteja sua identidade e controle o acesso à sua conta.", owner: "Identidade OrdaX", capabilities: ["browserSession", "password", "twoFactor", "recovery", "accessEvents"] },
+    { id: "dispositivos", navigationGroup: "security", sessionDependent: true, title: "Meus dispositivos", icon: "devices", description: "Dispositivos e sessões vinculados à sua conta.", owner: "Sessões e dispositivos OrdaX", capabilities: ["deviceSessions", "osDevices", "remoteSignOut"] },
+    { id: "privacidade", navigationGroup: "security", title: "Dados e privacidade", icon: "fingerprint", description: "Seus dados, suas escolhas. Você está no controle.", owner: "Privacidade OrdaX", capabilities: ["dataExport", "consents", "accountDeletion"] },
+    { id: "integracoes", navigationGroup: "preferences", title: "Integrações", icon: "globe", description: "Contas conectadas e autorizações de aplicativos.", owner: "Integrações OrdaX", capabilities: ["connections", "connectionRevocation"] },
+    { id: "preferencias", navigationGroup: "preferences", title: "Preferências", icon: "sliders", description: "Personalize a experiência da sua conta.", owner: "Preferências OrdaX", capabilities: ["portalLocale", "portalAppearance", "communications"] },
+    { id: "atividade", navigationGroup: "preferences", title: "Atividade da conta", icon: "history", description: "Histórico de acesso e alterações importantes.", owner: "Auditoria da conta OrdaX", capabilities: ["accessEvents", "accountChanges", "activityPeriod"] },
+    { id: "suporte", mobileOverflow: true, title: "Central de ajuda", icon: "help", description: "Encontre respostas e cuide da sua experiência OrdaX.", capabilities: ["supportChannel"] }
   ]);
   const byId = new Map(sections.map(section => [section.id, section]));
-  const navigationGroups = Object.freeze([
-    { title: "Minha conta", ids: ["visao-geral", "dados-pessoais"] },
-    { title: "Plano e serviços", ids: ["assinatura", "consumo", "faturamento"] },
-    { title: "Segurança e privacidade", ids: ["seguranca", "dispositivos", "privacidade"] },
-    { title: "Preferências e conexões", ids: ["integracoes", "preferencias", "atividade"] }
+  const navigationGroupDefinitions = Object.freeze([
+    { id: "account", title: "Minha conta" },
+    { id: "services", title: "Plano e serviços" },
+    { id: "security", title: "Segurança e privacidade" },
+    { id: "preferences", title: "Preferências e conexões" }
   ]);
-  const mobileSections = Object.freeze([{ id: "visao-geral", label: "Resumo" }, { id: "assinatura", label: "Assinatura" }, { id: "consumo", label: "Consumo" }, { id: "seguranca", label: "Segurança" }]);
+  const navigationGroups = Object.freeze(navigationGroupDefinitions.map(group => ({
+    ...group,
+    ids: sections.filter(section => section.navigationGroup === group.id).map(section => section.id),
+  })).filter(group => group.ids.length));
+  const mobileSections = Object.freeze(sections.filter(section => section.mobileLabel));
   const mobileSectionIds = new Set(mobileSections.map(section => section.id));
+  const mobileOverflowSections = Object.freeze(sections.filter(section => section.mobileOverflow));
   const periods = Object.freeze({ month: "Este mês", week: "Últimos 7 dias", thirty: "Últimos 30 dias", year: "Este ano" });
   const resourceTabs = Object.freeze({ overview: "Visão geral", ai: "IA", storage: "Armazenamento", apis: "APIs" });
   const resources = Object.freeze([
@@ -613,9 +618,9 @@
   function renderNavigation() {
     renderSidebarToggle();
     document.getElementById("sidebar-navigation").innerHTML = navigationGroups.map(group => `<div class="nav-group"><p class="nav-group-label">${tx(group.title)}</p>${group.ids.map(id => navigationEntry(byId.get(id))).join("")}</div>`).join("");
-    document.getElementById("mobile-navigation").innerHTML = mobileSections.map(item => `<a href="#${item.id}"${state.section === item.id ? ' class="active" aria-current="page"' : ""}>${icon(byId.get(item.id).icon)}<span>${tx(item.label)}</span></a>`).join("") + `<button type="button" class="button ghost${mobileSectionIds.has(state.section) ? "" : " active"}" id="more-toggle" data-open-more aria-controls="more-dialog" aria-expanded="${moreDialog.open}">${icon("more")}<span>${tx("Mais")}</span></button>`;
+    document.getElementById("mobile-navigation").innerHTML = mobileSections.map(item => `<a href="#${item.id}"${state.section === item.id ? ' class="active" aria-current="page"' : ""}>${icon(item.icon)}<span>${tx(item.mobileLabel)}</span></a>`).join("") + `<button type="button" class="button ghost${mobileSectionIds.has(state.section) ? "" : " active"}" id="more-toggle" data-open-more aria-controls="more-dialog" aria-expanded="${moreDialog.open}">${icon("more")}<span>${tx("Mais")}</span></button>`;
     const moreGroups = navigationGroups.map(group => ({ ...group, ids: group.ids.filter(id => !mobileSectionIds.has(id)) })).filter(group => group.ids.length);
-    document.getElementById("more-navigation").innerHTML = moreGroups.map(group => `<div class="nav-group"><p class="nav-group-label">${tx(group.title)}</p>${group.ids.map(id => navigationEntry(byId.get(id), "more-link")).join("")}</div>`).join("") + navigationEntry(byId.get("suporte"), "more-link");
+    document.getElementById("more-navigation").innerHTML = moreGroups.map(group => `<div class="nav-group"><p class="nav-group-label">${tx(group.title)}</p>${group.ids.map(id => navigationEntry(byId.get(id), "more-link")).join("")}</div>`).join("") + mobileOverflowSections.map(section => navigationEntry(section, "more-link")).join("");
     const supportLink = root.querySelector('.sidebar-bottom [data-section="suporte"]');
     supportLink.classList.toggle("active", state.section === "suporte");
     if (state.section === "suporte") supportLink.setAttribute("aria-current", "page"); else supportLink.removeAttribute("aria-current");

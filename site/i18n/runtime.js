@@ -178,38 +178,223 @@
       select.value = activeLocale;
       select.setAttribute("aria-label", t("locale.selector.label"));
       for (const option of select.options) {
+        option.lang = option.value;
         option.textContent = t(`locale.selector.${option.value}`);
       }
     }
     if (label) label.textContent = t("locale.selector.label");
+    const toggle = document.querySelector("[data-public-nav-toggle]");
+    if (toggle) {
+      toggle.setAttribute("aria-label", t("site.navigation.toggle"));
+      const text = toggle.querySelector("span");
+      if (text) text.textContent = t("site.navigation.menu");
+    }
+  }
+
+  function normalizePublicHeader() {
+    const header = document.querySelector(".site-header");
+    const navigation = header?.querySelector(":scope > .site-nav");
+    if (!header || !navigation) return;
+
+    // Privacy and terms retain their Identity-pinned source bytes. Normalize
+    // the existing text link into the same visible brand used by generated
+    // public shells, without editing either legal document.
+    const brand = header.querySelector(":scope > .brand") ||
+      Array.from(header.children).find(element => element.matches?.('a[href="/"]'));
+    if (brand && !brand.querySelector("img.brand-mark")) {
+      const name = brand.querySelector(".brand-name")?.textContent.trim() ||
+        brand.textContent.trim();
+      if (name) {
+        const mark = document.createElement("img");
+        mark.className = "brand-mark";
+        mark.src = "/assets/ordax-symbol.png";
+        mark.width = 30;
+        mark.height = 30;
+        mark.alt = "";
+        const wordmark = document.createElement("span");
+        wordmark.className = "brand-name";
+        wordmark.textContent = name;
+        brand.classList.add("brand");
+        brand.setAttribute("aria-label", "OrdaX — início");
+        brand.replaceChildren(mark, wordmark);
+      }
+    }
+
+    const ensureAuthActionsGroup = actions => {
+      let group = actions.querySelector(":scope > .site-auth-actions");
+      if (group) return group;
+
+      const links = Array.from(actions.querySelectorAll(":scope > [data-auth-nav]"));
+      if (!links.length) return null;
+      group = document.createElement("div");
+      group.className = "site-auth-actions";
+      actions.insertBefore(group, links[0]);
+      links.forEach(link => group.append(link));
+      return group;
+    };
+
+    const addCompactRegisterLabel = actions => {
+      const register = actions?.querySelector(':scope > [data-auth-nav="register"]');
+      const desktopLabel = register?.querySelector("[data-auth-nav-label]");
+      if (!register || !desktopLabel || register.querySelector('[data-shell-label="mobile"]')) return;
+
+      const compactLabel = catalog.messages[SOURCE_LOCALE]?.["site.action.signup.compact"];
+      if (typeof compactLabel !== "string") {
+        throw new Error("public-site-compact-register-label-missing");
+      }
+
+      desktopLabel.dataset.shellLabel = "desktop";
+      const mobileLabel = document.createElement("span");
+      mobileLabel.dataset.shellLabel = "mobile";
+      mobileLabel.textContent = compactLabel;
+      desktopLabel.after(mobileLabel);
+    };
+
+    const existingActions = header.querySelector(":scope > .site-actions");
+    if (existingActions) {
+      addCompactRegisterLabel(ensureAuthActionsGroup(existingActions));
+      return;
+    }
+
+    const authLinks = Array.from(navigation.querySelectorAll(":scope > [data-auth-nav]"));
+    if (!authLinks.length) return;
+
+    const actions = document.createElement("div");
+    actions.className = "site-actions";
+    header.insertBefore(actions, navigation);
+    authLinks.forEach(link => actions.append(link));
+    addCompactRegisterLabel(ensureAuthActionsGroup(actions));
+  }
+
+  function normalizePublicFooter() {
+    const footer = document.querySelector("footer.site-footer");
+    const brand = footer?.querySelector(':scope > a:first-child[href="/"]');
+    const headerBrand = document.querySelector(".site-header > .brand");
+    const symbol = headerBrand?.querySelector("img.brand-mark")?.getAttribute("src");
+    if (!brand || !symbol || brand.querySelector("img.brand-mark")) return;
+
+    // Legal documents keep Identity-pinned source bytes. Reuse the normalized
+    // header's symbol so their footer receives the shared brand presentation
+    // without copying its path or modifying the canonical document markup.
+    const name = brand.textContent.trim();
+    if (!name) return;
+
+    const mark = document.createElement("img");
+    mark.className = "brand-mark";
+    mark.src = symbol;
+    mark.width = 48;
+    mark.height = 30;
+    mark.alt = "";
+    const wordmark = document.createElement("span");
+    wordmark.className = "brand-name";
+    wordmark.textContent = name;
+    brand.classList.add("brand");
+    const label = headerBrand.getAttribute("aria-label");
+    if (label) brand.setAttribute("aria-label", label);
+    brand.replaceChildren(mark, wordmark);
+  }
+
+  function normalizePublicNavigation(nav) {
+    if (!nav) return null;
+
+    let tools = nav.querySelector(":scope > .site-nav-tools");
+    if (!tools) {
+      tools = document.createElement("div");
+      tools.className = "site-nav-tools";
+      nav.prepend(tools);
+    }
+
+    let links = nav.querySelector(":scope > .site-nav-links");
+    if (!links) {
+      links = document.createElement("div");
+      links.className = "site-nav-links";
+      for (const anchor of Array.from(nav.querySelectorAll(":scope > a"))) {
+        links.append(anchor);
+      }
+      nav.append(links);
+    }
+
+    const selector = nav.querySelector(":scope > .public-locale-switcher");
+    if (selector && selector.parentElement !== tools) tools.prepend(selector);
+    return {tools, links};
+  }
+
+  function installResponsiveNavigation(nav, linksContainer) {
+    const header = nav?.closest(".site-header");
+    const actions = header?.querySelector(":scope > .site-actions");
+    const links = linksContainer
+      ? Array.from(linksContainer.querySelectorAll(":scope > a"))
+      : [];
+    if (!header || !actions || !nav || !linksContainer || !links.length ||
+        actions.querySelector(":scope > [data-public-nav-toggle]")) return;
+
+    if (!nav.id) nav.id = "public-primary-navigation";
+    if (!linksContainer.id) linksContainer.id = "public-primary-links";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "site-nav-toggle";
+    toggle.dataset.publicNavToggle = "";
+    toggle.setAttribute("aria-controls", nav.id);
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", t("site.navigation.toggle"));
+    toggle.innerHTML = '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">' +
+      '<path d="M4 7h16M4 12h16M4 17h16"></path></svg><span></span>';
+    toggle.querySelector("span").textContent = t("site.navigation.menu");
+    actions.append(toggle);
+
+    const setExpanded = expanded => {
+      toggle.setAttribute("aria-expanded", String(expanded));
+      nav.dataset.expanded = String(expanded);
+    };
+    setExpanded(false);
+    header.dataset.navEnhanced = "true";
+
+    toggle.addEventListener("click", () => {
+      setExpanded(toggle.getAttribute("aria-expanded") !== "true");
+    });
+    nav.addEventListener("click", event => {
+      if (event.target.closest("a")) setExpanded(false);
+    });
+    nav.addEventListener("keydown", event => {
+      if (event.key === "Escape" && nav.dataset.expanded === "true") {
+        setExpanded(false);
+        toggle.focus();
+      }
+    });
   }
 
   function installSelector() {
-    if (document.querySelector("[data-public-locale-switcher]")) return;
-    const nav = document.querySelector("[data-public-locale-slot]") || document.querySelector(".site-nav");
-    if (!nav) return;
+    normalizePublicHeader();
+    normalizePublicFooter();
+    const nav = document.querySelector(".site-header > .site-nav");
+    const navigation = normalizePublicNavigation(nav);
+    const localeSlot = document.querySelector("[data-public-locale-slot]");
+    if (!document.querySelector("[data-public-locale-switcher]") && (navigation || localeSlot)) {
+      const host = document.createElement("label");
+      host.className = "public-locale-switcher";
+      host.dataset.publicLocaleSwitcher = "";
 
-    const host = document.createElement("label");
-    host.className = "public-locale-switcher";
-    host.dataset.publicLocaleSwitcher = "";
+      const text = document.createElement("span");
+      text.className = "sr-only";
+      text.dataset.publicLocaleLabel = "";
 
-    const text = document.createElement("span");
-    text.className = "sr-only";
-    text.dataset.publicLocaleLabel = "";
+      const select = document.createElement("select");
+      select.className = "public-locale-select";
+      select.dataset.publicLocaleSelect = "";
+      for (const locale of catalog.supportedLocales) {
+        const option = document.createElement("option");
+        option.value = locale;
+        select.append(option);
+      }
+      select.addEventListener("change", () => setLocale(select.value));
 
-    const select = document.createElement("select");
-    select.className = "public-locale-select";
-    select.dataset.publicLocaleSelect = "";
-    for (const locale of catalog.supportedLocales) {
-      const option = document.createElement("option");
-      option.value = locale;
-      select.append(option);
+      host.append(text, select);
+      if (navigation) navigation.tools.prepend(host);
+      else localeSlot.replaceWith(host);
+      updateSelector();
     }
-    select.addEventListener("change", () => setLocale(select.value));
-
-    host.append(text, select);
-    nav.append(host);
-    updateSelector();
+    installResponsiveNavigation(nav, navigation?.links);
   }
 
   function setLocale(value) {
