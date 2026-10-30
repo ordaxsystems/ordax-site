@@ -37,6 +37,8 @@ BRAND_FILES = {
     "assets/fonts/Inter-OFL-1.1.txt",
 }
 REMOTE_SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+# Exact official read-only Windows CI page; not a release-authority or download grant.
+DESKTOP_EVALUATION_WORKFLOW = "https://github.com/ordaxsystems/ordax-os/actions/workflows/windows-desktop-dev.yml?query=branch%3Amain"
 SCHEMA = "prototype-ordax.independent-public-site-bundle/1"
 MAX_BUNDLE_FILES = 500
 MAX_BUNDLE_BYTES = 64 * 1024 * 1024
@@ -134,6 +136,8 @@ def check_source(strict_assets: bool = False) -> dict:
             if "http://" in value or "https://" in value:
                 scrubbed = value.replace(REMOTE_SCRIPT, "")
                 scrubbed = re.sub(r'href="https://web\.ordax\.com\.br/"', 'href="/"', scrubbed)
+                if p.suffix.lower() == ".html":
+                    scrubbed = scrubbed.replace('href="' + DESKTOP_EVALUATION_WORKFLOW + '"', 'href="/download/#desktop"')
                 if "http://" in scrubbed or "https://" in scrubbed:
                     raise SiteError("unapproved external runtime reference: " + str(p))
     missing_binary = []
