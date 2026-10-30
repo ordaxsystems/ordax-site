@@ -1526,6 +1526,28 @@ html body[data-page] footer.site-footer nav {
   }
 }
 
+/* Keep the normal single-row header at the 320px transition as well:
+   321-360px should not jump immediately to the larger brand sizing. */
+@media (max-width: 360px) {
+  html body[data-page] .site-header > .site-actions,
+  html body[data-page] .site-header > .site-actions > .site-auth-actions {
+    gap: 5px;
+  }
+
+  html body[data-page] .site-header > .brand {
+    gap: 4px;
+  }
+
+  html body[data-page] .site-header > .brand .brand-name {
+    font-size: 20px;
+  }
+
+  html body[data-page] .site-header > .brand .brand-mark {
+    width: 24px;
+    height: 24px;
+  }
+}
+
 @media (max-width: 320px) {
   html body[data-page] .site-header > .site-actions {
     gap: 4px;
