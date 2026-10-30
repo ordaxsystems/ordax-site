@@ -1253,10 +1253,31 @@ def text_enlargement_probe(driver: Driver) -> dict:
         tag: el.tagName.toLowerCase(), selector: String(el.className || '').slice(0, 85),
         right: Math.round(el.getBoundingClientRect().right)
       }));
+      // Rectangular overlap is distinct from clipping/scroll overflow.
+      // A 200%-enlarged brand may overlap account actions while both boxes
+      // remain individually unclipped. Check only known Site-owned pairs.
+      const visualOverlaps = [];
+      const intersects = (a, b) => {
+        if (!a || !b) return false;
+        const x = a.getBoundingClientRect(), y = b.getBoundingClientRect();
+        return x.width > 0 && x.height > 0 && y.width > 0 && y.height > 0 &&
+          x.left < y.right - 1 && x.right > y.left + 1 &&
+          x.top < y.bottom - 1 && x.bottom > y.top + 1;
+      };
+      const header = document.querySelector('.site-header');
+      const brand = header?.querySelector(':scope > .brand') ||
+        header?.querySelector(':scope > a:first-child');
+      const actions = header?.querySelector(':scope > .site-actions');
+      if (intersects(brand, actions) ||
+          intersects(brand?.querySelector('.brand-name'), actions))
+        visualOverlaps.push('public-header-brand-vs-actions');
+      if (intersects(document.querySelector('.download-hero .art-caption'),
+                     document.querySelector('.download-hero-copy .eyebrow')))
+        visualOverlaps.push('download-art-caption-vs-eyebrow');
       return {
         method: 'computed-font-size-doubling-not-native-browser-zoom',
         scalePercent: 200, scaledTextNodes: samples.length,
-        wrongSizes: wrongSizes.length, clippedText,
+        wrongSizes: wrongSizes.length, clippedText, visualOverlaps,
         width: innerWidth, documentScrollWidth: document.documentElement.scrollWidth,
         noPageHorizontalOverflow: document.documentElement.scrollWidth <= innerWidth + 2,
         overflowElements,
@@ -1814,6 +1835,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
             checks = {
                 "textActuallyDoubled": report["scaledTextNodes"] > 0 and report["wrongSizes"] == 0,
                 "textDoesNotClip": not report["clippedText"],
+                "textDoesNotOverlapSiteControls": not report["visualOverlaps"],
                 "textDoesNotCausePageOverflow": report["noPageHorizontalOverflow"],
                 "noUncaughtScripts": report["noUnexpectedRuntimeErrors"],
             }
