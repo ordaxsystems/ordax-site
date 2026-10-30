@@ -1442,11 +1442,24 @@ html body[data-page] footer.site-footer nav {
 
 @media (max-width: 760px) {
   html body[data-page] .site-header {
-    grid-template-columns: minmax(0, 1fr) max-content;
-    grid-template-areas: "brand actions" "nav nav";
-    justify-items: stretch;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
     gap: 0 8px;
     padding: 12px clamp(12px, 4vw, 20px);
+  }
+
+  /* Allow large text to wrap the complete account group below the brand,
+     instead of allowing the brand or login labels to overlap. */
+  html body[data-page] .site-header > .brand,
+  html body[data-page] .site-header > a:first-child:not(.brand),
+  html body[data-page] .site-header > .site-actions {
+    flex: 0 0 auto;
+  }
+
+  html body[data-page] .site-header > .site-nav {
+    flex: 1 0 100%;
   }
 
   html body[data-page] .site-header > .brand {

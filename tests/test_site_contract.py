@@ -176,6 +176,8 @@ class SiteContractTests(unittest.TestCase):
         )
         self.assertIn('grid-template-columns: minmax(0, 1fr) max-content;', shared_css)
         self.assertIn('--public-content-top-space: clamp(32px, 4.4vw, 58px);', shared_css)
+        self.assertIn('flex-wrap: wrap;', shared_css)
+        self.assertIn('textDoesNotOverlapSiteControls', smoke)
         self.assertIn('.site-header > .site-actions > .site-nav-toggle', shared_css)
         self.assertIn('.site-header > .site-actions > .site-auth-actions', shared_css)
         auth_group = re.search(r"(?m)^\.site-auth-actions\s*\{([^{}]*)\}", shared_css)
@@ -311,7 +313,7 @@ class SiteContractTests(unittest.TestCase):
             "the mobile download hero must use the shared gutter and compact vertical rhythm",
         )
         self.assertIn(
-            ".art-caption{bottom:18px;right:var(--public-page-gutter);font-size:7px}",
+            ".art-caption{top:auto;bottom:18px;right:var(--public-page-gutter);font-size:7px}",
             download_css,
             "mobile download decoration must align to the shared page gutter",
         )
