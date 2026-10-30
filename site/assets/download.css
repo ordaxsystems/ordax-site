@@ -17,3 +17,29 @@ body[data-page="download"]{--canvas:var(--ordax-bg);--surface:var(--ordax-panel)
 @media(prefers-reduced-motion:reduce){.download-hero-art{animation:none}}
 
 [data-page="download"] svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}.step-symbol svg{width:30px;height:30px}
+
+
+/* Separate installed Windows Desktop from bootable USB without a second download authority. */
+.download-mode-nav{display:flex;flex-wrap:wrap;gap:12px;margin:0 0 24px}
+.download-mode-nav a{display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border:1px solid var(--ordax-border);border-radius:10px;color:var(--ordax-text);background:var(--ordax-panel);font-size:13px}
+.download-mode-nav a:hover{border-color:var(--ordax-accent-strong)}
+.desktop-download{scroll-margin-top:30px;margin-bottom:36px;padding:32px;border:1px solid var(--ordax-border);border-radius:var(--ordax-radius-lg);background:linear-gradient(150deg,var(--ordax-panel),var(--ordax-surface))}
+.desktop-download-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:22px}
+.desktop-download-heading .eyebrow{margin-bottom:9px}
+.desktop-download-heading h2{font-size:clamp(29px,3.4vw,43px);font-weight:500;letter-spacing:-.045em;margin:0 0 10px}
+.desktop-download-heading p:last-child{max-width:600px;font-size:14px;line-height:1.75;color:var(--ordax-muted);margin:0}
+.desktop-release-state{flex-shrink:0;border:1px solid var(--ordax-border);border-radius:40px;padding:10px 15px;font-size:11px;color:var(--ordax-text)}
+.desktop-download-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:29px}
+.desktop-install-card,.desktop-test-card{padding:24px;border-radius:var(--ordax-radius-md);background:var(--ordax-subtle-bg);border:1px solid var(--ordax-border)}
+.desktop-download h3{font-size:19px;font-weight:500;margin:0 0 11px}
+.desktop-install-card>p,.desktop-test-card li{font-size:13px;line-height:1.8;color:var(--ordax-muted)}
+.desktop-install-card>p{margin:0 0 18px}
+.desktop-build-link{display:inline-flex;align-items:center;justify-content:space-between;gap:20px;padding:13px 16px;border-radius:var(--ordax-radius-md);background:var(--ordax-button-bg);color:var(--ordax-button-text);font-size:13px;font-weight:600;max-width:100%}
+.desktop-build-link:hover{filter:brightness(1.08);color:var(--ordax-button-text)}
+.desktop-install-card .desktop-small{margin:18px 0 0;font-size:11px;overflow-wrap:anywhere}
+.desktop-test-card ol{padding-left:21px;margin:7px 0 0}
+.desktop-test-card li{margin:0 0 9px;padding-left:3px}
+.desktop-integrity-note{font-size:12px;line-height:1.85;color:var(--ordax-muted);padding:18px 20px;border:1px solid var(--ordax-border);border-radius:var(--ordax-radius-md);margin:22px 0 0}
+.desktop-integrity-note strong{color:var(--ordax-text)}
+@media(max-width:860px){.desktop-download-grid{grid-template-columns:1fr}.desktop-download-heading{flex-direction:column}.desktop-release-state{align-self:flex-start}}
+@media(max-width:760px){.desktop-download{padding:22px 19px}.desktop-install-card,.desktop-test-card{padding:20px}.desktop-download-heading h2{font-size:30px}.download-mode-nav a{flex:1 1 145px}}
