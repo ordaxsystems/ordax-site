@@ -22,7 +22,7 @@ body[data-page="download"]{--canvas:var(--ordax-bg);--surface:var(--ordax-panel)
 
 /* Separate installed Windows Desktop from bootable USB without a second download authority. */
 .download-mode-nav{display:flex;flex-wrap:wrap;gap:12px;margin:0 0 24px}
-.download-mode-nav a{display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border:1px solid var(--ordax-border);border-radius:10px;color:var(--ordax-text);background:var(--ordax-panel);font-size:13px}
+.download-mode-nav a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:12px 18px;border:1px solid var(--ordax-border);border-radius:10px;color:var(--ordax-text);background:var(--ordax-panel);font-size:13px}
 .download-mode-nav a:hover{border-color:var(--ordax-accent-strong)}
 .desktop-download{scroll-margin-top:30px;margin-bottom:36px;padding:32px;border:1px solid var(--ordax-border);border-radius:var(--ordax-radius-lg);background:linear-gradient(150deg,var(--ordax-panel),var(--ordax-surface))}
 .desktop-download-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:22px}
@@ -35,7 +35,7 @@ body[data-page="download"]{--canvas:var(--ordax-bg);--surface:var(--ordax-panel)
 .desktop-download h3{font-size:19px;font-weight:500;margin:0 0 11px}
 .desktop-install-card>p,.desktop-test-card li{font-size:13px;line-height:1.8;color:var(--ordax-muted)}
 .desktop-install-card>p{margin:0 0 18px}
-.desktop-build-link{display:inline-flex;align-items:center;justify-content:space-between;gap:20px;padding:13px 16px;border-radius:var(--ordax-radius-md);background:var(--ordax-button-bg);color:var(--ordax-button-text);font-size:13px;font-weight:600;max-width:100%}
+.desktop-build-link{display:inline-flex;align-items:center;justify-content:space-between;gap:20px;min-height:44px;padding:13px 16px;border-radius:var(--ordax-radius-md);background:var(--ordax-button-bg);color:var(--ordax-button-text);font-size:13px;font-weight:600;max-width:100%}
 .desktop-build-link:hover{filter:brightness(1.08);color:var(--ordax-button-text)}
 .desktop-install-card .desktop-small{margin:18px 0 0;font-size:11px;overflow-wrap:anywhere}
 .desktop-test-card ol{padding-left:21px;margin:7px 0 0}
