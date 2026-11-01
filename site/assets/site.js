@@ -1192,10 +1192,12 @@
   let startRevision = 0;
   async function start() {
     const generation = ++startRevision;
-    // Legacy hosted-auth redirects can put bearer tokens in the URL hash.
-    // Discard the entire fragment before any fetch or external challenge:
-    // waiting for the runtime config would keep those tokens addressable.
-    if (document.body?.dataset?.page === "login" && window.location.hash) {
+    // Hosted Identity redirects can leave bearer-like key/value fragments on
+    // any presentation form route. The Site never consumes these credentials:
+    // discard them synchronously before config, Turnstile or other requests.
+    // Keep ordinary #conteudo anchors functional for keyboard navigation.
+    if (IDENTITY_PREVIEW_PATHS.has(window.location.pathname)
+        && window.location.hash.includes("=")) {
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
     // A second locale/session check revokes any previous form or challenge

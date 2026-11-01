@@ -556,6 +556,17 @@ class SiteContractTests(unittest.TestCase):
             "phone overflow navigation must own its complete viewport geometry",
         )
 
+    def test_identity_rejects_legacy_bearer_fragments_on_all_form_routes(self):
+        source = (ROOT / "site/assets/site.js").read_text(encoding="utf-8")
+        browser = (ROOT / "scripts/browser_smoke.py").read_text(encoding="utf-8")
+        # Reuse the route set already required for local, read-only preview
+        # instead of maintaining a competing token-route allowlist.
+        self.assertIn("IDENTITY_PREVIEW_PATHS.has(window.location.pathname)", source)
+        self.assertIn('window.location.hash.includes("=")', source)
+        self.assertIn("window.history.replaceState", source)
+        self.assertIn("for identity_route in NO_SCRIPT_ROUTES[:4]", browser)
+        self.assertIn('hashPreserved: window.location.hash === \'#conteudo\'', browser)
+
     def test_identity_and_mcp_account_data_share_bounded_json_transport(self):
         shell = (ROOT / "site/assets/site.js").read_text(encoding="utf-8")
         portal = (ROOT / "site/assets/account-portal.js").read_text(encoding="utf-8")
