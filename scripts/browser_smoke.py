@@ -1879,6 +1879,43 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     if not passed:
                         failures.append({"route": route, "viewport": f"spacing-{locale}",
                                          "rule": rule, "summary": report})
+        # The Site's disabled Web product must not invite login or expose a
+        # launch URL, even with an independently authenticated synthetic user.
+        # The fixture exists only on the isolated loopback HTTP server.
+        server.auth_json_attack_for_test = "valid"
+        try:
+            driver.cdp("Emulation.setDeviceMetricsOverride", {
+                "width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True
+            })
+            driver.navigate(f"http://127.0.0.1:{server.server_port}/web/")
+            web_gate = {}
+            for _ in range(40):
+                web_gate = driver.run("""return (() => {
+                  const status = document.querySelector('[data-web-state]');
+                  const login = document.querySelector('[data-web-login]');
+                  const launch = document.querySelector('[data-web-launch]');
+                  return {
+                    pathname: window.location.pathname,
+                    status: status?.dataset?.status,
+                    statusUnbusy: status?.getAttribute('aria-busy') !== 'true',
+                    loginHidden: login?.hidden === true,
+                    launchHidden: launch?.hidden === true,
+                    noLaunchHref: launch && !launch.hasAttribute('href'),
+                    runtimeErrors: window.__ordaxPageErrors || []
+                  };
+                })();""")
+                if web_gate.get("status") == "unavailable":
+                    break
+                time.sleep(0.1)
+            if (web_gate.get("pathname") != "/web/"
+                    or web_gate.get("status") != "unavailable"
+                    or not all(web_gate.get(key) for key in
+                               ("statusUnbusy", "loginHidden", "launchHidden", "noLaunchHref"))
+                    or web_gate.get("runtimeErrors")):
+                failures.append({"route": "/web/", "viewport": "product-disabled-authenticated",
+                                 "rule": "web-entry-must-fail-closed", "summary": web_gate})
+        finally:
+            server.auth_json_attack_for_test = None
         # Exercise poisoned catalogs through the REAL Site browser runtime
         # without changing the pinned candidate or invoking any publisher.
         demo_id = "1" * 40

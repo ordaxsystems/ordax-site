@@ -709,6 +709,16 @@
     state.dataset.status = "checking";
     state.setAttribute("aria-busy", "true");
     setStatus("[data-web-state]", t("web.entry.checking.title"), t("web.entry.checking.detail"));
+    // Product availability is defined by the signed Site runtime config,
+    // never inferred from a session or from a hard-coded external host.
+    // When disabled/unconfigured, avoid inviting the visitor to sign in.
+    const path = productWebEntry(config);
+    if (!path) {
+      state.dataset.status = "unavailable";
+      state.removeAttribute("aria-busy");
+      setStatus("[data-web-state]", t("web.entry.pending.title"), t("web.entry.pending.detail"));
+      return;
+    }
     try {
       const session = await verifiedIdentitySession();
       if (revision !== sessionRevision || generation !== webRenderRevision || pageRevision !== startRevision) return;
@@ -717,16 +727,10 @@
         state.dataset.status = "anonymous";
         setStatus("[data-web-state]", t("web.entry.anonymous.title"), t("web.entry.anonymous.detail"));
       } else {
-        const path = productWebEntry(config);
-        if (path) {
-          launch.href = path;
-          launch.hidden = false;
-          state.dataset.status = "ready";
-          setStatus("[data-web-state]", t("web.entry.ready.title"), t("web.entry.ready.detail"));
-        } else {
-          state.dataset.status = "unavailable";
-          setStatus("[data-web-state]", t("web.entry.pending.title"), t("web.entry.pending.detail"));
-        }
+        launch.href = path;
+        launch.hidden = false;
+        state.dataset.status = "ready";
+        setStatus("[data-web-state]", t("web.entry.ready.title"), t("web.entry.ready.detail"));
       }
     } catch {
       if (revision !== sessionRevision || generation !== webRenderRevision || pageRevision !== startRevision) return;
