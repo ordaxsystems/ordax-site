@@ -2,6 +2,14 @@
 
 **Estado em 24/10/2026: migração Dev de código, apresentação e artefatos visuais concluída.** Este documento é a referência de estado, não uma nova camada de configuração. O código e os comandos válidos estão no [README](../README.md); os hashes, commits e a origem dos dois pacotes no único [lock Dev](../contracts/dev-artifact-lock.json).
 
+## Situação operacional — 01/11/2026 (substitui referências históricas abaixo)
+
+- **Owner e publicação:** `ordax-site/main` mantém exclusivamente o frontend público; o projeto Vercel canônico `ordax-site` preserva o mesmo ID que tinha sob o nome `ordax-site-dev`. Os aliases `vercel.app` permanecem sob `ssoProtection=all`; nenhum domínio comercial foi associado a ele. O rótulo interno de deployment Vercel `production` **não** significa cutover público.
+- **Prova de build:** a [PR #23](https://github.com/ordaxsystems/ordax-site/pull/23) integrou a paridade Node 24. O [CI pós-merge](https://github.com/ordaxsystems/ordax-site/actions/runs/41288178210) passou; o [deployment protegido](https://vercel.com/ordaxsystems/ordax-site/Ak7fhEuLKJYtSwqA5825QDfktd55) `READY` recebeu o commit `93308c67`, com log indicando troca efetiva de Node 26 para 24 e `SITE_BUNDLE_VERIFY=PASS`. Esses fatos **não** são prova HTTP byte-exata nem E2E autenticado.
+- **Gateway:** o Site expõe apenas o adaptador de host `api/account-proxy.mjs`, que reexporta a fonte imutável do `ordax-os` descrita em `contracts/canonical-gateway-source.json`. Não duplicar OIDC, cookies, Turnstile, sessões ou grants. Sem configuração e confiança do owner, manter Identity indisponível.
+- **Pendências reais:** pré-flight de bytes servido via Vercel CLI autenticada para o mesmo commit/manifesto CI; E2E autorizado de Identity no host final; acessibilidade manual; assinatura/autorizações de publisher e cutover. Estado, evidências adicionais e decisão de promoção residem na [issue #14](https://github.com/ordaxsystems/ordax-site/issues/14). Nenhuma etapa dessas recebe `PASS` por inferência.
+- **Interpretação de histórico:** as seções datadas de outubro abaixo registram provas e previews daquela época, não representam o deployment atual ou instruções para refazer a migração. O contrato executável continua em `vercel.json`, nos locks e nos testes.
+
 ## Ajuste de leitura — 2026-10-29
 
 Na Minha Conta, tablets com ponteiro de toque (641–1180px) usam a barra inferior com nomes visíveis para Resumo, Assinatura, Consumo, Segurança e Mais. Isso substitui a faixa lateral de ícones compacta nesse perfil de entrada; teclado/leitores mantêm os nomes acessíveis e o menu Mais abre as demais seções.

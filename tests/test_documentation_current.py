@@ -52,6 +52,31 @@ class CurrentDocsTests(unittest.TestCase):
             {"ordaxsystems/ordax-surface"},
         )
 
+    def test_active_host_guidance_matches_existing_gateway_owner_contracts(self):
+        # Documentation is not a second deployment SSOT: it must describe the
+        # executable Vercel adapter and the one immutable OS-owned source lock.
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        handoff = (ROOT / "docs/HANDOFF.md").read_text(encoding="utf-8")
+        vercel = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+        lock = json.loads((ROOT / "contracts/canonical-gateway-source.json").read_text(encoding="utf-8"))
+        for value in (readme, agents, handoff):
+            self.assertIn("api/account-proxy.mjs", value)
+            self.assertIn("contracts/canonical-gateway-source.json", value)
+            self.assertIn("ordax-site", value)
+        self.assertNotIn("sem Identity/gateway", readme)
+        self.assertNotIn("O preview `ordax-site` próprio permanece uma dependência", agents)
+        self.assertEqual(lock["repository"], "ordaxsystems/ordax-os")
+        self.assertEqual(lock["status"], "staging-only-not-authorized-for-production")
+        self.assertIn("stage_canonical_gateway.py --out .gateway-source", vercel["installCommand"])
+        self.assertEqual(
+            [row["source"] for row in vercel["rewrites"]],
+            ["/auth/:path*", "/sync/:path*", "/account/:path*"],
+        )
+        self.assertNotIn("domains", vercel)
+        self.assertIn("X-Robots-Tag", str(vercel["headers"]))
+        self.assertIn("noindex", str(vercel["headers"]))
+
     def test_adr_ids_are_unique_and_old_runbooks_are_explicitly_archived(self):
         decisions = (ROOT / "docs/DECISIONS.md").read_text(encoding="utf-8")
         ids = re.findall(r"\*\*SITE-ADR-(\d{3})", decisions)
