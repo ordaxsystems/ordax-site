@@ -1009,9 +1009,9 @@ class SiteContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/site-source.yml").read_text(encoding="utf-8")
         # The workflow is the sole owner of action commit IDs; regression
         # only enforces Node 24 generation and immutable 40-digit SHA pins.
-        uses_lines = re.findall(r"^\\s*-\\s+uses:\\s+actions/[^\\r\\n]+", workflow, re.M)
+        uses_lines = re.findall(r"^\s*-\s+uses:\s+actions/[^\r\n]+", workflow, re.M)
         pinned = re.findall(
-            r"^\\s*-\\s+uses:\\s+actions/([a-z-]+)@([0-9a-f]{40})\\s+#\\s+(v7\\.\\d+\\.\\d+)\\s*$",
+            r"^\s*-\s+uses:\s+actions/([a-z-]+)@([0-9a-f]{40})\s+#\s+(v7\.\d+\.\d+)\s*$",
             workflow, re.M,
         )
         self.assertEqual(len(uses_lines), 4)
