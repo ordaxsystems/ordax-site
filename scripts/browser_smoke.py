@@ -162,6 +162,10 @@ def responsive_shell_checks(report: dict, width: int, route: str,
         checks["coarsePointerTargetsRemainComfortable"] = (
             not report["undersizedInteractiveTargets"]
         )
+    if route == "/":
+        checks["compactDemoOnlyInertWithoutPrecisePointer"] = (
+            report["compactDemoInput"]["valid"]
+        )
     if route == "/conta/":
         checks["accountShellPresent"] = report["accountPortal"]
         checks["accountTopbarFitsViewport"] = report["accountTopbarFitsViewport"]
@@ -475,6 +479,16 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
       const header = $('header.site-header');
       const heroCopy = route === '/' ? $('.hero-copy') : null;
       const heroCopyStyle = heroCopy ? getComputedStyle(heroCopy) : null;
+      const compactDemoInput = route !== '/' ? null : (() => {
+        const stage = $('[data-demo-stage]');
+        const coarse = matchMedia('(any-pointer: coarse)').matches;
+        const precise = matchMedia('(any-pointer: fine)').matches;
+        return {
+          present: !!stage, coarse, precise,
+          inert: stage?.inert === true,
+          valid: !!stage && stage.inert === (coarse && !precise)
+        };
+      })();
       const landingPhoneEntrance = route !== '/' ? null : (() => {
         const phone = $('.playground .phone-device');
         const animation = phone?.getAnimations().find(item =>
@@ -725,6 +739,7 @@ def probe(driver: Driver, route: str, width: int, height: int) -> dict:
           heroCopyStyle.visibility === 'visible' && heroCopyStyle.display !== 'none'),
         landingHeroCopyHasNoEntranceAnimation: !heroCopy || heroCopyStyle.animationName === 'none',
         landingPhoneEntrance,
+        compactDemoInput,
         skip: !!$('.skip-link[href^="#"]'),
         publicHeaderRegionsReady: route === '/conta/' || !header ||
           (!!headerBrand && !!headerActions && !!headerNav && !!navLinksContainer && !!localeSelect),
@@ -1608,6 +1623,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                 if route == "/":
                     check.update({
                         "landingFixturePresent": report["landingFixturePresent"],
+                        "compactDemoOnlyInertWithoutPrecisePointer": report["compactDemoInput"]["valid"],
                         "landingHeroCopyVisibleOnFirstRender": report["landingHeroCopyVisible"],
                         "landingHeroCopyHasNoEntranceAnimation": report["landingHeroCopyHasNoEntranceAnimation"],
                         "landingPhoneEntranceFitsViewport": report["landingPhoneEntrance"]["checked"]
@@ -1770,6 +1786,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                     checks["accountMobileNavigationLabelsFit"] = report["accountMobileNavigationLabelsFit"]
                     checks["noInventedVerifiedUser"] = not report["accountHasVerifiedUser"]
                 if route == "/":
+                    checks["compactDemoOnlyInertWithoutPrecisePointer"] = report["compactDemoInput"]["valid"]
                     checks["landingPhoneEntranceFitsViewport"] = (
                         report["landingPhoneEntrance"]["checked"]
                         and report["landingPhoneEntrance"]["fits"]
