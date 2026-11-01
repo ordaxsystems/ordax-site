@@ -14,11 +14,11 @@
     "surface_preview": {
       "release": {
         "source_repository": "ordaxsystems/ordax-surface",
-        "source_commit": "1ab73da4aae5991273a5f4ca380d5af135ffd8d5",
-        "os_host_commit": "8b677ba7a1b04cc7abb4795fd6d8dc406dd7109a",
-        "release_tag": "meridian-dev-1ab73da4aae5991273a5f4ca380d5af135ffd8d5",
-        "archive_sha256": "f37cded023174c922c674f2991d531cd2867429cadb4ab3a53694a206f9422c9",
-        "manifest_sha256": "ef8e436cb3cb977c31d7038c3057bb3df9322bd5e1ff3e738ab6fd69270778a0"
+        "source_commit": "7591c40542c2b0646e9db5af78f9dda3e0286b0f",
+        "os_host_commit": "c8b61202a3527d781754fc354dd8968e0d10f07f",
+        "release_tag": "meridian-dev-7591c40542c2b0646e9db5af78f9dda3e0286b0f",
+        "archive_sha256": "a1b265467274a59107b79c8d6aa1ad7a9c164f83d066e07f81fbff99711b477d",
+        "manifest_sha256": "701322c7f2b504c10b8c86fd484e3f226da3f53167e919946ca8dd9468cfdc8b"
       }
     }
   }
