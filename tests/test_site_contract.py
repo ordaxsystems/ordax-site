@@ -556,6 +556,28 @@ class SiteContractTests(unittest.TestCase):
             "phone overflow navigation must own its complete viewport geometry",
         )
 
+    def test_web_product_links_respect_site_entry_gate_and_status(self):
+        landing = (ROOT / "site/index.html").read_text(encoding="utf-8")
+        account = (ROOT / "site/conta/index.html").read_text(encoding="utf-8")
+        web = (ROOT / "site/web/index.html").read_text(encoding="utf-8")
+        runtime = (ROOT / "site/assets/site.js").read_text(encoding="utf-8")
+        config = json.loads((ROOT / "site/config/public-site.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(landing.count('href="/web/"'), 1)
+        self.assertEqual(account.count('href="/web/"'), 3)
+        self.assertNotIn('https://web.ordax.com.br/', landing + account)
+        self.assertIn('data-web-launch hidden', web)
+        self.assertIs(config["product"]["web"]["enabled"], False)
+        self.assertIsNone(config["product"]["web"]["entry_url"])
+        gate = runtime.split("async function renderWebEntry(config)", 1)[1].split(
+            "async function renderIdentity(", 1
+        )[0]
+        self.assertLess(gate.index("const path = productWebEntry(config)"),
+                        gate.index("await verifiedIdentitySession()"))
+        self.assertIn('if (!path)', gate)
+        self.assertIn('state.dataset.status = "unavailable"', gate)
+        self.assertIn('launch.removeAttribute("href")', gate)
+
     def test_identity_rejects_legacy_bearer_fragments_on_all_form_routes(self):
         source = (ROOT / "site/assets/site.js").read_text(encoding="utf-8")
         browser = (ROOT / "scripts/browser_smoke.py").read_text(encoding="utf-8")
