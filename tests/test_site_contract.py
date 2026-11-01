@@ -1020,6 +1020,7 @@ class SiteContractTests(unittest.TestCase):
         command = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))["ignoreCommand"]
         self.assertIn("VERCEL_GIT_PREVIOUS_SHA", command)
         self.assertNotIn("HEAD^", command)
+        self.assertLessEqual(len(command), 256, "Vercel ignoreCommand schema max")
         if not shutil.which("git") or not shutil.which("sh"):
             self.skipTest("Git and POSIX shell required for Vercel build gate")
 
