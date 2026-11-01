@@ -24,6 +24,9 @@ jobs:
           # exact real Git commit compiled, not an ephemeral merge revision.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          # PR base and recent main push are normally within 50 commits.
+          # If not, build_impact fails closed and the full CI still runs.
+          fetch-depth: 50
       - name: Assert exact candidate source revision
         run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
       - name: Use the same Node.js LTS major as the Vercel host
@@ -31,6 +34,12 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - name: Determine candidate impact from trusted Git history
+        id: impact
+        env:
+          ORDAX_CI_EVENT: ${{ github.event_name }}
+          ORDAX_CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 scripts/build_impact.py --ci
       - name: Compile Python tools
         run: python3 -m compileall -q scripts tests
       - name: Audit independent presentation and assets
@@ -42,12 +51,14 @@ jobs:
       - name: Fail-closed architecture and catalog tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Verify Vercel gateway host against immutable OS source (staging only)
+        if: steps.impact.outputs.full == 'true'
         run: |
           npm ci --omit=dev --ignore-scripts --no-audit --no-fund
           python3 scripts/stage_canonical_gateway.py --out .gateway-source
           node --check api/account-proxy.mjs
           node --test tests/test_gateway_host.mjs
       - name: Verify owner-signed brand and Meridian releases on every CI build
+        if: steps.impact.outputs.full == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -81,6 +92,7 @@ jobs:
           done
           echo "SITE_DEV_SURFACE_RELEASE_SIGNATURES=VERIFIED"
       - name: Build standalone static candidate
+        if: steps.impact.outputs.full == 'true'
         run: |
           python3 scripts/build.py build \
             --source-commit "$(git rev-parse HEAD)" \
@@ -92,11 +104,13 @@ jobs:
           echo "SITE_CANDIDATE_SOURCE_COMMIT=$(git rev-parse HEAD)"
           echo "SITE_CANDIDATE_MANIFEST_SHA256=$(sha256sum out/site/public-site-manifest.json | cut -d ' ' -f1)"
       - name: Verify all built routes and fail-closed default states
+        if: steps.impact.outputs.full == 'true'
         run: python3 scripts/smoke_static.py --out out/site
       - name: Browser proof on Chrome (local-only, offline APIs)
+        if: steps.impact.outputs.full == 'true'
         run: python3 scripts/browser_smoke.py --out out/site --evidence out/browser-evidence
       - name: Upload browser evidence including any failures
-        if: always()
+        if: always() && steps.impact.outputs.full == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ordax-site-browser-evidence
@@ -104,6 +118,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: Upload non-production candidate artifact
+        if: steps.impact.outputs.full == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ordax-site-candidate
