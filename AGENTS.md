@@ -111,7 +111,7 @@ O **cutover de código e artefatos Dev está integrado à `main`**. Surface #13/
 ## Origem de staging deve corresponder ao Site independente (2026-10-24)
 
 - Não classificar um preview do `ordax-os` ou `ordax-web` como prova do novo Site, mesmo que `/auth/session` e `/releases/catalog.json` tenham schemas compatíveis. O staging preflight exige **SHA-256 do manifesto de build recebido do CI confiável** e `source_commit` exato; confere digest/size dos documentos públicos contra o inventário do bundle, antes de declarar PASS anônimo.
-- A conta Vercel consultada tinha apenas `ordax-os-public` e `ordax-web`, ambos sem deployment recente de produção com READY e previews históricos do OS com SSO. Não criar/desproteger projetos, habilitar prod/DNS ou contornar SSO a partir do preflight. O preview `ordax-site` próprio permanece uma dependência de owner de deployment, não evidência já obtida.
+- **Nota de estado atual, substitui a observação histórica de 24/10:** o projeto único Vercel `ordax-site` já está criado, conectado à `main`, com build `READY` e `ssoProtection=all`; `ordax-site-dev` é apenas o nome/alias anterior do mesmo projeto. A função de host `api/account-proxy.mjs` reexporta a fonte imutável verificada de `ordax-os` fixada em `contracts/canonical-gateway-source.json`, sem novo backend de Identity no Site. `READY` não comprova OAuth/OIDC, sessão real nem lançamento; preservar o SSO, não mover DNS/produção e não criar temporary share/bypass para fingir prova. Consultar a issue #14 para os gates de homologação ainda `BLOCKED`.
 
 
 ## Integridade do conteúdo completo no staging (2026-10-24)
