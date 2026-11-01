@@ -117,6 +117,14 @@ class SiteContractTests(unittest.TestCase):
         self.assertNotIn('class="landing-start-steps"', landing)
         self.assertNotIn(".landing-usb", css)
         self.assertNotIn(".landing-start-steps", css)
+        # A removed selector must not silently break the grouped narrow
+        # viewport layout for the surrounding trust/safety cards.
+        self.assertNotIn('body[data-page="landing"] body[data-page="landing"]', css)
+        self.assertIn(
+            'body[data-page="landing"] .landing-control, '
+            'body[data-page="landing"] .landing-faq { grid-template-columns: minmax(0, 1fr); }',
+            css,
+        )
         self.assertIn('class="journey-steps"', download)
         self.assertLess(download.index('id="desktop"'), download.index('id="creator"'))
 
