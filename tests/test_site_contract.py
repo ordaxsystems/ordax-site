@@ -999,6 +999,14 @@ class SiteContractTests(unittest.TestCase):
             {"@vercel/oidc": "4.0.0"},
         )
         self.assertFalse((ROOT / ".env.production").exists())
+        # Runtime major must not drift independently between Vercel, lock and CI.
+        package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+        package_lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
+        self.assertEqual(package["engines"], {"node": "24.x"})
+        self.assertEqual(package_lock["packages"][""]["engines"], package["engines"])
+        workflow = (ROOT / ".github/workflows/site-source.yml").read_text(encoding="utf-8")
+        self.assertIn("uses: actions/setup-node@v4", workflow)
+        self.assertIn("node-version: '24'", workflow)
         headers = config["headers"][0]["headers"]
         self.assertIn({"key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive"}, headers)
         self.assertTrue(any(row["key"] == "Content-Security-Policy" for row in headers))
