@@ -44,7 +44,7 @@
           { "href": "#intelligence", "label": "Intelligence" },
           { "href": "#controle", "label": "Controle e segurança" },
           { "href": "#duvidas", "label": "Dúvidas" },
-          { "href": "https://web.ordax.com.br/", "label": "OrdaX Web" },
+          { "href": "/web/", "label": "OrdaX Web" },
           { "href": "/download/", "label": "Download" },
           { "href": "/login/", "label": "Entrar" },
           { "href": "/cadastro/", "label": "Criar conta" },

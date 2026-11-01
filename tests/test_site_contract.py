@@ -566,6 +566,28 @@ class SiteContractTests(unittest.TestCase):
         self.assertEqual(landing.count('href="/web/"'), 1)
         self.assertEqual(account.count('href="/web/"'), 3)
         self.assertNotIn('https://web.ordax.com.br/', landing + account)
+        shell_source = (ROOT / "contracts/public-shell.json").read_text(encoding="utf-8")
+        shell = load_public_shell(load_routes())
+        footer_markup = render_public_shell(landing, "/", shell)
+        footer = footer_markup.split('<footer class="site-footer">', 1)[1].split(
+            "</footer>", 1
+        )[0]
+        self.assertNotIn('https://web.ordax.com.br/', shell_source)
+        self.assertIn('href="/web/"', footer)
+        self.assertEqual(footer.count('href="/web/"'), 1)
+        # No exception may reauthorize direct product hosts outside /web/.
+        self.assertNotIn("EXTERNAL_HREFS", (ROOT / "scripts/public_shell.py").read_text(encoding="utf-8"))
+        direct_shell = json.loads(shell_source)
+        direct_shell["routes"]["/"]["footer"]["navigation"] = [
+            {**item, "href": "https://web.ordax.com.br/"}
+            if item["label"] == "OrdaX Web" else item
+            for item in direct_shell["routes"]["/"]["footer"]["navigation"]
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            injected = Path(tmp) / "public-shell.json"
+            injected.write_text(json.dumps(direct_shell), encoding="utf-8")
+            with self.assertRaisesRegex(PublicShellError, "unsafe link target"):
+                load_public_shell(load_routes(), injected)
         self.assertIn('data-web-launch hidden', web)
         self.assertIs(config["product"]["web"]["enabled"], False)
         self.assertIsNone(config["product"]["web"]["entry_url"])

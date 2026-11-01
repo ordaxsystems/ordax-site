@@ -11,7 +11,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "contracts/public-shell.json"
 HEADER_MARKER = "<!-- ORDAX_PUBLIC_HEADER -->"
 FOOTER_MARKER = "<!-- ORDAX_PUBLIC_FOOTER -->"
-EXTERNAL_HREFS = {"https://web.ordax.com.br/"}
 
 
 class PublicShellError(ValueError):
@@ -21,8 +20,6 @@ class PublicShellError(ValueError):
 def _is_safe_href(value: object) -> bool:
     if not isinstance(value, str) or not value:
         return False
-    if value in EXTERNAL_HREFS:
-        return True
     if re.fullmatch(r"#[A-Za-z][A-Za-z0-9_-]*", value):
         return True
     if "#" in value:
