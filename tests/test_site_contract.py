@@ -1018,7 +1018,9 @@ class SiteContractTests(unittest.TestCase):
         # Compare against the last successful *deployment*, not HEAD^: queued
         # releases can contain code changes followed by a docs-only commit.
         command = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))["ignoreCommand"]
-        self.assertIn("VERCEL_GIT_PREVIOUS_SHA", command)
+        self.assertEqual(command, "python3 scripts/build_impact.py --vercel")
+        impact = (ROOT / "scripts/build_impact.py").read_text(encoding="utf-8")
+        self.assertIn("VERCEL_GIT_PREVIOUS_SHA", impact)
         self.assertNotIn("HEAD^", command)
         self.assertLessEqual(len(command), 256, "Vercel ignoreCommand schema max")
         if not shutil.which("git") or not shutil.which("sh"):
@@ -1059,6 +1061,7 @@ class SiteContractTests(unittest.TestCase):
                 ".github/workflows/ci.yml", "site/index.html", "vercel.json",
             ):
                 write(path, "initial\\n")
+            write("scripts/build_impact.py", impact)
             deployed = commit("initial")
             self.assertNotEqual(ignored_build(""), 0)
             self.assertNotEqual(ignored_build("f" * 40), 0)
@@ -1080,6 +1083,32 @@ class SiteContractTests(unittest.TestCase):
             self.assertNotEqual(ignored_build(deployed), 0)
             self.assertEqual(ignored_build(deployed_product), 0)
 
+            def ci_full(base_sha, event):
+                environment = os.environ.copy()
+                environment["ORDAX_CI_BASE_SHA"] = base_sha
+                environment["ORDAX_CI_EVENT"] = event
+                report = repo / "ci-output"
+                report.write_text("", encoding="utf-8")
+                environment["GITHUB_OUTPUT"] = str(report)
+                outcome = subprocess.run(
+                    ["python3", "scripts/build_impact.py", "--ci"],
+                    cwd=repo, env=environment, capture_output=True, text=True,
+                )
+                self.assertEqual(outcome.returncode, 0, outcome.stderr)
+                return "full=true" in report.read_text(encoding="utf-8")
+
+            # A PR containing tests/CI changes still runs the full suite,
+            # even though such files cannot affect the Vercel bundle.
+            self.assertTrue(ci_full(deployed, "pull_request"))
+            self.assertTrue(ci_full(deployed, "push"))
+            docs_base = git("rev-parse", "HEAD")
+            write("README.md", "docs-only again\\n")
+            commit("PR documentation without code or tests")
+            self.assertFalse(ci_full(docs_base, "pull_request"))
+            self.assertTrue(ci_full(docs_base, "push"))
+            self.assertTrue(ci_full("f" * 40, "pull_request"))
+            self.assertTrue(ci_full("", "pull_request"))
+
             write("unrecognized-root-config.txt", "relevant by default\\n")
             commit("unknown root input")
             self.assertNotEqual(ignored_build(deployed_product), 0)
@@ -1096,6 +1125,10 @@ class SiteContractTests(unittest.TestCase):
         self.assertNotIn("branches: [main, feat/site-independent-extraction]", workflow)
         self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", workflow)
         self.assertIn("persist-credentials: false", workflow)
+        self.assertIn("fetch-depth: 50", workflow)
+        self.assertIn("id: impact", workflow)
+        self.assertIn("python3 scripts/build_impact.py --ci", workflow)
+        self.assertIn("if: steps.impact.outputs.full == 'true'", workflow)
         self.assertIn('--source-commit "$(git rev-parse HEAD)"', workflow)
         self.assertIn("SITE_CANDIDATE_SOURCE_COMMIT=", workflow)
         self.assertIn("SITE_CANDIDATE_MANIFEST_SHA256=", workflow)
