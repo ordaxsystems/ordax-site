@@ -197,7 +197,7 @@ body[data-page="landing"] .site-footer p { font-size: 12px; line-height: 1.8; }
   body[data-page="landing"] .demo-toolbar { align-items: start; }
   body[data-page="landing"] .demo-tools { flex-wrap: wrap; margin: 0; }
   body[data-page="landing"] .landing-section { padding: 36px 22px; }
-  body[data-page="landing"] .landing-heading-split, body[data-page="landing"] .landing-intelligence, body[data-page="landing"] .landing-feature-grid, body[data-page="landing"] body[data-page="landing"] .landing-control, body[data-page="landing"] .landing-faq { grid-template-columns: minmax(0, 1fr); }
+  body[data-page="landing"] .landing-heading-split, body[data-page="landing"] .landing-intelligence, body[data-page="landing"] .landing-feature-grid, body[data-page="landing"] .landing-control, body[data-page="landing"] .landing-faq { grid-template-columns: minmax(0, 1fr); }
   body[data-page="landing"] .landing-purpose > .landing-heading { grid-template-columns: minmax(0, 1fr); gap: 0; }
   body[data-page="landing"] .landing-purpose > .landing-heading > p:not(.eyebrow) { margin-top: 16px; }
   body[data-page="landing"] .landing-benefits { gap: 14px; grid-template-columns: minmax(0, 1fr); margin-top: 22px; }
@@ -224,7 +224,7 @@ body[data-page="landing"] .site-footer p { font-size: 12px; line-height: 1.8; }
 @media (max-width: 400px) {
   body[data-page="landing"] .landing-space-grid { grid-template-columns: minmax(0, 1fr); }
 
-  body[data-page="landing"] .hero-actions > .button { width: 100%; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  body[data-page="landing"] .hero-actions > .button { width: 100%; }
 
   body[data-page="landing"] .landing-studio-flow { letter-spacing: 0; font-size: 9px; }
 }
