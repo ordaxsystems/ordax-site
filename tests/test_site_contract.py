@@ -1007,7 +1007,21 @@ class SiteContractTests(unittest.TestCase):
         self.assertEqual(package["engines"], {"node": "24.x"})
         self.assertEqual(package_lock["packages"][""]["engines"], package["engines"])
         workflow = (ROOT / ".github/workflows/site-source.yml").read_text(encoding="utf-8")
-        self.assertIn("uses: actions/setup-node@v4", workflow)
+        # Hosted runner Actions must use Node 24 compatible immutable releases:
+        # no unpinned tags or retired Node 20 runtime.
+        pinned = {
+            "checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+            "upload-artifact": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+        }
+        for action, digest in pinned.items():
+            with self.subTest(action=action):
+                self.assertIn(f"uses: actions/{action}@{digest}", workflow)
+        import re as regex
+        actual_uses = regex.findall(r"uses:\\s*actions/([a-z-]+)@([^\\s#]+)", workflow)
+        self.assertEqual(len(actual_uses), 4)
+        self.assertEqual({name for name, _ in actual_uses}, set(pinned))
+        self.assertTrue(all(regex.fullmatch(r"[0-9a-f]{40}", ref) for _, ref in actual_uses))
         self.assertIn("node-version: '24'", workflow)
         headers = config["headers"][0]["headers"]
         self.assertIn({"key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive"}, headers)
