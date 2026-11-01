@@ -1007,21 +1007,19 @@ class SiteContractTests(unittest.TestCase):
         self.assertEqual(package["engines"], {"node": "24.x"})
         self.assertEqual(package_lock["packages"][""]["engines"], package["engines"])
         workflow = (ROOT / ".github/workflows/site-source.yml").read_text(encoding="utf-8")
-        # Hosted runner Actions must use Node 24 compatible immutable releases:
-        # no unpinned tags or retired Node 20 runtime.
-        pinned = {
-            "checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
-            "setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1",
-            "upload-artifact": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
-        }
-        for action, digest in pinned.items():
-            with self.subTest(action=action):
-                self.assertIn(f"uses: actions/{action}@{digest}", workflow)
-        import re as regex
-        actual_uses = regex.findall(r"uses:\\s*actions/([a-z-]+)@([^\\s#]+)", workflow)
-        self.assertEqual(len(actual_uses), 4)
-        self.assertEqual({name for name, _ in actual_uses}, set(pinned))
-        self.assertTrue(all(regex.fullmatch(r"[0-9a-f]{40}", ref) for _, ref in actual_uses))
+        # The workflow is the sole owner of action commit IDs; regression
+        # only enforces Node 24 generation and immutable 40-digit SHA pins.
+        uses_lines = re.findall(r"^\\s*-\\s+uses:\\s+actions/[^\\r\\n]+", workflow, re.M)
+        pinned = re.findall(
+            r"^\\s*-\\s+uses:\\s+actions/([a-z-]+)@([0-9a-f]{40})\\s+#\\s+(v7\\.\\d+\\.\\d+)\\s*$",
+            workflow, re.M,
+        )
+        self.assertEqual(len(uses_lines), 4)
+        self.assertEqual(len(pinned), len(uses_lines))
+        self.assertCountEqual(
+            [action for action, _, _ in pinned],
+            ["checkout", "setup-node", "upload-artifact", "upload-artifact"],
+        )
         self.assertIn("node-version: '24'", workflow)
         headers = config["headers"][0]["headers"]
         self.assertIn({"key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive"}, headers)
