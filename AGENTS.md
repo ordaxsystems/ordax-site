@@ -44,7 +44,7 @@ O **cutover de código e artefatos Dev está integrado à `main`**. Surface #13/
 
 - Fixture/CSS Meridian e arquivos de marca não pertencem ao source editável do Site: o build padrão exige `--dev-lock contracts/dev-artifact-lock.json`, baixa ambas as prereleases assinadas da Surface e materializa seus arquivos somente depois das provas de proveniência e integridade.
 - Sem arquivo `surface-snapshot.json` distribuído duplicando `fixture.surface`. O preview source é imutável e a eventual correção de URL de fonte ocorre **apenas na saída de build** com fingerprint recalculado.
-- O preview Dev usa a prerelease Surface `meridian-dev-1ab73da4…`, com digests e commits Surface/OS fixados no lock. O snapshot de migração antigo foi excluído; não recriar cópia no Site/OS. Não alterar o status para `official` sem verificação real do publisher.
+- O preview Dev usa **exclusivamente** a prerelease Surface definida em `contracts/dev-artifact-lock.json`; os digests e commits Surface/OS vivem apenas nesse lock. Nunca fixar uma segunda revisão em README/AGENTS. O snapshot de migração antigo foi excluído; não recriar cópia no Site/OS. Não alterar o status para `official` sem verificação real do publisher.
 - O pacote Dev solicitado na [Surface #3](https://github.com/ordaxsystems/ordax-surface/issues/3) já foi entregue pelas PRs #13/#14. Lançamento, DNS, Identity, releases públicas e billing ainda requerem gates dos respectivos owners.
 
 ## Lock SSOT de insumos externos e segurança de releases
