@@ -167,3 +167,8 @@ O checkout preserva os últimos 50 commits para comparar com o SHA do evento; um
 ## CI Node 24 sem Actions aposentadas — 01/11/2026
 
 O CI isolado usa exclusivamente os três Actions oficiais em commits imutáveis (verificados no GitHub na data da atualização): `actions/checkout` v7.0.1, `actions/setup-node` v7.1.0 e `actions/upload-artifact` v7.0.2. As três releases declaram `node24` nos respectivos `action.yml`, compatível com o runner hospedado `ubuntu-24.04`. Eliminam os avisos de runtime Node 20 descontinuado sem duplicar workflows ou aumentar permissões. O checkout segue com `persist-credentials: false`, `fetch-depth: 50` e SHA de PR fixo; o setup mantém `node-version: '24'` com cache npm; browser evidence e candidato permanecem uploads não públicos por sete dias. O contrato `tests/test_site_contract.py` exige pin SHA de todos os Actions do pipeline, além da paridade Node entre CI, lock e Vercel. Atualizar esses pins requer revisão e CI completo, nunca usar tags móveis como `@v4` ou `@v7`.
+
+
+## Home: Desktop Windows primeiro, instruções USB com um único owner — 01/11/2026
+
+O hero e o primeiro cartão de modos da home direcionam para `/download/#desktop`, onde a avaliação Windows continua identificada como **homologação técnica**, sem instalador público assinado. A lista segue Desktop, Web, OS USB, Mobile e OS nativo. O tutorial USB de três passos foi retirado da home, pois `/download/` já contém a sequência completa, aviso de apagamento da mídia, Creator e verificações; o link USB permanece na lista de modos. Os estilos exclusivos do painel excluído foram retirados, e o teste de contrato verifica prioridade e SSOT. Nenhum download, catálogo, autorização de produção, backend ou identidade foi ativado.
