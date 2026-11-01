@@ -26,6 +26,11 @@ jobs:
           persist-credentials: false
       - name: Assert exact candidate source revision
         run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Use the same Node.js LTS major as the Vercel host
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
       - name: Compile Python tools
         run: python3 -m compileall -q scripts tests
       - name: Audit independent presentation and assets
