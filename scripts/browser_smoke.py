@@ -207,6 +207,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b'{"error":"service-unavailable"}')
 
     def do_GET(self):
+        # Deliberately stall a JSON route to prove the browser's real abort
+        # closes the UI fail-closed. The timeout is bounded to this harness.
+        if self.path == getattr(self.server, "stall_json_for_deadline_test", None):
+            threading.Event().wait(timeout=13)
+            return
         # Hold the config fetch after login has loaded to prove legacy bearer
         # fragments are removed BEFORE the first asynchronous network reply.
         if self.path == "/config/public-site.json" and getattr(
@@ -1463,6 +1468,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
     server.catalog_override = None
     server.manifest_override = None
     server.fixture_attack_for_test = None
+    server.stall_json_for_deadline_test = None
     server.auth_session_redirect_for_test = False
     server.auth_json_attack_for_test = None
     server.auth_session_race_for_test = False
@@ -1492,6 +1498,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
     no_script_results = []
     catalog_failure_results = []
     fixture_transport_results = []
+    json_deadline_results = []
     redirect_identity_results = []
     json_contract_results = []
     identity_race_results = []
@@ -1984,6 +1991,50 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                                      "rule": "fixture-transport-fail-closed", "summary": report})
             finally:
                 server.fixture_attack_for_test = None
+        # A server that accepts a request but never finishes it cannot leave
+        # either product configuration or signed demo in a permanent loading
+        # state. Exercise actual production fetch/stream cancellation, not a
+        # structural imitation of the deadline logic.
+        for route, path, state_selector in (
+            ("/web/", "/config/public-site.json", "[data-web-state]"),
+            ("/", "/assets/playground-fixture.json", ".playground"),
+        ):
+            server.stall_json_for_deadline_test = path
+            try:
+                driver.navigate(f"http://127.0.0.1:{server.server_port}{route}")
+                report = {}
+                for _ in range(125):
+                    report = driver.run("""return (() => {
+                      const path = window.location.pathname;
+                      const gate = document.querySelector('[data-web-state]');
+                      const fixture = document.querySelector('.playground');
+                      const check = path === '/web/' ? gate : fixture;
+                      return {
+                        pathname: path,
+                        status: path === '/web/' ? gate?.dataset.status
+                                                : fixture?.dataset.fixtureReady,
+                        notBusy: path !== '/web/' || gate?.getAttribute('aria-busy') !== 'true',
+                        loginHidden: path !== '/web/' || document.querySelector('[data-web-login]')?.hidden,
+                        launchHidden: path !== '/web/' || document.querySelector('[data-web-launch]')?.hidden,
+                        noLaunchHref: path !== '/web/' || !document.querySelector('[data-web-launch]')?.hasAttribute('href'),
+                        noDemo: path !== '/' || !document.querySelector('.playground .demo-native'),
+                        runtimeErrors: window.__ordaxPageErrors || []
+                      };
+                    })();""")
+                    if report.get("status") in ("unavailable", "false"):
+                        break
+                    time.sleep(0.1)
+                report["testPath"] = path
+                json_deadline_results.append(report)
+                expected = "unavailable" if route == "/web/" else "false"
+                if (report.get("pathname") != route or report.get("status") != expected
+                        or not all(report.get(x) for x in (
+                            "notBusy", "loginHidden", "launchHidden", "noLaunchHref", "noDemo"))
+                        or report.get("runtimeErrors")):
+                    failures.append({"route": route, "viewport": "json-deadline",
+                                     "rule": "stalled-json-must-resolve-fail-closed", "summary": report})
+            finally:
+                server.stall_json_for_deadline_test = None
         # Exercise poisoned catalogs through the REAL Site browser runtime
         # without changing the pinned candidate or invoking any publisher.
         demo_id = "1" * 40
@@ -2312,6 +2363,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                   "noScriptChecks": len(no_script_results),
                   "catalogFailureChecks": len(catalog_failure_results),
                   "fixtureTransportChecks": len(fixture_transport_results),
+                  "jsonDeadlineChecks": len(json_deadline_results),
                   "redirectIdentityChecks": len(redirect_identity_results),
                   "jsonContractChecks": len(json_contract_results),
                   "identityRaceChecks": len(identity_race_results),
@@ -2326,6 +2378,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                   "noScriptResults": no_script_results,
                   "catalogFailureResults": catalog_failure_results,
                    "fixtureTransportResults": fixture_transport_results,
+                   "jsonDeadlineResults": json_deadline_results,
                   "redirectIdentityResults": redirect_identity_results,
                   "jsonContractResults": json_contract_results,
                   "identityRaceResults": identity_race_results,
@@ -2379,7 +2432,7 @@ def main():
     )
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve(), args.chrome_binary)
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} cssBreakpointViewports={output['breakpointResponsiveViewports']} cssBreakpointChecks={output['breakpointResponsiveChecks']} localeResponsive={output['localizedResponsiveChecks']} localeViewports={output['localizedResponsiveViewports']} touch={output['touchResponsiveChecks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} fixtureReject={output['fixtureTransportChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} cssBreakpointViewports={output['breakpointResponsiveViewports']} cssBreakpointChecks={output['breakpointResponsiveChecks']} localeResponsive={output['localizedResponsiveChecks']} localeViewports={output['localizedResponsiveViewports']} touch={output['touchResponsiveChecks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} fixtureReject={output['fixtureTransportChecks']} jsonDeadline={output['jsonDeadlineChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
 
 
 if __name__ == "__main__":
