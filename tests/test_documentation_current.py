@@ -52,6 +52,23 @@ class CurrentDocsTests(unittest.TestCase):
             {"ordaxsystems/ordax-surface"},
         )
 
+    def test_active_docs_never_pin_a_second_surface_release_or_stale_build(self):
+        # The signed release lock and live CI run, not prose, own the moving
+        # release revision. Historical runbooks are retained under docs/history.
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        handoff = (ROOT / "docs/HANDOFF.md").read_text(encoding="utf-8")
+        audit = (ROOT / "docs/AUDIT.md").read_text(encoding="utf-8")
+        for name, body in (("README.md", readme), ("AGENTS.md", agents)):
+            with self.subTest(file=name):
+                self.assertNotRegex(body, r"meridian-dev-[0-9a-f]{8,40}")
+                self.assertIn("contracts/dev-artifact-lock.json", body)
+        self.assertIn("actions/workflows/site-source.yml?query=branch%3Amain", handoff)
+        self.assertIn("https://vercel.com/ordaxsystems/ordax-site", handoff)
+        self.assertIn("issue #14", handoff)
+        self.assertNotIn("93308c67", handoff.split("## Ajuste de leitura", 1)[0])
+        self.assertIn("checklists datados", audit)
+
     def test_active_host_guidance_matches_existing_gateway_owner_contracts(self):
         # Documentation is not a second deployment SSOT: it must describe the
         # executable Vercel adapter and the one immutable OS-owned source lock.
