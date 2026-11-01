@@ -1,6 +1,6 @@
 # Auditoria estrutural — OrdaX Site
 
-**Escopo:** arquitetura e artefatos do cutover de desenvolvimento, verificados após [Site #10](https://github.com/ordaxsystems/ordax-site/pull/10) e [OS #2238](https://github.com/ordaxsystems/ordax-os/pull/2238). A auditoria de 23–24/10/2026 está [arquivada como evidência histórica](history/SITE-AUDIT-2026-10-24.md). Este documento registra somente o diagnóstico operacional vigente.
+**Escopo:** arquitetura e evidências do cutover Dev. A auditoria de 23–24/10/2026 está [arquivada como evidência histórica](history/SITE-AUDIT-2026-10-24.md); os checklists datados abaixo registram **as revisões que foram testadas em sua época**, não a revisão atual. O estado atual de CI é o [workflow da `main`](https://github.com/ordaxsystems/ordax-site/actions/workflows/site-source.yml?query=branch%3Amain), e o acompanhamento de liberação fica na [issue #14](https://github.com/ordaxsystems/ordax-site/issues/14). Artefatos e versão Meridian Dev pertencem ao único `contracts/dev-artifact-lock.json`.
 
 ## Resultado da migração Dev
 
