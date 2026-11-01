@@ -1,5 +1,7 @@
 """Independent site contract regressions; no OS checkout, network or secrets."""
 import json
+import os
+import subprocess
 import re
 import shutil
 import sys
@@ -1010,6 +1012,80 @@ class SiteContractTests(unittest.TestCase):
         headers = config["headers"][0]["headers"]
         self.assertIn({"key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive"}, headers)
         self.assertTrue(any(row["key"] == "Content-Security-Policy" for row in headers))
+
+    def test_vercel_ignored_build_uses_last_deployed_sha_and_fails_open(self):
+        # Only docs/tests/CI instructions are excluded from host artifacts.
+        # Compare against the last successful *deployment*, not HEAD^: queued
+        # releases can contain code changes followed by a docs-only commit.
+        command = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))["ignoreCommand"]
+        self.assertIn("VERCEL_GIT_PREVIOUS_SHA", command)
+        self.assertNotIn("HEAD^", command)
+        if not shutil.which("git") or not shutil.which("sh"):
+            self.skipTest("Git and POSIX shell required for Vercel build gate")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+
+            def git(*args):
+                return subprocess.run(
+                    ["git", *args], cwd=repo, check=True,
+                    text=True, capture_output=True,
+                ).stdout.strip()
+
+            def write(path, contents):
+                target = repo / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(contents, encoding="utf-8")
+
+            def commit(message):
+                git("add", "-A")
+                git("commit", "--quiet", "-m", message)
+                return git("rev-parse", "HEAD")
+
+            def ignored_build(previous_sha):
+                environment = os.environ.copy()
+                environment["VERCEL_GIT_PREVIOUS_SHA"] = previous_sha
+                return subprocess.run(
+                    ["sh", "-c", command], cwd=repo, env=environment,
+                    capture_output=True, text=True,
+                ).returncode
+
+            git("init", "--quiet")
+            git("config", "user.name", "Site Gate Test")
+            git("config", "user.email", "gate-test@example.invalid")
+            for path in (
+                "README.md", "AGENTS.md", "docs/AUDIT.md", "tests/test_site.py",
+                ".github/workflows/ci.yml", "site/index.html", "vercel.json",
+            ):
+                write(path, "initial\\n")
+            deployed = commit("initial")
+            self.assertNotEqual(ignored_build(""), 0)
+            self.assertNotEqual(ignored_build("f" * 40), 0)
+
+            for path in (
+                "README.md", "AGENTS.md", "docs/AUDIT.md", "tests/test_site.py",
+                ".github/workflows/ci.yml",
+            ):
+                write(path, "docs-only\\n")
+            commit("documentation and CI only")
+            self.assertEqual(ignored_build(deployed), 0)
+
+            write("site/index.html", "product changed\\n")
+            deployed_product = commit("product code")
+            self.assertNotEqual(ignored_build(deployed), 0)
+
+            write("docs/AUDIT.md", "newer docs\\n")
+            commit("docs after product")
+            self.assertNotEqual(ignored_build(deployed), 0)
+            self.assertEqual(ignored_build(deployed_product), 0)
+
+            write("unrecognized-root-config.txt", "relevant by default\\n")
+            commit("unknown root input")
+            self.assertNotEqual(ignored_build(deployed_product), 0)
+
+            write("vercel.json", "host config changed\\n")
+            commit("host config change")
+            self.assertNotEqual(ignored_build(deployed_product), 0)
 
     def test_ci_candidate_comes_from_real_git_revision_once_per_pr(self):
         # Avoid building two different candidates for the same PR revision:
