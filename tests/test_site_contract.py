@@ -1009,15 +1009,18 @@ class SiteContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/site-source.yml").read_text(encoding="utf-8")
         # The workflow is the sole owner of action commit IDs; regression
         # only enforces Node 24 generation and immutable 40-digit SHA pins.
-        uses_lines = re.findall(r"^\s*-\s+uses:\s+actions/[^\r\n]+", workflow, re.M)
-        pinned = re.findall(
-            r"^\s*-\s+uses:\s+actions/([a-z-]+)@([0-9a-f]{40})\s+#\s+(v7\.\d+\.\d+)\s*$",
-            workflow, re.M,
-        )
+        uses_lines = [
+            line.strip().removeprefix("- ").strip()
+            for line in workflow.splitlines() if "uses: actions/" in line
+        ]
+        pinned = [
+            re.fullmatch(r"uses: actions/([a-z-]+)@([0-9a-f]{40}) # (v7\.\d+\.\d+)", line)
+            for line in uses_lines
+        ]
         self.assertEqual(len(uses_lines), 4)
-        self.assertEqual(len(pinned), len(uses_lines))
+        self.assertTrue(all(pinned), "all Actions require immutable v7 SHA refs")
         self.assertCountEqual(
-            [action for action, _, _ in pinned],
+            [match.group(1) for match in pinned if match],
             ["checkout", "setup-node", "upload-artifact", "upload-artifact"],
         )
         self.assertIn("node-version: '24'", workflow)
