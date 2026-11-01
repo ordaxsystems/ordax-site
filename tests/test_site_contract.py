@@ -90,6 +90,36 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn("releases/catalog.json", (ROOT / "site/assets/site.js").read_text())
         self.assertEqual(build.check_source(strict_assets=False)["source_files"] > 25, True)
 
+    def test_landing_prioritizes_windows_and_single_download_guide_owner(self):
+        landing = (ROOT / "site/index.html").read_text(encoding="utf-8")
+        css = (ROOT / "site/assets/landing.css").read_text(encoding="utf-8")
+        download = (ROOT / "site/download/index.html").read_text(encoding="utf-8")
+
+        hero = landing.split('class="hero-actions"', 1)[1].split("</div>", 1)[0]
+        self.assertIn('href="/download/#desktop"', hero)
+        self.assertIn("Como testar no Windows", hero)
+
+        modes = landing.split('class="landing-modes"', 1)[1].split(
+            '</div><p class="landing-caption">', 1
+        )[0]
+        self.assertEqual(re.findall(r"<h3>(OrdaX [^<]+)</h3>", modes), [
+            "OrdaX Desktop", "OrdaX Web", "OrdaX OS — USB",
+            "OrdaX Mobile", "OrdaX OS — Nativo",
+        ])
+        self.assertEqual(
+            re.findall(r'class="landing-mode-number" aria-hidden="true">(\d{2})', modes),
+            ["01", "02", "03", "04", "05"],
+        )
+        self.assertIn('href="/download/#desktop"', modes)
+        self.assertIn('href="/download/"', modes)
+        self.assertIn("publicação final ainda pendente", modes)
+        self.assertNotIn('class="landing-usb"', landing)
+        self.assertNotIn('class="landing-start-steps"', landing)
+        self.assertNotIn(".landing-usb", css)
+        self.assertNotIn(".landing-start-steps", css)
+        self.assertIn('class="journey-steps"', download)
+        self.assertLess(download.index('id="desktop"'), download.index('id="creator"'))
+
     def test_desktop_evaluation_link_allowlist_does_not_authorize_other_hosts(self):
         source = (ROOT / "scripts/build.py").read_text(encoding="utf-8")
         self.assertIn('DESKTOP_EVALUATION_WORKFLOW = "https://github.com/ordaxsystems/ordax-os/actions/workflows/windows-desktop-dev.yml?query=branch%3Amain"', source)
