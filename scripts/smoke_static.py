@@ -166,7 +166,7 @@ def assert_candidate(out: Path) -> dict:
             fixture = out / "assets/playground-fixture.json"
             if not fixture.is_file() or not json.loads(fixture.read_text("utf-8")).get("surface"):
                 raise AssertionError("standalone playground fixture is missing or malformed")
-            if 'fetch("/assets/playground-fixture.json"' not in (out / "assets/playground.js").read_text("utf-8"):
+            if 'window.OrdaXPublicJsonTransport.loadStatic(' not in (out / "assets/playground.js").read_text("utf-8"):
                 raise AssertionError("playground controller must consume only the canonical fixture")
         if relative == "conta/index.html" and "noindex" not in page.robots:
             raise AssertionError(relative + ": account portal must not be indexed")
