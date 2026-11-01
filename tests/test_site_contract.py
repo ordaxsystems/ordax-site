@@ -1087,15 +1087,17 @@ class SiteContractTests(unittest.TestCase):
                 environment = os.environ.copy()
                 environment["ORDAX_CI_BASE_SHA"] = base_sha
                 environment["ORDAX_CI_EVENT"] = event
-                report = repo / "ci-output"
-                report.write_text("", encoding="utf-8")
-                environment["GITHUB_OUTPUT"] = str(report)
-                outcome = subprocess.run(
-                    ["python3", "scripts/build_impact.py", "--ci"],
-                    cwd=repo, env=environment, capture_output=True, text=True,
-                )
-                self.assertEqual(outcome.returncode, 0, outcome.stderr)
-                return "full=true" in report.read_text(encoding="utf-8")
+                # GitHub writes this outside the checkout. Keep the fixture
+                # equally isolated so git add -A cannot accidentally commit it.
+                with tempfile.TemporaryDirectory(prefix="ordax-ci-impact-output-") as outdir:
+                    report = Path(outdir) / "github-output"
+                    environment["GITHUB_OUTPUT"] = str(report)
+                    outcome = subprocess.run(
+                        ["python3", "scripts/build_impact.py", "--ci"],
+                        cwd=repo, env=environment, capture_output=True, text=True,
+                    )
+                    self.assertEqual(outcome.returncode, 0, outcome.stderr)
+                    return "full=true" in report.read_text(encoding="utf-8")
 
             # A PR containing tests/CI changes still runs the full suite,
             # even though such files cannot affect the Vercel bundle.
