@@ -82,19 +82,33 @@
     // 200 (even to another same-origin route) cannot establish Identity or
     // legal-policy readiness; never follow redirects or accept alias responses.
     if (!sameOriginPath(path)) throw new Error("api-path-invalid");
-    const response = await fetch(path, {
-      method: "GET",
-      credentials,
-      cache,
-      redirect: "error",
-      headers: { Accept: "application/json" },
-      ...(signal ? { signal } : {}),
-    });
-    if (!response.ok || response.redirected ||
-        response.url !== new URL(path, window.location.origin).href) {
-      throw new Error("resource-unavailable");
+    // A stalled HTTP response or streaming body must not keep public forms,
+    // product availability or demo status in "checking" indefinitely.
+    // The same request deadline applies to every JSON consumer, and an
+    // external cancellation still propagates without owning a second timer.
+    const deadline = new AbortController();
+    const timeoutId = setTimeout(() => deadline.abort(), 10000);
+    const onAbort = () => deadline.abort();
+    if (signal?.aborted) deadline.abort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      const response = await fetch(path, {
+        method: "GET",
+        credentials,
+        cache,
+        redirect: "error",
+        headers: { Accept: "application/json" },
+        signal: deadline.signal,
+      });
+      if (!response.ok || response.redirected ||
+          response.url !== new URL(path, window.location.origin).href) {
+        throw new Error("resource-unavailable");
+      }
+      return parseJsonBytes(await readJsonBytes(response, maxBytes));
+    } finally {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
     }
-    return parseJsonBytes(await readJsonBytes(response, maxBytes));
   }
 
   // A single bounded JSON loader owns the MIME, redirect, and size checks.
@@ -452,9 +466,8 @@
   function verifiedIdentitySession() {
     if (!sessionPromise) {
       const revision = sessionRevision;
-      const signal = typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-        ? AbortSignal.timeout(10000) : undefined;
-      sessionPromise = loadJson("/auth/session", signal).then(session => {
+      // The central JSON loader owns the deadline for session requests too.
+      sessionPromise = loadJson("/auth/session").then(session => {
         if (!validSessionReadiness(session)) throw new Error("invalid-identity-session");
         if (revision === sessionRevision) {
           publishSessionView(session.authenticated ? "authenticated" : "anonymous",
