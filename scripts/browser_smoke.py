@@ -338,6 +338,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(body)
                 return
+        # Synthetic fixture attacks exist only inside this loopback proof:
+        # no signed public asset is changed or duplicated.
+        fixture_attack = getattr(self.server, "fixture_attack_for_test", None)
+        if self.path == "/assets/playground-fixture.json" and fixture_attack:
+            if fixture_attack == "redirect":
+                self.send_response(302)
+                self.send_header("Location", "/assets/playground-fixture.json?untrusted=1")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
+            raw = ((Path(self.directory) / "assets/playground-fixture.json").read_bytes()
+                   if fixture_attack == "wrong-mime"
+                   else b'{"padding":"' + b"x" * 550000 + b'"}')
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain" if fixture_attack == "wrong-mime"
+                                 else "application/json")
+                self.send_header("Cache-Control", "no-store")
+                if fixture_attack != "oversized":
+                    self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         # Negative download-contract responses exist only inside this loopback
         # browser proof. Never modify the verified build or publish a fixture.
         catalog_override = getattr(self.server, "catalog_override", None)
@@ -1437,6 +1462,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
     )
     server.catalog_override = None
     server.manifest_override = None
+    server.fixture_attack_for_test = None
     server.auth_session_redirect_for_test = False
     server.auth_json_attack_for_test = None
     server.auth_session_race_for_test = False
@@ -1465,6 +1491,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
     text_spacing_results = []
     no_script_results = []
     catalog_failure_results = []
+    fixture_transport_results = []
     redirect_identity_results = []
     json_contract_results = []
     identity_race_results = []
@@ -1933,6 +1960,30 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                                  "rule": "web-entry-must-fail-closed", "summary": web_gate})
         finally:
             server.auth_json_attack_for_test = None
+        # The production viewer must reject MIME/redirect/streaming attacks
+        # on the signed static fixture, without rendering any forged Surface.
+        for scenario in ("redirect", "wrong-mime", "oversized"):
+            server.fixture_attack_for_test = scenario
+            try:
+                driver.navigate(f"http://127.0.0.1:{server.server_port}/")
+                report = {}
+                for _ in range(40):
+                    report = driver.run("""return {
+                      ready: document.querySelector('.playground')?.dataset.fixtureReady ?? null,
+                      demoMounted: !!document.querySelector('.playground .demo-native'),
+                      runtimeErrors: window.__ordaxPageErrors || []
+                    };""")
+                    if report.get("ready") in ("true", "false"):
+                        break
+                    time.sleep(0.1)
+                report["scenario"] = scenario
+                fixture_transport_results.append(report)
+                if (report.get("ready") != "false"
+                        or report.get("demoMounted") or report.get("runtimeErrors")):
+                    failures.append({"route": "/", "viewport": "fixture-" + scenario,
+                                     "rule": "fixture-transport-fail-closed", "summary": report})
+            finally:
+                server.fixture_attack_for_test = None
         # Exercise poisoned catalogs through the REAL Site browser runtime
         # without changing the pinned candidate or invoking any publisher.
         demo_id = "1" * 40
@@ -2260,6 +2311,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                   "textSpacingChecks": len(text_spacing_results),
                   "noScriptChecks": len(no_script_results),
                   "catalogFailureChecks": len(catalog_failure_results),
+                  "fixtureTransportChecks": len(fixture_transport_results),
                   "redirectIdentityChecks": len(redirect_identity_results),
                   "jsonContractChecks": len(json_contract_results),
                   "identityRaceChecks": len(identity_race_results),
@@ -2273,6 +2325,7 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                   "textSpacingResults": text_spacing_results,
                   "noScriptResults": no_script_results,
                   "catalogFailureResults": catalog_failure_results,
+                   "fixtureTransportResults": fixture_transport_results,
                   "redirectIdentityResults": redirect_identity_results,
                   "jsonContractResults": json_contract_results,
                   "identityRaceResults": identity_race_results,
@@ -2326,7 +2379,7 @@ def main():
     )
     args = parser.parse_args()
     output = run(Path(args.out).resolve(), Path(args.evidence).resolve(), args.chrome_binary)
-    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} cssBreakpointViewports={output['breakpointResponsiveViewports']} cssBreakpointChecks={output['breakpointResponsiveChecks']} localeResponsive={output['localizedResponsiveChecks']} localeViewports={output['localizedResponsiveViewports']} touch={output['touchResponsiveChecks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
+    print(f"SITE_BROWSER_PROOF=PASS routes={output['routeCount']} viewports={output['viewportCount']} checks={output['checks']} cssBreakpointViewports={output['breakpointResponsiveViewports']} cssBreakpointChecks={output['breakpointResponsiveChecks']} localeResponsive={output['localizedResponsiveChecks']} localeViewports={output['localizedResponsiveViewports']} touch={output['touchResponsiveChecks']} reflow={output['reflowChecks']} text200={output['textEnlargementChecks']} spacing={output['textSpacingChecks']} noscript={output['noScriptChecks']} catalogReject={output['catalogFailureChecks']} fixtureReject={output['fixtureTransportChecks']} redirectIdentity={output['redirectIdentityChecks']} jsonContract={output['jsonContractChecks']} identityRace={output['identityRaceChecks']} usageSession={output['sameEmailUsageChecks']} fragmentScrub={output['legacyFragmentChecks']}")
 
 
 if __name__ == "__main__":
