@@ -114,13 +114,13 @@ body[data-page="landing"] .landing-heading .landing-text-link { margin-top: 12px
 body[data-page="landing"] .landing-text-link:hover { text-decoration: underline; text-underline-offset: 5px; }
 body[data-page="landing"] .landing-context-card { background: radial-gradient(ellipse at 100% 0, var(--md-sage-soft), transparent 65%), var(--surface); border: 1px solid var(--line); border-radius: var(--md-radius-large); }
 body[data-page="landing"] .landing-context-card .landing-board-top { flex-wrap: wrap; }
-body[data-page="landing"] .landing-context-steps, body[data-page="landing"] .landing-start-steps { list-style: none; margin: 0; padding: 0 22px; }
-body[data-page="landing"] .landing-context-steps li, body[data-page="landing"] .landing-start-steps li { display: flex; align-items: start; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); }
-body[data-page="landing"] .landing-context-steps li:last-child, body[data-page="landing"] .landing-start-steps li:last-child { border-bottom: 0; }
+body[data-page="landing"] .landing-context-steps { list-style: none; margin: 0; padding: 0 22px; }
+body[data-page="landing"] .landing-context-steps li { display: flex; align-items: start; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+body[data-page="landing"] .landing-context-steps li:last-child { border-bottom: 0; }
 body[data-page="landing"] .landing-context-steps li > span { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--md-surface); }
-body[data-page="landing"] .landing-context-steps li > span, body[data-page="landing"] .landing-start-steps li > span { color: var(--accent); font-size: 11px; padding-top: 4px; }
-body[data-page="landing"] .landing-context-steps h3, body[data-page="landing"] .landing-start-steps h4 { font-size: 16px; font-weight: 500; margin: 0 0 9px; }
-body[data-page="landing"] .landing-context-steps p, body[data-page="landing"] .landing-start-steps p { font-size: 13px; line-height: 1.8; color: var(--muted); margin: 0; }
+body[data-page="landing"] .landing-context-steps li > span { color: var(--accent); font-size: 11px; padding-top: 4px; }
+body[data-page="landing"] .landing-context-steps h3 { font-size: 16px; font-weight: 500; margin: 0 0 9px; }
+body[data-page="landing"] .landing-context-steps p { font-size: 13px; line-height: 1.8; color: var(--muted); margin: 0; }
 body[data-page="landing"] .landing-context-card > .landing-caption { border-top: 1px solid var(--line); padding: 12px 22px; margin: 0; }
 body[data-page="landing"] .landing-ai-footnotes { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; grid-column: 1/-1; }
 body[data-page="landing"] .landing-ai-footnotes p { color: var(--muted); font-size: 13px; line-height: 1.8; margin: 0; }
@@ -146,10 +146,6 @@ body[data-page="landing"] .landing-mode-number { color: var(--md-muted); font-si
 body[data-page="landing"] .landing-mode h3 { font-size: 18px; font-weight: 500; margin: 0 0 10px; }
 body[data-page="landing"] .landing-mode p { color: var(--muted); font-size: 13px; line-height: 1.7; margin: 0; }
 body[data-page="landing"] .landing-mode:first-child .landing-tag { background: var(--md-sage-soft); color: var(--md-sage); }
-body[data-page="landing"] .landing-usb { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 28px; padding: 28px; border: 1px solid var(--line); border-radius: var(--md-radius-large); background: var(--surface); }
-body[data-page="landing"] .landing-usb h3 { font-size: clamp(28px, 3vw, 40px); line-height: 1.15; font-weight: 500; letter-spacing: -.035em; margin: 0; }
-body[data-page="landing"] .landing-usb .button { margin-top: 16px; }
-body[data-page="landing"] .landing-start-steps { padding: 0; }
 body[data-page="landing"] .landing-control { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
 body[data-page="landing"] .landing-control-list article { display: flex; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); }
 body[data-page="landing"] .landing-control-list article:first-child { padding-top: 0; }
@@ -186,7 +182,6 @@ body[data-page="landing"] .site-footer p { font-size: 12px; line-height: 1.8; }
   body[data-page="landing"] .landing-intelligence, body[data-page="landing"] .landing-heading-split, body[data-page="landing"] .landing-control, body[data-page="landing"] .landing-faq { gap: 28px; }
   body[data-page="landing"] .landing-mode { grid-template-columns: 28px minmax(0, 1fr) 150px; }
   body[data-page="landing"] .landing-mode .landing-text-link { grid-column: 2/-1; }
-  body[data-page="landing"] .landing-usb { gap: 30px; padding: 30px; }
   body[data-page="landing"] .landing-feature-grid > article { padding: 24px; }
 }
 @media (max-width: 760px) {
@@ -202,7 +197,7 @@ body[data-page="landing"] .site-footer p { font-size: 12px; line-height: 1.8; }
   body[data-page="landing"] .demo-toolbar { align-items: start; }
   body[data-page="landing"] .demo-tools { flex-wrap: wrap; margin: 0; }
   body[data-page="landing"] .landing-section { padding: 36px 22px; }
-  body[data-page="landing"] .landing-heading-split, body[data-page="landing"] .landing-intelligence, body[data-page="landing"] .landing-feature-grid, body[data-page="landing"] .landing-usb, body[data-page="landing"] .landing-control, body[data-page="landing"] .landing-faq { grid-template-columns: minmax(0, 1fr); }
+  body[data-page="landing"] .landing-heading-split, body[data-page="landing"] .landing-intelligence, body[data-page="landing"] .landing-feature-grid, body[data-page="landing"] body[data-page="landing"] .landing-control, body[data-page="landing"] .landing-faq { grid-template-columns: minmax(0, 1fr); }
   body[data-page="landing"] .landing-purpose > .landing-heading { grid-template-columns: minmax(0, 1fr); gap: 0; }
   body[data-page="landing"] .landing-purpose > .landing-heading > p:not(.eyebrow) { margin-top: 16px; }
   body[data-page="landing"] .landing-benefits { gap: 14px; grid-template-columns: minmax(0, 1fr); margin-top: 22px; }
@@ -219,7 +214,6 @@ body[data-page="landing"] .site-footer p { font-size: 12px; line-height: 1.8; }
   body[data-page="landing"] .landing-app-grid article { align-items: start; flex-direction: column; padding: 20px; }
   body[data-page="landing"] .landing-mode { gap: 14px; grid-template-columns: 24px minmax(0, 1fr); }
   body[data-page="landing"] .landing-mode .landing-tag, body[data-page="landing"] .landing-mode .landing-text-link { grid-column: 2; }
-  body[data-page="landing"] .landing-usb { padding: 26px; gap: 20px; }
   body[data-page="landing"] .landing-closing { padding: 40px 22px; }
 
 }
