@@ -616,7 +616,7 @@ class SiteContractTests(unittest.TestCase):
         portal = (ROOT / "site/assets/account-portal.js").read_text(encoding="utf-8")
         self.assertIn("const MAX_PUBLIC_JSON_BYTES = 256 * 1024", shell)
         self.assertIn("async function readJsonBytes(response", shell)
-        self.assertIn('return parseJsonBytes(await readJsonBytes(response))', shell)
+        self.assertIn('return parseJsonBytes(await readJsonBytes(response, maxBytes))', shell)
         self.assertIn('const payload = await loadJson("/account/usage/mcp", signal)', shell)
         self.assertIn('owner !== sessionView', shell)
         self.assertIn('if (mcpUsageSession !== session)', portal)
@@ -922,7 +922,12 @@ class SiteContractTests(unittest.TestCase):
         landing = (ROOT / "site/index.html").read_text("utf-8")
         controller = (ROOT / "site/assets/playground.js").read_text("utf-8")
         self.assertNotIn('id="playground-fixture"', landing)
-        self.assertIn('fetch("/assets/playground-fixture.json"', controller)
+        self.assertIn('window.OrdaXPublicJsonTransport.loadStatic(', controller)
+        self.assertIn('"/assets/playground-fixture.json", 512000', controller)
+        runtime = (ROOT / "site/assets/site.js").read_text("utf-8")
+        self.assertIn('window.OrdaXPublicJsonTransport = Object.freeze', runtime)
+        self.assertNotIn('response.text()', controller)
+        self.assertNotIn('const response = await fetch(', controller)
         self.assertIn("for (const nestedMain of screen.querySelectorAll('main'))", controller)
 
     def test_surface_preview_is_one_pinned_external_release_without_legacy_copy(self):

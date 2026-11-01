@@ -14,15 +14,12 @@
   // 159 KB duplicate in HTML and no runtime imports from the Surface source.
   let fixture;
   try {
-    const response = await fetch("/assets/playground-fixture.json", {
-      credentials: "omit", redirect: "error", cache: "no-cache",
-    });
-    if (!response.ok) throw new Error("fixture-unavailable");
-    const expectedLength = Number(response.headers.get("content-length") || "0");
-    if (!Number.isFinite(expectedLength) || expectedLength > 512000) throw new Error("fixture-too-large");
-    const payload = await response.text();
-    if (payload.length > 512000) throw new Error("fixture-too-large");
-    fixture = JSON.parse(payload);
+    if (typeof window.OrdaXPublicJsonTransport?.loadStatic !== "function") {
+      throw new Error("public-json-transport-missing");
+    }
+    fixture = await window.OrdaXPublicJsonTransport.loadStatic(
+      "/assets/playground-fixture.json", 512000
+    );
     if (fixture?.$schema !== "prototype-ordax.public-playground-fixture/1"
         || !Array.isArray(fixture.apps)
         || !Array.isArray(fixture?.home?.rail_apps)
