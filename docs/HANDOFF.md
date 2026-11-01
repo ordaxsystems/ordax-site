@@ -90,7 +90,7 @@ O texto e as ações do hero da home não aguardam mais a animação de entrada 
 - Na Conta em tablets touch, cada destino de “Mais” ocupa uma linha completa dentro do diálogo; a regra também evita que folhas de estilo do portal façam links inline em grupos com vários destinos.
 - O nome acessível “Fechar diálogo” da Conta agora tem tradução inglesa no catálogo compartilhado, para que leitores de tela recebam o idioma correto após a troca para en-US.
 - Em telas touch, as marcas clicáveis de cabeçalho/rodapé e o link de pular conteúdo agora mantêm alvos de pelo menos 44 px; a Conta segue o mesmo tamanho para a marca do topbar.
-- Em touch, a demonstração compacta da home sai da ordem de teclado até ser ampliada; os diálogos do notebook e telefone mantêm alvos utilizáveis.
+- Na ausência de ponteiro preciso (dispositivo somente de toque), a demonstração compacta da home sai da ordem de teclado até ser ampliada; em notebooks híbridos com touch **e** mouse/trackpad fino ela permanece navegável. Ambos os tipos de ponteiro reavaliam a regra em alterações de hardware, e os diálogos ampliados preservam alvos acessíveis.
 - Nos cabeçalhos de identidade, o seletor de idioma agora reserva espaço para exibir por inteiro “Português (Brasil)” e “English (US)” em desktop; o tamanho móvel continua controlado pelo breakpoint existente.
 - Acessibilidade manual, Identity real, catálogo oficial, staging e produção continuam nos estados descritos acima; este ajuste é somente de apresentação.
 
