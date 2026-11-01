@@ -2107,37 +2107,56 @@ def run(root: Path, evidence: Path, chrome_binary: str | None = None) -> dict:
                                      "rule": "session-usage-cache-crossed-boundary", "summary": report})
         finally:
             server.same_email_usage_test = False
-        # A historical hosted-identity fragment must disappear before the
-        # Site receives even its normal public runtime config. No parsing,
-        # storing or token exchange is allowed; the token is synthetic.
-        server.fragment_config_started.clear()
-        server.fragment_config_release.clear()
-        server.hold_config_for_fragment_test = True
-        try:
-            driver.navigate(f"http://127.0.0.1:{server.server_port}/login/"
-                            "#access_token=synthetic-local-proof&token_type=bearer")
-            config_started = server.fragment_config_started.wait(timeout=1.5)
-            report = driver.run("""return (() => {
-              const form = document.querySelector('[data-identity-form]');
-              return {
-                hashGone: window.location.hash === '',
-                tokenNotInAddress: !window.location.href.includes('synthetic-local-proof'),
-                formInactive: !form || form.hidden || !form.hasAttribute('action'),
-                errors: window.__ordaxPageErrors || []
-              };
-            })();""")
-            report["scenario"] = "legacy-fragment-before-config"
-            report["configFetchStarted"] = config_started
-            report["configStillHeld"] = not server.fragment_config_release.is_set()
-            legacy_fragment_results.append(report)
-            if (not all((report["hashGone"], report["tokenNotInAddress"],
-                         report["formInactive"], report["configFetchStarted"],
-                         report["configStillHeld"])) or report["errors"]):
-                failures.append({"route": "/login/", "viewport": "legacy-bearer-fragment",
-                                 "rule": "fragment-not-cleared-before-config", "summary": report})
-        finally:
-            server.fragment_config_release.set()
-            server.hold_config_for_fragment_test = False
+        # Historic hosted-identity bearer fragments can reach any of the
+        # four form routes. The Site must scrub them before even the normal
+        # public config request; never consume/store/exchange such tokens.
+        # Reuse the existing form route scope rather than adding another list.
+        for identity_route in NO_SCRIPT_ROUTES[:4]:
+            server.fragment_config_started.clear()
+            server.fragment_config_release.clear()
+            server.hold_config_for_fragment_test = True
+            try:
+                driver.navigate(f"http://127.0.0.1:{server.server_port}{identity_route}"
+                                "#access_token=synthetic-local-proof&token_type=bearer")
+                config_started = server.fragment_config_started.wait(timeout=1.5)
+                report = driver.run("""return (() => {
+                  const form = document.querySelector('[data-identity-form]');
+                  return {
+                    hashGone: window.location.hash === '',
+                    tokenNotInAddress: !window.location.href.includes('synthetic-local-proof'),
+                    formInactive: !form || form.hidden || !form.hasAttribute('action'),
+                    errors: window.__ordaxPageErrors || []
+                  };
+                })();""")
+                report["route"] = identity_route
+                report["scenario"] = "legacy-fragment-before-config"
+                report["configFetchStarted"] = config_started
+                report["configStillHeld"] = not server.fragment_config_release.is_set()
+                legacy_fragment_results.append(report)
+                if (not all((report["hashGone"], report["tokenNotInAddress"],
+                             report["formInactive"], report["configFetchStarted"],
+                             report["configStillHeld"])) or report["errors"]):
+                    failures.append({"route": identity_route,
+                                     "viewport": "legacy-bearer-fragment",
+                                     "rule": "fragment-not-cleared-before-config",
+                                     "summary": report})
+            finally:
+                server.fragment_config_release.set()
+                server.hold_config_for_fragment_test = False
+        # Legitimate in-page anchors are not bearer-like fragments. Keep the
+        # keyboard skip-link behavior rather than stripping every URL hash.
+        driver.navigate(f"http://127.0.0.1:{server.server_port}/cadastro/#conteudo")
+        anchor_report = driver.run("""return {
+            hashPreserved: window.location.hash === '#conteudo',
+            errorFree: !(window.__ordaxPageErrors || []).length
+        };""")
+        anchor_report["route"] = "/cadastro/"
+        anchor_report["scenario"] = "non-credential-skip-link"
+        legacy_fragment_results.append(anchor_report)
+        if not all(anchor_report[k] for k in ("hashPreserved", "errorFree")):
+            failures.append({"route": "/cadastro/", "viewport": "skip-link-fragment",
+                             "rule": "legitimate-anchor-stripped",
+                             "summary": anchor_report})
         # Restore the default language to keep the no-JavaScript checks independent.
         driver.run("""localStorage.setItem('ordax.public.locale', 'pt-BR'); return true;""")
         # Verify that disabling JavaScript at document parse time cannot
