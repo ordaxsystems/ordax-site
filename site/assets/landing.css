@@ -224,7 +224,7 @@ body[data-page="landing"] .site-footer p { font-size: 12px; line-height: 1.8; }
 @media (max-width: 400px) {
   body[data-page="landing"] .landing-space-grid { grid-template-columns: minmax(0, 1fr); }
 
-  body[data-page="landing"] .hero-actions > .button { width: 100%; }
+  body[data-page="landing"] .hero-actions > .button { width: 100%; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 
   body[data-page="landing"] .landing-studio-flow { letter-spacing: 0; font-size: 9px; }
 }
