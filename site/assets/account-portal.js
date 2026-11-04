@@ -224,6 +224,28 @@
   // Every revalidation invalidates cached private usage even for the same email.
   let mcpUsageSession = null;
   let mcpUsageRevision = 0;
+  let mcpDevices = null;
+  let mcpDevicesStatus = "unavailable";
+  let mcpDevicesSession = null;
+  let mcpDevicesRevision = 0;
+
+  async function loadMcpDevices() {
+    const revision = ++mcpDevicesRevision;
+    if (!signedIn()) return;
+    mcpDevicesStatus = "loading";
+    if (state.section === "dispositivos") renderContent();
+    try {
+      const result = await account.readMcpDevices();
+      if (revision !== mcpDevicesRevision || !signedIn()) return;
+      mcpDevices = result.devices;
+      mcpDevicesStatus = "ready";
+    } catch {
+      if (revision !== mcpDevicesRevision || !signedIn()) return;
+      mcpDevices = null;
+      mcpDevicesStatus = "unavailable";
+    }
+    if (state.section === "dispositivos") renderContent();
+  }
 
   async function loadMcpUsage() {
     const revision = ++mcpUsageRevision;
@@ -412,6 +434,19 @@
   function pendingRecords({ caption, columns, title, description, iconName = "document" }) {
     return `<table class="records-table"><caption class="sr-only">${tx(caption)}</caption><thead><tr>${columns.map(label => `<th scope="col">${tx(label)}</th>`).join("")}</tr></thead><tbody><tr><td colspan="${columns.length}">${empty(title, description, iconName, true)}</td></tr></tbody></table>`;
   }
+  function mcpDeviceRecords() {
+    if (mcpDevicesStatus !== "ready" || !mcpDevices) {
+      return pendingRecords({ caption: "Computadores OrdaX MCP", columns: ["Dispositivo", "Última atividade", "Estado"],
+        title: mcpDevicesStatus === "loading" ? "Consultando computadores" : "Computadores indisponíveis",
+        description: mcpDevicesStatus === "loading" ? "Consultando a Platform." : "O cadastro não pôde ser verificado. Nenhum resultado será presumido.", iconName: "devices" });
+    }
+    if (!mcpDevices.length) return empty("Nenhum computador registrado", "A Platform confirmou que esta conta não tem dispositivos cadastrados.", "devices", true);
+    return `<table class="records-table"><caption class="sr-only">${tx("Computadores OrdaX MCP")}</caption><thead><tr>${["Dispositivo", "Última atividade", "Estado"].map(x => `<th scope="col">${tx(x)}</th>`).join("")}</tr></thead><tbody>${mcpDevices.map(device => {
+      const state = device.online ? device.runtime_ready ? "Online · Runtime pronto" : "Online · Runtime não confirmado" : "Offline";
+      const seen = device.last_seen_at ? new Date(device.last_seen_at).toLocaleString(i18n.getLocale()) : "Sem atividade registrada";
+      return `<tr><th scope="row"><strong>${esc(device.name)}</strong><small translate="no">${esc(device.device_id)}</small></th><td>${esc(seen)}</td><td><span class="status-tag${device.runtime_ready ? " is-verified" : ""}">${tx(state)}</span></td></tr>`;
+    }).join("")}</tbody></table>`;
+  }
   function field(label, placeholder, type = "text", capabilityId = "", { id = "", hint = "" } = {}) {
     const emailAvailable = capabilityId === "accountEmail" && capabilityState(capabilityId).status === "verified";
     const note = emailAvailable ? "E-mail da sessão atual. A alteração ainda não está disponível." : hint;
@@ -535,12 +570,12 @@
   function devices() {
     return `${sessionSection({ related: "seguranca" })}
     <section class="settings-section device-list" aria-labelledby="devices-heading">
-      ${panelHeading("Dispositivos autorizados", { id: "devices-heading", iconName: "devices", tone: "cyan", end: capabilityBadge("deviceSessions") })}
-      <p class="panel-description">${tx("Consulte os acessos vinculados à sua conta e gerencie outras sessões.")}</p>
-      <ul class="device-scope" aria-label="${tx("Tipos de acesso")}"><li>${icon("devices")}${tx("OrdaX OS")}</li><li>${icon("globe")}${tx("OrdaX Web")}</li><li>${icon("devices")}${tx("Dispositivos móveis")}</li></ul>
-      ${pendingRecords({ caption: "Dispositivos autorizados", columns: ["Dispositivo", "Última atividade", "Status"], title: "Dispositivos ainda não disponíveis", description: "A sessão atual não identifica todos os dispositivos. A lista depende do serviço público de dispositivos OrdaX.", iconName: "devices" })}
-      <p class="device-revoke-note" id="device-revoke-note">${icon("info")}${tx("A lista e o encerramento remoto de sessões aguardam integração.")}</p>
-      <div class="panel-actions device-actions">${action("Encerrar outras sessões", null, { describedBy: "device-revoke-note" })}${link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`)}</div>
+      ${panelHeading("Computadores OrdaX MCP", { id: "devices-heading", iconName: "devices", tone: "cyan", end: mcpDevicesStatus === "ready" ? '<span class="status-tag is-verified">Verificado</span>' : capabilityBadge("osDevices") })}
+      <p class="panel-description">${tx("Veja computadores registrados na Platform. Presença online não significa permissão de controle remoto.")}</p>
+      <p class="device-scope">${tx("Identidade do dispositivo, saúde do Runtime e grants dos aplicativos são estados distintos.")}</p>
+      ${mcpDeviceRecords()}
+      <p class="device-revoke-note" id="device-revoke-note">${icon("info")}${tx("Revogar um grant de cliente OAuth é diferente de desligar ou remover um dispositivo. A revogação ainda aguarda integração da Conta com a API Owner.")}</p>
+      <div class="panel-actions device-actions">${link("integracoes", "", "text-link", `${tx("Ver autorizações de aplicativos")}${icon("arrow-right")}`)}${link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`)}</div>
     </section>${relatedAreas(["seguranca", "atividade"], "Proteção e histórico da conta")}`;
   }
   function privacy() {
@@ -648,6 +683,7 @@
     if (dialog.open) dialog.close();
     renderNavigation();
     renderContent({ focus: !initial });
+    if (state.section === "dispositivos" && signedIn() && mcpDevicesStatus === "unavailable") void loadMcpDevices();
     if (changed || !initial) window.scrollTo({ top: 0, behavior: "instant" });
     if (contentAnchor) document.getElementById("conteudo").focus({ preventScroll: true });
   }
@@ -797,6 +833,13 @@
         mcpUsage = null;
         mcpUsageStatus = "unavailable";
         if (signedIn()) void loadMcpUsage();
+      }
+      if (mcpDevicesSession !== session) {
+        mcpDevicesSession = session;
+        mcpDevicesRevision += 1;
+        mcpDevices = null;
+        mcpDevicesStatus = "unavailable";
+        if (signedIn() && state.section === "dispositivos") void loadMcpDevices();
       }
       renderSession();
       // Revalidation must clear personal data, but not replace unrelated controls

@@ -655,6 +655,31 @@
       }
       return payload;
     },
+    // Reuse Account's authenticated same-origin transport: no Product tokens in JS.
+    async readMcpDevices(signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated") throw new Error("public-account-session-required");
+      const value = await loadJson("/account/mcp/devices", signal, { maxBytes: 64 * 1024 });
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!value || value.ok !== true || value.schema !== "ordax.owner-mcp-devices/1"
+          || !Array.isArray(value.devices) || value.devices.length > 200
+          || value.count !== value.devices.length
+          || new Set(value.devices.map(item => item?.device_id)).size !== value.devices.length
+          || !value.devices.every(item => item && uuid.test(item.device_id)
+            && typeof item.name === "string" && item.name.length > 0 && item.name.length <= 120
+            && typeof item.kind === "string" && item.kind.length <= 80
+            && typeof item.channel === "string" && item.channel.length <= 80
+            && typeof item.state === "string" && item.state.length <= 80
+            && typeof item.online === "boolean" && typeof item.runtime_ready === "boolean"
+            && (item.last_seen_at === null || (typeof item.last_seen_at === "string"
+              && Number.isFinite(Date.parse(item.last_seen_at)))))) {
+        throw new Error("public-account-mcp-devices-invalid");
+      }
+      if (owner !== sessionView || sessionView.status !== "authenticated") {
+        throw new Error("public-account-session-changed");
+      }
+      return value;
+    },
     subscribe(observer) {
       if (typeof observer !== "function") throw new TypeError("account-observer-required");
       sessionObservers.add(observer);
