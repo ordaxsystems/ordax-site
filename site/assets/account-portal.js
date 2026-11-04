@@ -228,6 +228,81 @@
   let mcpDevicesStatus = "unavailable";
   let mcpDevicesSession = null;
   let mcpDevicesRevision = 0;
+  let mcpAuthority = null;
+  let mcpAuthorityDevice = null;
+  let mcpAuthorityStatus = "unavailable";
+  let mcpAuthorityRevision = 0;
+  let mcpRevoking = false;
+  let mcpRevocationNotice = "";
+
+  async function loadMcpAuthority(deviceId) {
+    const revision = ++mcpAuthorityRevision;
+    if (!signedIn() || mcpDevicesStatus !== "ready"
+        || !mcpDevices?.some(d => d.device_id === deviceId)) return;
+    mcpAuthorityDevice = deviceId;
+    mcpAuthority = null;
+    mcpAuthorityStatus = "loading";
+    mcpRevocationNotice = "";
+    if (state.section === "dispositivos") renderContent();
+    try {
+      const value = await account.readMcpAuthority(deviceId);
+      if (revision !== mcpAuthorityRevision || !signedIn()
+          || mcpAuthorityDevice !== deviceId) return;
+      mcpAuthority = value;
+      mcpAuthorityStatus = "ready";
+    } catch {
+      if (revision !== mcpAuthorityRevision || !signedIn()) return;
+      mcpAuthority = null;
+      mcpAuthorityStatus = "unavailable";
+    }
+    if (state.section === "dispositivos") renderContent();
+  }
+
+  async function revokeMcpDeviceGrant(control) {
+    if (mcpRevoking || !signedIn() || mcpAuthorityStatus !== "ready" || !mcpAuthority) return;
+    const deviceId = control.dataset.mcpDevice;
+    const clientId = control.dataset.mcpClient;
+    const groupId = control.dataset.mcpGroup;
+    if (deviceId !== mcpAuthorityDevice || deviceId !== mcpAuthority.device_id
+        || !mcpAuthority.grant_groups.some(g => g.grant_group_id === groupId
+          && g.client_id === clientId)) return;
+    const device = mcpDevices?.find(d => d.device_id === deviceId);
+    const client = mcpAuthority.clients.find(c => c.client_id === clientId);
+    const clientName = client?.client_name || clientId;
+    // Native browser confirmation: the user, not a model or stale device row,
+    // initiates the exact grant mutation. No optimistic revoke or DELETE replay.
+    if (!window.confirm(`${tx("Revogar autorização")} — ${clientName} / ${device?.name || deviceId}?`)) return;
+    const revision = ++mcpAuthorityRevision;
+    mcpRevoking = true;
+    mcpRevocationNotice = "";
+    renderContent();
+    try {
+      await account.revokeMcpGrant({
+        device_id:deviceId, client_id:clientId, grant_group_id:groupId, confirm:"revogar",
+      });
+      if (revision !== mcpAuthorityRevision || !signedIn()
+          || mcpAuthorityDevice !== deviceId) return;
+      // Read back every group from the Platform. Never hide a row merely
+      // because the POST returned 200.
+      const confirmed = await account.readMcpAuthority(deviceId);
+      if (revision !== mcpAuthorityRevision || !signedIn()) return;
+      if (confirmed.grant_groups.some(g => g.grant_group_id === groupId && g.client_id === clientId))
+        throw new Error("mcp-owner-revoke-not-reflected");
+      mcpAuthority = confirmed;
+      mcpAuthorityStatus = "ready";
+      mcpRevocationNotice = "Autorização revogada e verificada.";
+    } catch {
+      if (revision !== mcpAuthorityRevision || !signedIn()) return;
+      mcpAuthority = null;
+      mcpAuthorityStatus = "unavailable";
+      mcpRevocationNotice = "A revogação não foi confirmada. Consulte novamente antes de tentar outra ação.";
+    } finally {
+      if (revision === mcpAuthorityRevision && signedIn()) {
+        mcpRevoking = false;
+        if (state.section === "dispositivos") renderContent();
+      }
+    }
+  }
 
   async function loadMcpDevices() {
     const revision = ++mcpDevicesRevision;
