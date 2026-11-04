@@ -19,7 +19,7 @@
     // Keep the canonical UUID shape and one fixed parameter; never enable
     // arbitrary query forwarding to other Identity or administrative routes.
     if (typeof value === "string" &&
-        /^\\/account\\/mcp\\/authority\\?device_id=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {
+        /^[/]account[/]mcp[/]authority[?]device_id=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {
       return true;
     }
     // Keep browser links aligned with the Site catalog's canonical path gate.
