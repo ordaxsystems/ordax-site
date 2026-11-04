@@ -793,6 +793,19 @@
     if (!byId.has(requested)) requested = "visao-geral";
     const changed = requested !== state.section;
     state.section = requested;
+    if (changed && requested === "dispositivos" && signedIn() && !mcpRevoking) {
+      // A new visit must re-read the Platform. Never show old Owner grants
+      // as if they were still active; no polling and no duplicate SSOT.
+      // An in-flight revoke keeps its revision and performs its own readback.
+      mcpDevicesRevision += 1;
+      mcpDevices = null;
+      mcpDevicesStatus = "unavailable";
+      mcpAuthorityRevision += 1;
+      mcpAuthority = null;
+      mcpAuthorityDevice = null;
+      mcpAuthorityStatus = "unavailable";
+      mcpRevocationNotice = "";
+    }
     closeMore();
     if (dialog.open) dialog.close();
     renderNavigation();
