@@ -171,3 +171,31 @@ test("Revoke UI requires exact group and Owner confirmation; no optimistic remov
   assert.match(portal,/mcp-owner-revoke-not-reflected/);
   assert.match(source,/method !== "POST" \|\| path !== "\/account\/mcp\/revoke"/);
 });
+
+test("denied MCP device selection cannot invalidate an active grant revocation",async()=>{
+  // Exercise the actual portal controller, not a duplicate implementation.
+  const portal=readFileSync(new URL("../site/assets/account-portal.js",import.meta.url),"utf8");
+  const start=portal.indexOf("  async function loadMcpAuthority(deviceId) {");
+  const end=portal.indexOf("\n  async function revokeMcpDeviceGrant(control) {",start);
+  assert.ok(start>=0 && end>start);
+  const realFunction=portal.slice(start,end);
+  const run=new Function("deviceId","answer",[
+    'let mcpRevoking=true, mcpAuthorityRevision=7, mcpAuthority=null;',
+    'let mcpAuthorityDevice=null, mcpAuthorityStatus="unavailable";',
+    'let mcpRevocationNotice="", mcpDevicesStatus="ready";',
+    'let mcpDevices=[{device_id:deviceId}], calls=0;',
+    'const state={section:"dispositivos"};',
+    'const signedIn=()=>true, renderContent=()=>{};',
+    'const account={readMcpAuthority:async()=>{calls+=1;return answer}};',
+    realFunction,
+    'return {open:loadMcpAuthority, revision:()=>mcpAuthorityRevision,',
+    '  calls:()=>calls, release:()=>{mcpRevoking=false}};',
+  ].join("\n"))(first.device_id,authority);
+  await run.open(first.device_id);
+  assert.equal(run.revision(),7,"stale click must not cancel pending POST");
+  assert.equal(run.calls(),0,"stale click cannot query while revoking");
+  run.release();
+  await run.open(first.device_id);
+  assert.equal(run.revision(),8);
+  assert.equal(run.calls(),1);
+});
