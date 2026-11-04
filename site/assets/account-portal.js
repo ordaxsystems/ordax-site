@@ -686,7 +686,7 @@
       <p class="device-scope">${tx("Identidade do dispositivo, saúde do Runtime e grants dos aplicativos são estados distintos.")}</p>
       ${mcpDeviceRecords()}
       ${mcpAuthorityPanel()}
-      <p class="device-revoke-note" id="device-revoke-note">${icon("info")}${tx("Revogar um grant de cliente OAuth é diferente de desligar ou remover um dispositivo. A revogação ainda aguarda integração da Conta com a API Owner.")}</p>
+      <p class="device-revoke-note" id="device-revoke-note">${icon("info")}${tx("Revogar um grant OAuth não desliga nem remove o computador. A ação exige confirmação e verificação pela Platform.")}</p>
       <div class="panel-actions device-actions">${link("integracoes", "", "text-link", `${tx("Ver autorizações de aplicativos")}${icon("arrow-right")}`)}${link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`)}</div>
     </section>${relatedAreas(["seguranca", "atividade"], "Proteção e histórico da conta")}`;
   }
