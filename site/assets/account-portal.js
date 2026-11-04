@@ -236,9 +236,11 @@
   let mcpRevocationNotice = "";
 
   async function loadMcpAuthority(deviceId) {
-    const revision = ++mcpAuthorityRevision;
+    // A denied/late selection must not invalidate an in-flight revocation.
+    // Advancing revision first would strand mcpRevoking=true in its finally.
     if (!signedIn() || mcpRevoking || mcpDevicesStatus !== "ready"
         || !mcpDevices?.some(d => d.device_id === deviceId)) return;
+    const revision = ++mcpAuthorityRevision;
     mcpAuthorityDevice = deviceId;
     mcpAuthority = null;
     mcpAuthorityStatus = "loading";
