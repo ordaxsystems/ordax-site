@@ -15,6 +15,38 @@ function harness(session, transport) {
     return { read: async function(signal) {${body}
     }, change(next) { sessionView = next; } };`)(transport, session);
 }
+// Execute the original path gate from site.js. Tests of the Account port
+// alone would mock loadJson and miss a GET rejected before network dispatch.
+const gateStart = source.indexOf("  function sameOriginPath(value) {");
+const gateEnd = source.indexOf("\n  // Eligibility is shared", gateStart);
+assert.ok(gateStart >= 0 && gateEnd > gateStart, "canonical same-origin gate missing");
+const sameOriginPath = new Function(source.slice(gateStart,gateEnd) +
+  "\nreturn sameOriginPath;")();
+
+test("real same-origin gate permits only a single exact MCP authority UUID query",()=>{
+  const deviceId="14cef8f4-3c06-4b1b-9e3a-42c74ef7dec5";
+  const valid="/account/mcp/authority?device_id="+deviceId;
+  assert.equal(sameOriginPath(valid),true);
+  assert.equal(sameOriginPath("/account/mcp/devices"),true);
+  assert.equal(sameOriginPath("/account/mcp/revoke"),true);
+  for(const bad of [
+    "/account/mcp/authority", "/account/mcp/authority?device_id=bad",
+    valid+"&device_id="+deviceId, valid+"&owner_id="+deviceId,
+    "/account/mcp/authority?owner_id="+deviceId,
+    "/account/mcp/authority?device_id="+deviceId.toUpperCase(),
+    "/account/mcp/authority?device_id=%31"+deviceId.slice(1),
+    valid+"#fragment", "/auth/session?device_id="+deviceId,
+    "/account/usage/mcp?device_id="+deviceId,
+    "/account/mcp/authority?device_id="+deviceId+"/../../auth/session",
+    "//evil.example/account/mcp/authority?device_id="+deviceId,
+    "https://evil.example/account/mcp/authority?device_id="+deviceId,
+  ]) assert.equal(sameOriginPath(bad),false,bad);
+});
+
+test("Account JSON transport always invokes the real same-origin URL gate",()=>{
+  assert.match(source,/if \(!sameOriginPath\(path\)\) throw new Error\("api-path-invalid"\)/);
+});
+
 const first = {
   device_id:"14cef8f4-3c06-4b1b-9e3a-42c74ef7dec5",
   name:"Windows OrdaX",kind:"desktop",channel:"development",
