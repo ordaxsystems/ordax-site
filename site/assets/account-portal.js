@@ -511,16 +511,52 @@
   }
   function mcpDeviceRecords() {
     if (mcpDevicesStatus !== "ready" || !mcpDevices) {
-      return pendingRecords({ caption: "Computadores OrdaX MCP", columns: ["Dispositivo", "Última atividade", "Estado"],
+      return pendingRecords({ caption: "Computadores OrdaX MCP", columns: ["Dispositivo", "Última atividade", "Estado", "Autorizações"],
         title: mcpDevicesStatus === "loading" ? "Consultando computadores" : "Computadores indisponíveis",
         description: mcpDevicesStatus === "loading" ? "Consultando a Platform." : "O cadastro não pôde ser verificado. Nenhum resultado será presumido.", iconName: "devices" });
     }
     if (!mcpDevices.length) return empty("Nenhum computador registrado", "A Platform confirmou que esta conta não tem dispositivos cadastrados.", "devices", true);
-    return `<table class="records-table"><caption class="sr-only">${tx("Computadores OrdaX MCP")}</caption><thead><tr>${["Dispositivo", "Última atividade", "Estado"].map(x => `<th scope="col">${tx(x)}</th>`).join("")}</tr></thead><tbody>${mcpDevices.map(device => {
+    return `<table class="records-table"><caption class="sr-only">${tx("Computadores OrdaX MCP")}</caption><thead><tr>${["Dispositivo", "Última atividade", "Estado", "Autorizações"].map(x => `<th scope="col">${tx(x)}</th>`).join("")}</tr></thead><tbody>${mcpDevices.map(device => {
       const state = device.online ? device.runtime_ready ? "Online · Runtime pronto" : "Online · Runtime não confirmado" : "Offline";
       const seen = device.last_seen_at ? new Date(device.last_seen_at).toLocaleString(i18n.getLocale()) : "Sem atividade registrada";
-      return `<tr><th scope="row"><strong>${esc(device.name)}</strong><small translate="no">${esc(device.device_id)}</small></th><td>${esc(seen)}</td><td><span class="status-tag${device.runtime_ready ? " is-verified" : ""}">${tx(state)}</span></td></tr>`;
+      return `<tr><th scope="row"><strong>${esc(device.name)}</strong><small translate="no">${esc(device.device_id)}</small></th><td>${esc(seen)}</td><td><span class="status-tag${device.runtime_ready ? " is-verified" : ""}">${tx(state)}</span></td><td>${action("Autorizações", null, { disabled:false, small:true, data:`data-mcp-device="${esc(device.device_id)}"` })}</td></tr>`;
     }).join("")}</tbody></table>`;
+  }
+  function mcpAuthorityPanel() {
+    if (!mcpAuthorityDevice) return "";
+    const device = mcpDevices?.find(d => d.device_id === mcpAuthorityDevice);
+    if (!device) return "";
+    const status = mcpAuthorityStatus;
+    const notice = mcpRevocationNotice ? `<p class="device-revoke-note" role="status">${icon("info")}${tx(mcpRevocationNotice)}</p>` : "";
+    if (status !== "ready" || !mcpAuthority) {
+      return `<section class="settings-section" aria-labelledby="mcp-grants-heading">
+        <h3 id="mcp-grants-heading">${tx("Autorizações de aplicativos")} · ${esc(device.name)}</h3>
+        <p role="status">${tx(status === "loading" ? "Consultando autorizações" : "Autorizações indisponíveis")}</p>
+        ${notice}
+      </section>`;
+    }
+    const grants = mcpAuthority.grant_groups;
+    const rows = grants.map(grant => {
+      const oauthClient = mcpAuthority.clients.find(c => c.client_id === grant.client_id);
+      const label = oauthClient?.client_name || grant.client_id;
+      const expiry = grant.valid_until
+        ? new Date(grant.valid_until).toLocaleString(i18n.getLocale()) : tx("Sem prazo de expiração");
+      const revokedConsent = grant.client_consent_active ? "" : ` · ${tx("Consentimento OAuth inativo")}`;
+      const actionControl = action("Revogar", "close", {
+        disabled:mcpRevoking, small:true,
+        data:`data-mcp-revoke data-mcp-device="${esc(device.device_id)}" data-mcp-client="${esc(grant.client_id)}" data-mcp-group="${esc(grant.grant_group_id)}"`,
+      });
+      return `<tr><th scope="row"><strong>${esc(label)}</strong><small translate="no">${esc(grant.client_id)}</small></th>
+        <td>${esc(grant.profile_key)}${revokedConsent}</td><td>${esc(expiry)}</td><td>${actionControl}</td></tr>`;
+    }).join("");
+    const table = grants.length ? `<table class="records-table"><caption class="sr-only">${tx("Autorizações de aplicativos")}</caption>
+      <thead><tr><th scope="col">${tx("Cliente OAuth")}</th><th scope="col">${tx("Perfil de acesso")}</th>
+      <th scope="col">${tx("Validade")}</th><th scope="col">${tx("Revogar")}</th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<p>${tx("Nenhuma autorização ativa para este computador.")}</p>`;
+    return `<section class="settings-section" aria-labelledby="mcp-grants-heading">
+      <h3 id="mcp-grants-heading">${tx("Autorizações de aplicativos")} · ${esc(device.name)}</h3>
+      <p class="panel-description">${tx("Revogar remove apenas o grant selecionado, sem desconectar outros computadores.")}</p>
+      ${table}${notice}</section>`;
   }
   function field(label, placeholder, type = "text", capabilityId = "", { id = "", hint = "" } = {}) {
     const emailAvailable = capabilityId === "accountEmail" && capabilityState(capabilityId).status === "verified";
@@ -649,6 +685,7 @@
       <p class="panel-description">${tx("Veja computadores registrados na Platform. Presença online não significa permissão de controle remoto.")}</p>
       <p class="device-scope">${tx("Identidade do dispositivo, saúde do Runtime e grants dos aplicativos são estados distintos.")}</p>
       ${mcpDeviceRecords()}
+      ${mcpAuthorityPanel()}
       <p class="device-revoke-note" id="device-revoke-note">${icon("info")}${tx("Revogar um grant de cliente OAuth é diferente de desligar ou remover um dispositivo. A revogação ainda aguarda integração da Conta com a API Owner.")}</p>
       <div class="panel-actions device-actions">${link("integracoes", "", "text-link", `${tx("Ver autorizações de aplicativos")}${icon("arrow-right")}`)}${link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`)}</div>
     </section>${relatedAreas(["seguranca", "atividade"], "Proteção e histórico da conta")}`;
@@ -821,7 +858,13 @@
       document.getElementById("conteudo").focus();
       return;
     }
-    if (control.matches("[data-refresh-session]")) { if (!layoutPreview) void account.refreshSession(); }
+    if (control.matches("[data-mcp-device]") && !control.matches("[data-mcp-revoke]")) {
+      event.preventDefault();
+      if (!layoutPreview) void loadMcpAuthority(control.dataset.mcpDevice);
+    } else if (control.matches("[data-mcp-revoke]")) {
+      event.preventDefault();
+      if (!layoutPreview) void revokeMcpDeviceGrant(control);
+    } else if (control.matches("[data-refresh-session]")) { if (!layoutPreview) void account.refreshSession(); }
     else if (control.matches("[data-open-dialog]")) openDialog(control.dataset.openDialog);
     else if (control.matches("[data-close-dialog]")) dialog.close();
     else if (control.matches("[data-open-more]")) { if (moreDialog.open) closeMore(); else { moreDialog.showModal(); control.setAttribute("aria-expanded", "true"); } }
@@ -914,6 +957,12 @@
         mcpDevicesRevision += 1;
         mcpDevices = null;
         mcpDevicesStatus = "unavailable";
+        mcpAuthorityRevision += 1;
+        mcpAuthority = null;
+        mcpAuthorityDevice = null;
+        mcpAuthorityStatus = "unavailable";
+        mcpRevoking = false;
+        mcpRevocationNotice = "";
         if (signedIn() && state.section === "dispositivos") void loadMcpDevices();
       }
       renderSession();
