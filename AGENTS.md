@@ -1,8 +1,12 @@
 # OrdaX Site — instruções para agentes
 
+> **Execução DEV — Evolução Rápida (regra transversal obrigatória):** aplicar a [política canônica OrdaX](https://github.com/ordaxsystems/ordax-os/blob/main/docs/DEVELOPMENT-WORKFLOW.md#regra-operacional-transversal--evolucao-rapida-dev-2026-11-04) antes de iniciar trabalho. Entregar a alteração no owner correto primeiro e validar com testes proporcionais depois; não ampliar escopo com auditorias, documentação, CI ou workflows sem causalidade. Preservar gates obrigatórios, integridade, segurança e autorização.
+
 Este repositório é o **owner do código de apresentação do site público** após cutover aprovado, não do OS, Surface Web, Identity, cobranças ou publicação de releases.
 
-## Ordem de leitura
+## Leitura por impacto
+
+Para correções localizadas, leia apenas os arquivos e contratos afetados. O roteiro abaixo é para mudanças transversais ou de publicação e não exige auditoria integral antes de cada edição.
 1. `README.md`
 2. `docs/AUDIT.md`
 3. `docs/DECISIONS.md`
