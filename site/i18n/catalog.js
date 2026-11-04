@@ -21,7 +21,7 @@
     ["Sem atividade registrada","No activity recorded"],
     ["Veja computadores registrados na Platform. Presença online não significa permissão de controle remoto.","See computers registered with the Platform. Online presence does not mean remote-control permission."],
     ["Identidade do dispositivo, saúde do Runtime e grants dos aplicativos são estados distintos.","Device identity, Runtime health and application grants are separate states."],
-    ["Revogar um grant de cliente OAuth é diferente de desligar ou remover um dispositivo. A revogação ainda aguarda integração da Conta com a API Owner.","Revoking an OAuth client grant is different from shutting down or removing a device. Revocation awaits integration between Account and the Owner API."],
+    ["Revogar um grant OAuth não desliga nem remove o computador. A ação exige confirmação e verificação pela Platform.","Revoking an OAuth grant does not shut down or remove the computer. The action requires confirmation and verification by the Platform."],
     ["Ver autorizações de aplicativos","View application authorizations"],
     ["Autorizações","Authorizations"],
     ["Autorizações de aplicativos","Application authorizations"],
