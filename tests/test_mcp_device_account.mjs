@@ -199,3 +199,51 @@ test("denied MCP device selection cannot invalidate an active grant revocation",
   assert.equal(run.revision(),8);
   assert.equal(run.calls(),1);
 });
+
+test("re-entering devices refreshes Owner data without interrupting a revocation",()=>{
+  // Run the actual router with injected navigation/document stubs.
+  const portal=readFileSync(new URL("../site/assets/account-portal.js",import.meta.url),"utf8");
+  const start=portal.indexOf("  function route({ initial = false } = {}) {");
+  const end=portal.indexOf("\n  const dialog = document.getElementById(\"account-dialog\");",start);
+  assert.ok(start>0 && end>start,"real Account router missing");
+  const realRoute=portal.slice(start,end);
+  const harness=new Function("revoking",[
+    'let state={section:"visao-geral"};',
+    'const byId=new Map([["visao-geral",{}],["dispositivos",{}]]);',
+    'const location={hash:"#dispositivos"};',
+    'const window={scrollTo:()=>{}};',
+    'const document={getElementById:()=>({focus:()=>{}})};',
+    'const dialog={open:false,close:()=>{}};',
+    'const closeMore=()=>{},renderNavigation=()=>{},renderContent=()=>{};',
+    'let mcpRevoking=revoking,mcpDevicesRevision=3,mcpAuthorityRevision=5;',
+    'let mcpDevices=[{device_id:"old"}],mcpDevicesStatus="ready";',
+    'let mcpAuthority={grant_groups:[{grant_group_id:"old"}]},mcpAuthorityDevice="old",',
+    '    mcpAuthorityStatus="ready",mcpRevocationNotice="old";',
+    'const signedIn=()=>true;',
+    'let loads=0;',
+    'async function loadMcpDevices(){loads++;mcpDevicesStatus="loading";}',
+    realRoute,
+    'return {run:route, setHash:v=>{location.hash=v},',
+    '  view:()=>({loads,deviceRev:mcpDevicesRevision,authRev:mcpAuthorityRevision,',
+    '  devices:mcpDevices,authority:mcpAuthority,chosen:mcpAuthorityDevice,',
+    '  deviceStatus:mcpDevicesStatus,notice:mcpRevocationNotice})};',
+  ].join("\n"));
+
+  const normal=harness(false);
+  normal.run();
+  assert.deepEqual(normal.view(),{
+    loads:1,deviceRev:4,authRev:6,devices:null,authority:null,
+    chosen:null,deviceStatus:"loading",notice:"",
+  });
+  normal.run();
+  assert.equal(normal.view().loads,1,"hash revisit during fetch must not duplicate calls");
+  normal.setHash("#visao-geral");normal.run();
+  normal.setHash("#dispositivos");normal.run();
+  assert.equal(normal.view().loads,2,"new visit refreshes instead of showing stale grants");
+
+  const pending=harness(true);
+  pending.run();
+  assert.equal(pending.view().loads,0,"do not start a new fetch during revoke");
+  assert.equal(pending.view().authRev,5,"do not cancel in-flight revocation receipt");
+  assert.equal(pending.view().authority.grant_groups[0].grant_group_id,"old");
+});
