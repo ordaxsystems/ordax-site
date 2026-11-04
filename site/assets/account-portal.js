@@ -237,7 +237,7 @@
 
   async function loadMcpAuthority(deviceId) {
     const revision = ++mcpAuthorityRevision;
-    if (!signedIn() || mcpDevicesStatus !== "ready"
+    if (!signedIn() || mcpRevoking || mcpDevicesStatus !== "ready"
         || !mcpDevices?.some(d => d.device_id === deviceId)) return;
     mcpAuthorityDevice = deviceId;
     mcpAuthority = null;
@@ -519,7 +519,7 @@
     return `<table class="records-table"><caption class="sr-only">${tx("Computadores OrdaX MCP")}</caption><thead><tr>${["Dispositivo", "Última atividade", "Estado", "Autorizações"].map(x => `<th scope="col">${tx(x)}</th>`).join("")}</tr></thead><tbody>${mcpDevices.map(device => {
       const state = device.online ? device.runtime_ready ? "Online · Runtime pronto" : "Online · Runtime não confirmado" : "Offline";
       const seen = device.last_seen_at ? new Date(device.last_seen_at).toLocaleString(i18n.getLocale()) : "Sem atividade registrada";
-      return `<tr><th scope="row"><strong>${esc(device.name)}</strong><small translate="no">${esc(device.device_id)}</small></th><td>${esc(seen)}</td><td><span class="status-tag${device.runtime_ready ? " is-verified" : ""}">${tx(state)}</span></td><td>${action("Autorizações", null, { disabled:false, small:true, data:`data-mcp-device="${esc(device.device_id)}"` })}</td></tr>`;
+      return `<tr><th scope="row"><strong>${esc(device.name)}</strong><small translate="no">${esc(device.device_id)}</small></th><td>${esc(seen)}</td><td><span class="status-tag${device.runtime_ready ? " is-verified" : ""}">${tx(state)}</span></td><td>${action("Autorizações", null, { disabled:mcpRevoking, small:true, data:`data-mcp-device="${esc(device.device_id)}"` })}</td></tr>`;
     }).join("")}</tbody></table>`;
   }
   function mcpAuthorityPanel() {
