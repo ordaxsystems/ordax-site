@@ -15,6 +15,15 @@
   const t = (messageId, variables) => i18n.t(messageId, variables);
 
   function sameOriginPath(value) {
+    // The Owner grant inspector is the ONLY GET JSON route accepting a query.
+    // Keep the canonical UUID shape and one fixed parameter; never enable
+    // arbitrary query forwarding to other Identity or administrative routes.
+    if (typeof value === "string" &&
+        /^[/]account[/]mcp[/]authority[?]device_id=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {
+      return true;
+    }
+    // This admin read requires exactly one chosen device, not a bare route.
+    if (value === "/account/mcp/authority") return false;
     // Keep browser links aligned with the Site catalog's canonical path gate.
     // Disallow encoded separators/dots, traversals and URL normalization aliases.
     return (
@@ -77,11 +86,17 @@
     maxBytes = MAX_PUBLIC_JSON_BYTES,
     credentials = "same-origin",
     cache = "no-store",
+    method = "GET",
+    jsonBody,
   } = {}) {
     // API contracts belong to their exact same-origin endpoint. A redirected
     // 200 (even to another same-origin route) cannot establish Identity or
     // legal-policy readiness; never follow redirects or accept alias responses.
     if (!sameOriginPath(path)) throw new Error("api-path-invalid");
+    if (method !== "GET" && (method !== "POST" || path !== "/account/mcp/revoke")) {
+      throw new Error("api-method-not-allowed");
+    }
+    if (method === "GET" && jsonBody !== undefined) throw new Error("api-get-body-not-allowed");
     // A stalled HTTP response or streaming body must not keep public forms,
     // product availability or demo status in "checking" indefinitely.
     // The same request deadline applies to every JSON consumer, and an
@@ -93,11 +108,14 @@
     else signal?.addEventListener("abort", onAbort, { once: true });
     try {
       const response = await fetch(path, {
-        method: "GET",
+        method,
         credentials,
         cache,
         redirect: "error",
-        headers: { Accept: "application/json" },
+        headers: method === "POST"
+          ? { Accept: "application/json", "Content-Type": "application/json" }
+          : { Accept: "application/json" },
+        ...(method === "POST" ? { body: JSON.stringify(jsonBody) } : {}),
         signal: deadline.signal,
       });
       if (!response.ok || response.redirected ||
@@ -654,6 +672,78 @@
         throw new Error("public-account-session-changed");
       }
       return payload;
+    },
+    async readMcpAuthority(deviceId, signal) {
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const owner = sessionView;
+      if (owner.status !== "authenticated") throw new Error("public-account-session-required");
+      if (!uuid.test(deviceId)) throw new Error("mcp-owner-device-invalid");
+      const value = await loadJson("/account/mcp/authority?device_id=" + deviceId, signal,
+        { maxBytes: 64 * 1024 });
+      const clients = value?.clients;
+      const grants = value?.grant_groups;
+      if (!value || value.ok !== true || value.schema !== "ordax.owner-mcp-authority-view/1"
+          || value.device_id !== deviceId || !Array.isArray(clients) || clients.length > 100
+          || !Array.isArray(grants) || grants.length > 256
+          || new Set(clients.map(c => c?.client_id)).size !== clients.length
+          || new Set(grants.map(g => g?.grant_group_id)).size !== grants.length
+          || !clients.every(c => c && uuid.test(c.client_id)
+            && typeof c.client_name === "string" && c.client_name.length <= 120)
+          || !grants.every(g => g && uuid.test(g.grant_group_id) && uuid.test(g.client_id)
+            && /^[a-z][a-z0-9._-]{1,79}$/.test(g.profile_key)
+            && typeof g.client_consent_active === "boolean"
+            && (g.valid_until === null || (typeof g.valid_until === "string"
+              && Number.isFinite(Date.parse(g.valid_until)))))) {
+        throw new Error("mcp-owner-authority-invalid");
+      }
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return value;
+    },
+    async revokeMcpGrant(input, signal) {
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const owner = sessionView;
+      if (owner.status !== "authenticated") throw new Error("public-account-session-required");
+      if (!input || Object.keys(input).sort().join(",") !== "client_id,confirm,device_id,grant_group_id"
+          || !uuid.test(input.device_id) || !uuid.test(input.client_id)
+          || !uuid.test(input.grant_group_id) || input.confirm !== "revogar")
+        throw new Error("mcp-owner-revoke-invalid");
+      // Same-origin HttpOnly cookies, browser Origin and Fetch Metadata only;
+      // the Product bearer remains inside the authenticated Account gateway.
+      const value = await loadJson("/account/mcp/revoke", signal,
+        { maxBytes: 4096, method: "POST", jsonBody: input });
+      if (!value || value.ok !== true || value.schema !== "ordax.owner-mcp-revocation/1"
+          || value.revoked !== true || value.device_id !== input.device_id
+          || value.client_id !== input.client_id || value.grant_group_id !== input.grant_group_id)
+        throw new Error("mcp-owner-revoke-unconfirmed");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return value;
+    },
+    // Reuse Account's authenticated same-origin transport: no Product tokens in JS.
+    async readMcpDevices(signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated") throw new Error("public-account-session-required");
+      const value = await loadJson("/account/mcp/devices", signal, { maxBytes: 64 * 1024 });
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!value || value.ok !== true || value.schema !== "ordax.owner-mcp-devices/1"
+          || !Array.isArray(value.devices) || value.devices.length > 200
+          || value.count !== value.devices.length
+          || new Set(value.devices.map(item => item?.device_id)).size !== value.devices.length
+          || !value.devices.every(item => item && uuid.test(item.device_id)
+            && typeof item.name === "string" && item.name.length > 0 && item.name.length <= 120
+            && typeof item.kind === "string" && item.kind.length <= 80
+            && typeof item.channel === "string" && item.channel.length <= 80
+            && typeof item.state === "string" && item.state.length <= 80
+            && typeof item.online === "boolean" && typeof item.runtime_ready === "boolean"
+            && (item.last_seen_at === null || (typeof item.last_seen_at === "string"
+              && Number.isFinite(Date.parse(item.last_seen_at)))))) {
+        throw new Error("public-account-mcp-devices-invalid");
+      }
+      if (owner !== sessionView || sessionView.status !== "authenticated") {
+        throw new Error("public-account-session-changed");
+      }
+      return value;
     },
     subscribe(observer) {
       if (typeof observer !== "function") throw new TypeError("account-observer-required");
