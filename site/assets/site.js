@@ -14,7 +14,10 @@
   }
   const t = (messageId, variables) => i18n.t(messageId, variables);
 
-  function sameOriginPath(value) {
+  function sameOriginPath(value, method = "GET") {
+    // The central selection POST has no query; its GET sibling must carry
+    // exactly one OAuth client ID. Keep this distinction at the URL gate.
+    if (value === "/account/mcp/central-selections" && method === "POST") return true;
     // Only the exact Owner device and OAuth-client reads accept a UUID query.
     // Never allow arbitrary parameters, URL normalization or other Identity routes.
     if (typeof value === "string" &&
@@ -92,7 +95,7 @@
     // API contracts belong to their exact same-origin endpoint. A redirected
     // 200 (even to another same-origin route) cannot establish Identity or
     // legal-policy readiness; never follow redirects or accept alias responses.
-    if (!sameOriginPath(path)) throw new Error("api-path-invalid");
+    if (!sameOriginPath(path, method)) throw new Error("api-path-invalid");
     if (method !== "GET" && (method !== "POST" || ![
       "/account/mcp/revoke", "/account/mcp/central-selections",
     ].includes(path))) {

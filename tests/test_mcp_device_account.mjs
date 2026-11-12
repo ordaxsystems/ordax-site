@@ -17,7 +17,7 @@ function harness(session, transport) {
 }
 // Execute the original path gate from site.js. Tests of the Account port
 // alone would mock loadJson and miss a GET rejected before network dispatch.
-const gateStart = source.indexOf("  function sameOriginPath(value) {");
+const gateStart = source.indexOf('  function sameOriginPath(value, method = "GET") {');
 const gateEnd = source.indexOf("\n  // Eligibility is shared", gateStart);
 assert.ok(gateStart >= 0 && gateEnd > gateStart, "canonical same-origin gate missing");
 const sameOriginPath = new Function(source.slice(gateStart,gateEnd) +
@@ -44,7 +44,7 @@ test("real same-origin gate permits only a single exact MCP authority UUID query
 });
 
 test("Account JSON transport always invokes the real same-origin URL gate",()=>{
-  assert.match(source,/if \(!sameOriginPath\(path\)\) throw new Error\("api-path-invalid"\)/);
+  assert.match(source,/if \(!sameOriginPath\(path, method\)\) throw new Error\("api-path-invalid"\)/);
 });
 
 const first = {
@@ -174,6 +174,9 @@ test("Account central MCP routes admit only exact client UUID and one POST",asyn
       assert.equal(sameOriginPath(invalid),false,invalid);
   }
   assert.equal(sameOriginPath("/account/mcp/central-selections"),false);
+  assert.equal(sameOriginPath("/account/mcp/central-selections","GET"),false);
+  assert.equal(sameOriginPath("/account/mcp/central-selections","POST"),true);
+  assert.equal(sameOriginPath("/account/mcp/central-targets","POST"),false);
   const calls=[];
   const h=centralHarness({status:"authenticated"},async (...args)=>{
     calls.push(args);
