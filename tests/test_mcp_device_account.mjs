@@ -309,6 +309,41 @@ test("denied MCP device selection cannot invalidate an active grant revocation",
   assert.equal(run.calls(),1);
 });
 
+test("MCP device presentation never marks offline Runtime as verified or exposes busy controls",()=>{
+  // Exercise the real Account renderer; readiness alone never proves online state.
+  const portal=readFileSync(new URL("../site/assets/account-portal.js",import.meta.url),"utf8");
+  const start=portal.indexOf("  function mcpDeviceRecords() {");
+  const end=portal.indexOf("\n  function mcpAuthorityPanel() {",start);
+  assert.ok(start>0 && end>start,"real MCP device renderer missing");
+  const render=new Function("devices","selecting","revoking",[
+    'const mcpDevicesStatus="ready",mcpDevices=devices;',
+    'const mcpRevoking=revoking,mcpCentralSelecting=selecting;',
+    'const i18n={getLocale:()=>"pt-BR"};',
+    'const esc=value=>String(value??""),tx=value=>String(value);',
+    'const icon=()=>"",pendingRecords=()=>"",empty=()=>"";',
+    'const action=(label,_icon,options)=>"<button"+(options.disabled?" disabled":"")+">"+label+"</button>";',
+    portal.slice(start,end),
+    "return mcpDeviceRecords();",
+  ].join("\n"));
+  const target={device_id:first.device_id,name:"Product",
+    last_seen_at:"2026-11-12T06:00:00Z",online:false,runtime_ready:true};
+  const offline=render([target],false,false);
+  assert.match(offline,/Offline/);
+  assert.doesNotMatch(offline,/status-tag is-verified/,"offline is not attested");
+  assert.match(offline,/<button>Autorizações<\/button>/);
+  const online=render([{...target,online:true}],false,false);
+  assert.match(online,/status-tag is-verified/);
+  assert.match(render([{...target,online:true,runtime_ready:false}],false,false),
+    /Runtime não confirmado/);
+  assert.doesNotMatch(render([{...target,online:true,runtime_ready:false}],false,false),
+    /status-tag is-verified/);
+  assert.match(render([target],true,false),/<button disabled>Autorizações<\/button>/);
+  assert.match(render([target],false,true),/<button disabled>Autorizações<\/button>/);
+  const panel=portal.slice(portal.indexOf("  function mcpAuthorityPanel() {"),
+    portal.indexOf("\n  function field(",portal.indexOf("  function mcpAuthorityPanel() {")));
+  assert.match(panel,/disabled:mcpRevoking \|\| mcpCentralSelecting, small:true/);
+});
+
 test("re-entering devices refreshes Owner data without interrupting a revocation",()=>{
   // Run the actual router with injected navigation/document stubs.
   const portal=readFileSync(new URL("../site/assets/account-portal.js",import.meta.url),"utf8");
