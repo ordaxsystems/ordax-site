@@ -936,8 +936,11 @@
     if (!byId.has(requested)) requested = "visao-geral";
     const changed = requested !== state.section;
     state.section = requested;
-    if (changed && requested === "dispositivos" && signedIn() && !mcpRevoking) {
-      // A new visit must re-read the Platform. Never show old Owner grants
+    if (changed && requested === "dispositivos" && signedIn()
+        && !mcpRevoking && !mcpCentralSelecting) {
+      // In-flight Owner selection must retain its exact POST receipt. A
+      // section revisit cannot reset the revision and permit a second choice.
+      // A new idle visit must re-read the Platform, never show old Owner grants
       // as if they were still active; no polling and no duplicate SSOT.
       // An in-flight revoke keeps its revision and performs its own readback.
       mcpDevicesRevision += 1;

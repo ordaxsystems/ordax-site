@@ -351,7 +351,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   const end=portal.indexOf("\n  const dialog = document.getElementById(\"account-dialog\");",start);
   assert.ok(start>0 && end>start,"real Account router missing");
   const realRoute=portal.slice(start,end);
-  const harness=new Function("revoking",[
+  const harness=new Function("revoking","selecting",[
     'let state={section:"visao-geral"};',
     'const byId=new Map([["visao-geral",{}],["dispositivos",{}]]);',
     'const location={hash:"#dispositivos"};',
@@ -359,22 +359,22 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
     'const document={getElementById:()=>({focus:()=>{}})};',
     'const dialog={open:false,close:()=>{}};',
     'const closeMore=()=>{},renderNavigation=()=>{},renderContent=()=>{};',
-    'let mcpRevoking=revoking,mcpDevicesRevision=3,mcpAuthorityRevision=5;',
+    'let mcpRevoking=revoking,mcpCentralSelecting=selecting,mcpDevicesRevision=3,mcpAuthorityRevision=5;',
     'let mcpDevices=[{device_id:"old"}],mcpDevicesStatus="ready";',
     'let mcpAuthority={grant_groups:[{grant_group_id:"old"}]},mcpAuthorityDevice="old",',
     '    mcpAuthorityStatus="ready",mcpRevocationNotice="old";',
     'const signedIn=()=>true;',
-    'const resetMcpCentral=()=>{};',
+    'let centralResets=0;const resetMcpCentral=()=>{centralResets++};',
     'let loads=0;',
     'async function loadMcpDevices(){loads++;mcpDevicesStatus="loading";}',
     realRoute,
-    'return {run:route, setHash:v=>{location.hash=v},',
+    'return {run:route, setHash:v=>{location.hash=v}, resets:()=>centralResets,',
     '  view:()=>({loads,deviceRev:mcpDevicesRevision,authRev:mcpAuthorityRevision,',
     '  devices:mcpDevices,authority:mcpAuthority,chosen:mcpAuthorityDevice,',
     '  deviceStatus:mcpDevicesStatus,notice:mcpRevocationNotice})};',
   ].join("\n"));
 
-  const normal=harness(false);
+  const normal=harness(false,false);
   normal.run();
   assert.deepEqual(normal.view(),{
     loads:1,deviceRev:4,authRev:6,devices:null,authority:null,
@@ -386,9 +386,27 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   normal.setHash("#dispositivos");normal.run();
   assert.equal(normal.view().loads,2,"new visit refreshes instead of showing stale grants");
 
-  const pending=harness(true);
+  const pending=harness(true,false);
   pending.run();
   assert.equal(pending.view().loads,0,"do not start a new fetch during revoke");
   assert.equal(pending.view().authRev,5,"do not cancel in-flight revocation receipt");
   assert.equal(pending.view().authority.grant_groups[0].grant_group_id,"old");
+
+  // A user may navigate away and back after confirming the Owner choice
+  // while the single POST is still in flight. Never invalidate its receipt
+  // or permit a fresh selection while the original outcome is uncertain.
+  const selecting=harness(false,true);
+  selecting.run();
+  assert.equal(selecting.view().loads,0,"do not refresh while selecting");
+  assert.equal(selecting.view().authRev,5);
+  assert.equal(selecting.view().deviceRev,3);
+  selecting.setHash("#visao-geral");
+  selecting.run();
+  selecting.setHash("#dispositivos");
+  selecting.run();
+  assert.equal(selecting.view().loads,0,"revisit cannot restart inventory during POST");
+  assert.equal(selecting.view().authRev,5,"revisit preserves the Owner selection receipt");
+  assert.equal(selecting.view().deviceRev,3,"revisit preserves current device scope");
+  assert.equal(selecting.view().chosen,"old");
+  assert.equal(selecting.resets(),0,"revisit must not cancel the pending selection");
 });
