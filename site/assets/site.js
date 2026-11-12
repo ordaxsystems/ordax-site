@@ -15,15 +15,15 @@
   const t = (messageId, variables) => i18n.t(messageId, variables);
 
   function sameOriginPath(value) {
-    // The Owner grant inspector is the ONLY GET JSON route accepting a query.
-    // Keep the canonical UUID shape and one fixed parameter; never enable
-    // arbitrary query forwarding to other Identity or administrative routes.
+    // Only the exact Owner device and OAuth-client reads accept a UUID query.
+    // Never allow arbitrary parameters, URL normalization or other Identity routes.
     if (typeof value === "string" &&
-        /^[/]account[/]mcp[/]authority[?]device_id=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {
+        /^[/]account[/]mcp[/](?:authority[?]device_id|central-(?:targets|selections)[?]client_id)=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {
       return true;
     }
     // This admin read requires exactly one chosen device, not a bare route.
-    if (value === "/account/mcp/authority") return false;
+    if (["/account/mcp/authority","/account/mcp/central-targets",
+      "/account/mcp/central-selections"].includes(value)) return false;
     // Keep browser links aligned with the Site catalog's canonical path gate.
     // Disallow encoded separators/dots, traversals and URL normalization aliases.
     return (
@@ -93,7 +93,9 @@
     // 200 (even to another same-origin route) cannot establish Identity or
     // legal-policy readiness; never follow redirects or accept alias responses.
     if (!sameOriginPath(path)) throw new Error("api-path-invalid");
-    if (method !== "GET" && (method !== "POST" || path !== "/account/mcp/revoke")) {
+    if (method !== "GET" && (method !== "POST" || ![
+      "/account/mcp/revoke", "/account/mcp/central-selections",
+    ].includes(path))) {
       throw new Error("api-method-not-allowed");
     }
     if (method === "GET" && jsonBody !== undefined) throw new Error("api-get-body-not-allowed");
@@ -718,6 +720,71 @@
         throw new Error("mcp-owner-revoke-unconfirmed");
       if (owner !== sessionView || sessionView.status !== "authenticated")
         throw new Error("public-account-session-changed");
+      return value;
+    },
+    async readMcpCentralTargets(clientId, signal) {
+      const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const owner=sessionView;
+      if(owner.status!=="authenticated")throw Error("public-account-session-required");
+      if(!uuid.test(clientId))throw Error("mcp-owner-client-invalid");
+      const value=await loadJson("/account/mcp/central-targets?client_id="+clientId,signal,
+        {maxBytes:8192});
+      if(!value||value.ok!==true||value.schema!=="ordax.owner-central-targets/1"
+          ||value.client_id!==clientId||value.attested!==false
+          ||value.dispatch_authorized!==false
+          ||!Number.isSafeInteger(value.eligible_device_count)
+          ||value.eligible_device_count<0||value.eligible_device_count>25
+          ||!Array.isArray(value.targets)||value.targets.length!==value.eligible_device_count
+          ||new Set(value.targets.map(t=>t?.device_id)).size!==value.targets.length
+          ||!value.targets.every(t=>t&&uuid.test(t.device_id)
+            &&typeof t.reported_online==="boolean"&&typeof t.runtime_ready==="boolean"))
+        throw Error("mcp-owner-central-targets-invalid");
+      if(owner!==sessionView||sessionView.status!=="authenticated")
+        throw Error("public-account-session-changed");
+      return value;
+    },
+    async readMcpCentralSelections(clientId, signal) {
+      const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const owner=sessionView;
+      if(owner.status!=="authenticated")throw Error("public-account-session-required");
+      if(!uuid.test(clientId))throw Error("mcp-owner-client-invalid");
+      const value=await loadJson("/account/mcp/central-selections?client_id="+clientId,
+        signal,{maxBytes:8192});
+      if(!value||value.ok!==true||value.schema!=="ordax.owner-central-selections/1"
+          ||value.client_id!==clientId||value.attested!==false
+          ||value.dispatch_authorized!==false
+          ||!Number.isSafeInteger(value.count)||value.count<0||value.count>25
+          ||!Array.isArray(value.pending_selections)
+          ||value.pending_selections.length!==value.count
+          ||new Set(value.pending_selections.map(t=>t?.challenge_id)).size!==value.count
+          ||!value.pending_selections.every(t=>t&&uuid.test(t.challenge_id)
+            &&typeof t.created_at==="string"&&Number.isFinite(Date.parse(t.created_at))
+            &&typeof t.expires_at==="string"&&Number.isFinite(Date.parse(t.expires_at))))
+        throw Error("mcp-owner-central-selections-invalid");
+      if(owner!==sessionView||sessionView.status!=="authenticated")
+        throw Error("public-account-session-changed");
+      return value;
+    },
+    async selectMcpCentralDevice(input, signal) {
+      const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const owner=sessionView;
+      if(owner.status!=="authenticated")throw Error("public-account-session-required");
+      if(!input||Object.keys(input).sort().join(",")
+          !=="challenge_id,client_id,confirm,device_id"
+          ||!uuid.test(input.client_id)||!uuid.test(input.challenge_id)
+          ||!uuid.test(input.device_id)||input.confirm!=="selecionar")
+        throw Error("mcp-owner-central-selection-invalid");
+      const value=await loadJson("/account/mcp/central-selections",signal,
+        {maxBytes:4096,method:"POST",jsonBody:input});
+      if(!value||value.ok!==true
+          ||value.schema!=="ordax.owner-central-device-selection/1"
+          ||value.status!=="pending"||value.client_id!==input.client_id
+          ||value.device_id!==input.device_id||value.challenge_id!==input.challenge_id
+          ||value.attested!==false||value.dispatch_authorized!==false
+          ||typeof value.expires_at!=="string"||!Number.isFinite(Date.parse(value.expires_at)))
+        throw Error("mcp-owner-central-selection-unconfirmed");
+      if(owner!==sessionView||sessionView.status!=="authenticated")
+        throw Error("public-account-session-changed");
       return value;
     },
     // Reuse Account's authenticated same-origin transport: no Product tokens in JS.

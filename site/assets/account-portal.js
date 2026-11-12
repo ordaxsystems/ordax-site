@@ -235,12 +235,114 @@
   let mcpRevoking = false;
   let mcpRevocationNotice = "";
 
+  let mcpCentralClient = null;
+  let mcpCentralTargets = null;
+  let mcpCentralSelections = null;
+  let mcpCentralStatus = "unavailable";
+  let mcpCentralRevision = 0;
+  let mcpCentralSelecting = false;
+  let mcpCentralNotice = "";
+
+  function resetMcpCentral() {
+    mcpCentralRevision += 1;
+    mcpCentralClient = null;
+    mcpCentralTargets = null;
+    mcpCentralSelections = null;
+    mcpCentralStatus = "unavailable";
+    mcpCentralSelecting = false;
+    mcpCentralNotice = "";
+  }
+
+  async function loadMcpCentralClient(clientId) {
+    if (!signedIn() || mcpRevoking || mcpCentralSelecting
+        || mcpAuthorityStatus !== "ready" || !mcpAuthority
+        || !mcpAuthority.clients.some(c => c.client_id === clientId)
+        || !mcpAuthority.grant_groups.some(g => g.client_id === clientId
+          && g.client_consent_active && (!g.valid_until
+            || Date.parse(g.valid_until) > Date.now()))) return;
+    const revision = ++mcpCentralRevision, owner = session;
+    mcpCentralClient = clientId;
+    mcpCentralTargets = null;
+    mcpCentralSelections = null;
+    mcpCentralStatus = "loading";
+    mcpCentralNotice = "";
+    renderContent();
+    try {
+      const [targets, selections] = await Promise.all([
+        account.readMcpCentralTargets(clientId),
+        account.readMcpCentralSelections(clientId),
+      ]);
+      if (revision !== mcpCentralRevision || session !== owner || !signedIn()
+          || mcpAuthorityDevice !== mcpAuthority?.device_id) return;
+      mcpCentralTargets = targets;
+      mcpCentralSelections = selections;
+      mcpCentralStatus = "ready";
+    } catch {
+      if (revision !== mcpCentralRevision || session !== owner || !signedIn()) return;
+      mcpCentralTargets = null;
+      mcpCentralSelections = null;
+      mcpCentralStatus = "unavailable";
+    }
+    if (state.section === "dispositivos") renderContent();
+  }
+
+  async function selectMcpCentralDevice(control) {
+    if (mcpCentralSelecting || mcpRevoking || !signedIn()
+        || mcpAuthorityStatus !== "ready" || !mcpAuthority
+        || mcpCentralStatus !== "ready" || !mcpCentralTargets || !mcpCentralSelections
+        || mcpCentralClient !== control.dataset.mcpCentralSelect
+        || mcpCentralTargets.client_id !== mcpCentralClient
+        || mcpCentralSelections.client_id !== mcpCentralClient
+        || mcpCentralSelections.count !== 1) return;
+    const deviceId = mcpAuthorityDevice;
+    const ticket = mcpCentralSelections.pending_selections[0];
+    const available = mcpCentralTargets.targets.some(t =>
+      t.device_id === deviceId && t.reported_online && t.runtime_ready);
+    if (!available || !ticket || Date.parse(ticket.expires_at) <= Date.now()) return;
+    const device = mcpDevices?.find(d => d.device_id === deviceId);
+    const client = mcpAuthority.clients.find(c => c.client_id === mcpCentralClient);
+    if (!window.confirm(
+      `${tx("Selecionar sessão MCP")} — ${client?.client_name || mcpCentralClient}
+      / ${device?.name || deviceId}?\n\n${tx("O Runtime precisará confirmar a sessão. Esta ação não concede novas permissões.")}`
+    )) return;
+    const revision = ++mcpCentralRevision, owner = session;
+    const clientId = mcpCentralClient;
+    mcpCentralSelecting = true;
+    mcpCentralNotice = "";
+    renderContent();
+    try {
+      const selected = await account.selectMcpCentralDevice({
+        client_id:clientId, challenge_id:ticket.challenge_id,
+        device_id:deviceId, confirm:"selecionar",
+      });
+      if (revision !== mcpCentralRevision || session !== owner || !signedIn()
+          || mcpAuthorityDevice !== deviceId) return;
+      if (selected.status !== "pending" || selected.attested !== false
+          || selected.dispatch_authorized !== false)
+        throw new Error("mcp-central-unconfirmed");
+      mcpCentralNotice = "Seleção enviada. Aguarde confirmação do Runtime; controle remoto ainda não atestado.";
+      mcpCentralStatus = "pending";
+    } catch {
+      if (revision !== mcpCentralRevision || session !== owner || !signedIn()) return;
+      mcpCentralTargets = null;
+      mcpCentralSelections = null;
+      mcpCentralStatus = "unavailable";
+      mcpCentralNotice = "Seleção não confirmada. Consulte novamente antes de outra tentativa.";
+    } finally {
+      if (revision === mcpCentralRevision && session === owner && signedIn()) {
+        mcpCentralSelecting = false;
+        if (state.section === "dispositivos") renderContent();
+      }
+    }
+  }
+
   async function loadMcpAuthority(deviceId) {
     // A denied/late selection must not invalidate an in-flight revocation.
     // Advancing revision first would strand mcpRevoking=true in its finally.
-    if (!signedIn() || mcpRevoking || mcpDevicesStatus !== "ready"
+    if (!signedIn() || mcpRevoking || mcpCentralSelecting || mcpDevicesStatus !== "ready"
         || !mcpDevices?.some(d => d.device_id === deviceId)) return;
     const revision = ++mcpAuthorityRevision;
+    resetMcpCentral();
     mcpAuthorityDevice = deviceId;
     mcpAuthority = null;
     mcpAuthorityStatus = "loading";
@@ -261,7 +363,7 @@
   }
 
   async function revokeMcpDeviceGrant(control) {
-    if (mcpRevoking || !signedIn() || mcpAuthorityStatus !== "ready" || !mcpAuthority) return;
+    if (mcpRevoking || mcpCentralSelecting || !signedIn() || mcpAuthorityStatus !== "ready" || !mcpAuthority) return;
     const deviceId = control.dataset.mcpDevice;
     const clientId = control.dataset.mcpClient;
     const groupId = control.dataset.mcpGroup;
@@ -292,6 +394,7 @@
         throw new Error("mcp-owner-revoke-not-reflected");
       mcpAuthority = confirmed;
       mcpAuthorityStatus = "ready";
+      resetMcpCentral();
       mcpRevocationNotice = "Autorização revogada e verificada.";
     } catch {
       if (revision !== mcpAuthorityRevision || !signedIn()) return;
@@ -555,10 +658,50 @@
       <thead><tr><th scope="col">${tx("Cliente OAuth")}</th><th scope="col">${tx("Perfil de acesso")}</th>
       <th scope="col">${tx("Validade")}</th><th scope="col">${tx("Revogar")}</th></tr></thead><tbody>${rows}</tbody></table>`
       : `<p>${tx("Nenhuma autorização ativa para este computador.")}</p>`;
+    const availableClients = mcpAuthority.clients.filter(c =>
+      grants.some(g => g.client_id === c.client_id && g.client_consent_active
+        && (!g.valid_until || Date.parse(g.valid_until) > Date.now())));
+    const centralButtons = availableClients.map(c =>
+      `<button type="button" class="button outline h-8"
+        data-mcp-central-client="${esc(c.client_id)}"${mcpRevoking || mcpCentralSelecting ? " disabled" : ""}>
+        ${icon("plug")}${tx("Sessão MCP")} · ${esc(c.client_name)}</button>`).join("");
+    let centralDetail = "";
+    if (mcpCentralClient) {
+      const target = mcpCentralTargets?.targets.find(t =>
+        t.device_id === mcpAuthorityDevice && t.reported_online && t.runtime_ready);
+      const tickets = mcpCentralSelections?.pending_selections ?? [];
+      const ticket = tickets.length === 1 ? tickets[0] : null;
+      const ready = mcpCentralStatus === "ready" && target
+        && mcpCentralSelections?.count === 1 && ticket
+        && Date.parse(ticket.expires_at) > Date.now();
+      const description = mcpCentralStatus === "loading"
+        ? "Consultando desafios e computadores autorizados."
+        : mcpCentralStatus === "pending"
+          ? "Aguardando confirmação do Runtime."
+          : mcpCentralStatus === "ready"
+            ? !target
+              ? "Este dispositivo não possui grant de ação e Runtime elegível para esta sessão."
+              : !ticket
+                ? "Não existe um desafio único e válido aguardando seleção."
+                : "O dispositivo e o desafio foram verificados para seleção Owner."
+            : "A seleção de sessão MCP está indisponível.";
+      centralDetail = `<div class="device-revoke-note" role="status">${tx(description)}
+        ${ready ? action("Selecionar computador para esta sessão", "shield", {
+          disabled:mcpRevoking || mcpCentralSelecting, small:true,
+          data:`data-mcp-central-select="${esc(mcpCentralClient)}"`,
+        }) : ""}</div>`;
+    }
+    const centralPanel = availableClients.length
+      ? `<div class="panel-actions" aria-label="${tx("Sessão MCP Owner")}">
+        <p>${tx("Selecione o cliente OAuth autorizado. A escolha não concede grants nem prova controle remoto.")}</p>
+        <div>${centralButtons}</div></div>${centralDetail}`
+      : "";
+    const centralNotice = mcpCentralNotice
+      ? `<p class="device-revoke-note" role="status">${icon("info")}${tx(mcpCentralNotice)}</p>` : "";
     return `<section class="settings-section" aria-labelledby="mcp-grants-heading">
       <h3 id="mcp-grants-heading">${tx("Autorizações de aplicativos")} · ${esc(device.name)}</h3>
       <p class="panel-description">${tx("Revogar remove apenas o grant selecionado, sem desconectar outros computadores.")}</p>
-      ${table}${notice}</section>`;
+      ${table}${centralPanel}${centralNotice}${notice}</section>`;
   }
   function field(label, placeholder, type = "text", capabilityId = "", { id = "", hint = "" } = {}) {
     const emailAvailable = capabilityId === "accountEmail" && capabilityState(capabilityId).status === "verified";
@@ -805,6 +948,7 @@
       mcpAuthorityDevice = null;
       mcpAuthorityStatus = "unavailable";
       mcpRevocationNotice = "";
+      resetMcpCentral();
     }
     closeMore();
     if (dialog.open) dialog.close();
@@ -873,7 +1017,13 @@
       document.getElementById("conteudo").focus();
       return;
     }
-    if (control.matches("[data-mcp-device]") && !control.matches("[data-mcp-revoke]")) {
+    if (control.matches("[data-mcp-central-select]")) {
+      event.preventDefault();
+      if (!layoutPreview) void selectMcpCentralDevice(control);
+    } else if (control.matches("[data-mcp-central-client]")) {
+      event.preventDefault();
+      if (!layoutPreview) void loadMcpCentralClient(control.dataset.mcpCentralClient);
+    } else if (control.matches("[data-mcp-device]") && !control.matches("[data-mcp-revoke]")) {
       event.preventDefault();
       if (!layoutPreview) void loadMcpAuthority(control.dataset.mcpDevice);
     } else if (control.matches("[data-mcp-revoke]")) {
@@ -978,6 +1128,7 @@
         mcpAuthorityStatus = "unavailable";
         mcpRevoking = false;
         mcpRevocationNotice = "";
+        resetMcpCentral();
         if (signedIn() && state.section === "dispositivos") void loadMcpDevices();
       }
       renderSession();

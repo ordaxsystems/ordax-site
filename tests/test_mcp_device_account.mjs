@@ -101,7 +101,7 @@ test("an authenticated, verified empty list is distinct from an unavailable serv
 const authorityStart = source.indexOf("    async readMcpAuthority(deviceId, signal) {");
 const authorityEnd = source.indexOf("\n    },\n    async revokeMcpGrant(input, signal) {", authorityStart);
 const revokeStart = source.indexOf("    async revokeMcpGrant(input, signal) {");
-const revokeEnd = source.indexOf("\n    },\n    // Reuse Account's authenticated", revokeStart);
+const revokeEnd = source.indexOf("\n    },\n    async readMcpCentralTargets(clientId, signal) {", revokeStart);
 assert.ok(authorityStart > 0 && authorityEnd > authorityStart, "Owner authority read port missing");
 assert.ok(revokeStart > 0 && revokeEnd > revokeStart, "Owner revoke port missing");
 
@@ -123,6 +123,110 @@ const group = "33333333-3333-4333-8333-333333333333";
 const groupItem = {grant_group_id:group,client_id:client,profile_key:"full-computer-control",valid_until:null,client_consent_active:true};
 const authority = {ok:true,schema:"ordax.owner-mcp-authority-view/1",device_id:first.device_id,
   clients:[{client_id:client,client_name:"ChatGPT"}],grant_groups:[groupItem]};
+
+const centralTargetsStart=source.indexOf("    async readMcpCentralTargets(clientId, signal) {");
+const centralTargetsEnd=source.indexOf("\n    },\n    async readMcpCentralSelections(clientId, signal) {",
+  centralTargetsStart);
+const centralTicketsStart=source.indexOf("    async readMcpCentralSelections(clientId, signal) {");
+const centralTicketsEnd=source.indexOf("\n    },\n    async selectMcpCentralDevice(input, signal) {",
+  centralTicketsStart);
+const centralSelectStart=source.indexOf("    async selectMcpCentralDevice(input, signal) {");
+const centralSelectEnd=source.indexOf("\n    },\n    // Reuse Account's authenticated",
+  centralSelectStart);
+assert.ok(centralTargetsStart>0&&centralTargetsEnd>centralTargetsStart);
+assert.ok(centralTicketsStart>0&&centralTicketsEnd>centralTicketsStart);
+assert.ok(centralSelectStart>0&&centralSelectEnd>centralSelectStart);
+const centralBody=(start,end,head)=>source.slice(start+head.length,end);
+function centralHarness(session,fetcher){
+  return new Function("loadJson","initial",`let sessionView=initial;
+    return {
+      targets: async function(clientId,signal) {${centralBody(
+        centralTargetsStart,centralTargetsEnd,"    async readMcpCentralTargets(clientId, signal) {")}
+      },
+      tickets: async function(clientId,signal) {${centralBody(
+        centralTicketsStart,centralTicketsEnd,"    async readMcpCentralSelections(clientId, signal) {")}
+      },
+      select: async function(input,signal) {${centralBody(
+        centralSelectStart,centralSelectEnd,"    async selectMcpCentralDevice(input, signal) {")}
+      },
+      change(next){sessionView=next}
+    };`)(fetcher,session);
+}
+const challenge="99999999-9999-4999-8999-999999999999";
+const expiry=new Date(Date.now()+100000).toISOString();
+const centralTargets={ok:true,schema:"ordax.owner-central-targets/1",client_id:client,
+  eligible_device_count:1,targets:[{device_id:first.device_id,
+    reported_online:true,runtime_ready:true}],attested:false,dispatch_authorized:false};
+const centralTickets={ok:true,schema:"ordax.owner-central-selections/1",client_id:client,
+  count:1,pending_selections:[{challenge_id:challenge,
+    created_at:new Date(Date.now()-1000).toISOString(),expires_at:expiry}],
+  attested:false,dispatch_authorized:false};
+const centralChoice={client_id:client,challenge_id:challenge,
+  device_id:first.device_id,confirm:"selecionar"};
+
+test("Account central MCP routes admit only exact client UUID and one POST",async()=>{
+  for(const route of ["targets","selections"]){
+    const path="/account/mcp/central-"+route+"?client_id="+client;
+    assert.equal(sameOriginPath(path),true);
+    for(const invalid of ["/account/mcp/central-"+route,
+      path+"&client_id="+client,path+"&owner_id="+other,path+"#fragment",
+      path.replace(client,"invalid"),path.replace(client,"%32"+client.slice(1))])
+      assert.equal(sameOriginPath(invalid),false,invalid);
+  }
+  assert.equal(sameOriginPath("/account/mcp/central-selections"),false);
+  const calls=[];
+  const h=centralHarness({status:"authenticated"},async (...args)=>{
+    calls.push(args);
+    return args[0].includes("central-targets")?centralTargets:
+      args[0].includes("?")?centralTickets:
+      {ok:true,schema:"ordax.owner-central-device-selection/1",status:"pending",
+        client_id:client,device_id:first.device_id,challenge_id:challenge,
+        expires_at:expiry,attested:false,dispatch_authorized:false};
+  });
+  assert.equal((await h.targets(client)).eligible_device_count,1);
+  assert.equal((await h.tickets(client)).count,1);
+  assert.equal((await h.select(centralChoice)).status,"pending");
+  assert.deepEqual(calls.map(c=>c[0]),[
+    "/account/mcp/central-targets?client_id="+client,
+    "/account/mcp/central-selections?client_id="+client,
+    "/account/mcp/central-selections",
+  ]);
+  assert.equal(calls[2][2].method,"POST");
+  assert.deepEqual(calls[2][2].jsonBody,centralChoice);
+});
+
+test("Account central results never imply attestation and reject session changes",async()=>{
+  for(const invalid of [{...centralTargets,attested:true},
+    {...centralTargets,targets:[{...centralTargets.targets[0],runtime_ready:"yes"}]},
+    {...centralTargets,client_id:other}]){
+    await assert.rejects(centralHarness({status:"authenticated"},async()=>invalid).targets(client));
+  }
+  for(const invalid of [{...centralTickets,count:2},
+    {...centralTickets,pending_selections:[{...centralTickets.pending_selections[0],
+      challenge_id:"bad"}]}, {...centralTickets,dispatch_authorized:true}]){
+    await assert.rejects(centralHarness({status:"authenticated"},async()=>invalid).tickets(client));
+  }
+  await assert.rejects(centralHarness({status:"authenticated"},async()=>({
+    ok:true,schema:"ordax.owner-central-device-selection/1",status:"bound",
+    client_id:client,challenge_id:challenge,device_id:first.device_id,
+    expires_at:expiry,attested:true,dispatch_authorized:true,
+  })).select(centralChoice));
+  await assert.rejects(centralHarness({status:"anonymous"},async()=>{
+    throw Error("must not fetch");
+  }).select(centralChoice),/session-required/);
+  let release;
+  const waiting=new Promise(resolve=>{release=resolve});
+  const h=centralHarness({status:"authenticated"},()=>waiting);
+  const request=h.targets(client);
+  h.change({status:"authenticated"});
+  release(centralTargets);
+  await assert.rejects(request,/session-changed/);
+  const portal=readFileSync(new URL("../site/assets/account-portal.js",import.meta.url),"utf8");
+  assert.match(portal,/data-mcp-central-select/);
+  assert.match(portal,/mcpCentralSelections\?\.count === 1/);
+  assert.match(portal,/window\.confirm\(/);
+  assert.match(portal,/mcpCentralNotice = "Seleção enviada/);
+});
 
 test("Account grant inspection is scoped to one UUID, rejects forgery and duplicate grants", async () => {
   const calls = [];
@@ -169,7 +273,8 @@ test("Revoke UI requires exact group and Owner confirmation; no optimistic remov
   assert.match(portal,/await account\.revokeMcpGrant\(/);
   assert.match(portal,/await account\.readMcpAuthority\(deviceId\)/);
   assert.match(portal,/mcp-owner-revoke-not-reflected/);
-  assert.match(source,/method !== "POST" \|\| path !== "\/account\/mcp\/revoke"/);
+  assert.match(source,/method !== "POST" \|\| !\[/);
+  assert.match(source,/"\/account\/mcp\/revoke", "\/account\/mcp\/central-selections"/);
 });
 
 test("denied MCP device selection cannot invalidate an active grant revocation",async()=>{
@@ -183,6 +288,7 @@ test("denied MCP device selection cannot invalidate an active grant revocation",
     'let mcpRevoking=true, mcpAuthorityRevision=7, mcpAuthority=null;',
     'let mcpAuthorityDevice=null, mcpAuthorityStatus="unavailable";',
     'let mcpRevocationNotice="", mcpDevicesStatus="ready";',
+    'let mcpCentralSelecting=false;const resetMcpCentral=()=>{};',
     'let mcpDevices=[{device_id:deviceId}], calls=0;',
     'const state={section:"dispositivos"};',
     'const signedIn=()=>true, renderContent=()=>{};',
@@ -220,6 +326,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
     'let mcpAuthority={grant_groups:[{grant_group_id:"old"}]},mcpAuthorityDevice="old",',
     '    mcpAuthorityStatus="ready",mcpRevocationNotice="old";',
     'const signedIn=()=>true;',
+    'const resetMcpCentral=()=>{};',
     'let loads=0;',
     'async function loadMcpDevices(){loads++;mcpDevicesStatus="loading";}',
     realRoute,
