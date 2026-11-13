@@ -879,7 +879,7 @@
       } catch { throw Error("mcp-owner-github-start-unconfirmed"); }
       const expected=new Set(["allow_signup","client_id","code_challenge","code_challenge_method",
         "prompt","redirect_uri","state"]);
-      const state=value.challenge_id+"\\.";
+      const stateValue=authorization.searchParams.get("state")||"";
       if(authorization.protocol!=="https:"||authorization.hostname!=="github.com"
           ||authorization.port||authorization.pathname!=="/login/oauth/authorize"
           ||authorization.username||authorization.password||authorization.hash
@@ -891,9 +891,8 @@
           ||authorization.searchParams.get("redirect_uri")!=="https://ordax.com.br/account/mcp/github/callback"
           ||authorization.searchParams.get("allow_signup")!=="false"
           ||authorization.searchParams.get("prompt")!=="select_account"
-          ||!(authorization.searchParams.get("state")||"").startsWith(state.slice(0,-1))
           ||!new RegExp("^"+value.challenge_id.replace(/-/g,"\\-")+"\\.[A-Za-z0-9_-]{43}$")
-            .test(authorization.searchParams.get("state")||"")
+            .test(stateValue)
           ||install.protocol!=="https:"||install.hostname!=="github.com"||install.port
           ||!/^[/]apps[/][A-Za-z0-9-]+[/]installations[/]new$/.test(install.pathname)
           ||install.search||install.hash||install.username||install.password)
