@@ -6,7 +6,7 @@ Repositório de **apresentação pública** do OrdaX. Independente dos builds do
 
 ## Integração com o ecossistema
 
-O Site não monta o OrdaX. Ele apresenta o produto e consome somente interfaces públicas: catálogo de downloads/releases autorizado, identidade pública e assets publicados. Builds e source de OS, Surface, Desktop, Creator e Apps continuam nos respectivos owners.
+O Site não monta o OrdaX. **A integração normal de produto** consome somente interfaces públicas: catálogo de downloads/releases autorizado, identidade pública e assets publicados. Builds e source de OS, Surface, Desktop, Creator e Apps continuam nos respectivos owners. A única exceção atual é o bridge **temporário de staging** do gateway de Conta, fixado e limitado por `contracts/canonical-gateway-source.json`; ele não transfere ownership, não autoriza produção e deve desaparecer pela condição de remoção registrada no contrato.
 
 Isso impede que uma mudança de site provoque build do OS ou que uma mudança interna do OS force atualização do portal sem necessidade de publicação. [Regra canônica de composição](https://github.com/ordaxsystems/ordax-os/blob/main/docs/DEVELOPMENT-WORKFLOW.md#integração-multi-repositório--composição-do-produto-2026-11-13).
 
