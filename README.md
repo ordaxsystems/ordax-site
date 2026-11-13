@@ -4,6 +4,12 @@ Repositório de **apresentação pública** do OrdaX. Independente dos builds do
 
 > **Cutover de desenvolvimento integrado (2026-10-24).** O `ordax-site/main` é o owner do código e build independentes. O repoint dos builds Vercel do OS foi integrado em [ordax-os#2225](https://github.com/ordaxsystems/ordax-os/pull/2225); a apresentação histórica duplicada foi removida por [ordax-os#2229](https://github.com/ordaxsystems/ordax-os/pull/2229) (merge `c7533bc6`). Este estado **não** autoriza deploy de produção, alteração de DNS, ativação de Identity nem uso público dos artefatos temporários.
 
+## Integração com o ecossistema
+
+O Site não monta o OrdaX. Ele apresenta o produto e consome somente interfaces públicas: catálogo de downloads/releases autorizado, identidade pública e assets publicados. Builds e source de OS, Surface, Desktop, Creator e Apps continuam nos respectivos owners.
+
+Isso impede que uma mudança de site provoque build do OS ou que uma mudança interna do OS force atualização do portal sem necessidade de publicação. [Regra canônica de composição](https://github.com/ordaxsystems/ordax-os/blob/main/docs/DEVELOPMENT-WORKFLOW.md#integração-multi-repositório--composição-do-produto-2026-11-13).
+
 ## O que pertence ao Site
 
 - `site/` — HTML/CSS/JavaScript estático, landing, downloads, login/cadastro/recuperação, UI de Conta, páginas legais, playground read-only e locales `pt-BR`/`en-US`.
