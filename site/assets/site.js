@@ -21,15 +21,20 @@
     if (value === "/account/mcp/project-onboarding/projects") {
       return method === "POST";
     }
-    // Only the exact Owner device and OAuth-client reads accept a UUID query.
+    if (value === "/account/mcp/github/authorization-challenges"
+        || value === "/account/mcp/github/repository-selections") {
+      return method === "POST";
+    }
+    // Only the exact Owner device/OAuth-client/challenge reads accept a UUID query.
     // Never allow arbitrary parameters, URL normalization or other Identity routes.
     if (typeof value === "string" &&
-        /^[/]account[/]mcp[/](?:(?:authority|project-onboarding)[?]device_id|central-(?:targets|selections)[?]client_id)=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {
+        /^[/]account[/]mcp[/](?:(?:authority|project-onboarding)[?]device_id|central-(?:targets|selections)[?]client_id|github[/]repository-candidates[?]challenge_id)=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {
       return true;
     }
     // These admin reads require exactly one scoped UUID, not a bare route.
     if (["/account/mcp/authority","/account/mcp/project-onboarding",
-      "/account/mcp/central-targets","/account/mcp/central-selections"].includes(value)) return false;
+      "/account/mcp/central-targets","/account/mcp/central-selections",
+      "/account/mcp/github/repository-candidates"].includes(value)) return false;
     // Keep browser links aligned with the Site catalog's canonical path gate.
     // Disallow encoded separators/dots, traversals and URL normalization aliases.
     return (
@@ -851,6 +856,107 @@
           ||!uuid.test(value.project_id)||value.space_id!==request.space_id
           ||value.state!=="active"||value.next_state!=="needs_github_installation")
         throw Error("mcp-owner-project-create-unconfirmed");
+      if(owner!==sessionView||sessionView.status!=="authenticated")
+        throw Error("public-account-session-changed");
+      return value;
+    },
+    async startMcpGithubAuthorization(projectId, signal) {
+      const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const owner=sessionView;
+      if(owner.status!=="authenticated")throw Error("public-account-session-required");
+      if(!uuid.test(projectId))throw Error("mcp-owner-github-project-invalid");
+      const value=await loadJson("/account/mcp/github/authorization-challenges",signal,
+        {maxBytes:8192,method:"POST",jsonBody:{project_id:projectId,confirm:"connect_github"}});
+      if(!value||value.ok!==true
+          ||value.schema!=="ordax.owner-github-authorization-challenge/1"
+          ||!uuid.test(value.challenge_id)||value.project_id!==projectId
+          ||typeof value.expires_at!=="string"||!Number.isFinite(Date.parse(value.expires_at)))
+        throw Error("mcp-owner-github-start-unconfirmed");
+      let authorization,install;
+      try {
+        authorization=new URL(value.authorization_url);
+        install=new URL(value.install_url);
+      } catch { throw Error("mcp-owner-github-start-unconfirmed"); }
+      const expected=new Set(["allow_signup","client_id","code_challenge","code_challenge_method",
+        "prompt","redirect_uri","state"]);
+      const stateValue=authorization.searchParams.get("state")||"";
+      let callback;
+      try { callback=new URL(authorization.searchParams.get("redirect_uri")||""); }
+      catch { throw Error("mcp-owner-github-start-unconfirmed"); }
+      if(authorization.protocol!=="https:"||authorization.hostname!=="github.com"
+          ||authorization.port||authorization.pathname!=="/login/oauth/authorize"
+          ||authorization.username||authorization.password||authorization.hash
+          ||authorization.searchParams.size!==expected.size
+          ||[...authorization.searchParams.keys()].some(key=>!expected.has(key))
+          ||!/^[A-Za-z0-9_.-]{8,160}$/.test(authorization.searchParams.get("client_id")||"")
+          ||!/^[A-Za-z0-9_-]{43}$/.test(authorization.searchParams.get("code_challenge")||"")
+          ||authorization.searchParams.get("code_challenge_method")!=="S256"
+          ||callback.protocol!=="https:"||callback.hostname!=="ordax.com.br"||callback.port
+          ||callback.pathname!=="/account/mcp/github/callback"
+          ||callback.search||callback.hash||callback.username||callback.password
+          ||authorization.searchParams.get("allow_signup")!=="false"
+          ||authorization.searchParams.get("prompt")!=="select_account"
+          ||!new RegExp("^"+value.challenge_id.replace(/-/g,"\\-")+"\\.[A-Za-z0-9_-]{43}$")
+            .test(stateValue)
+          ||install.protocol!=="https:"||install.hostname!=="github.com"||install.port
+          ||!/^[/]apps[/][A-Za-z0-9-]+[/]installations[/]new$/.test(install.pathname)
+          ||install.search||install.hash||install.username||install.password)
+        throw Error("mcp-owner-github-start-unconfirmed");
+      if(owner!==sessionView||sessionView.status!=="authenticated")
+        throw Error("public-account-session-changed");
+      return {...value,authorization_url:authorization.toString(),install_url:install.toString()};
+    },
+    async readMcpGithubCandidates(challengeId, signal) {
+      const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const providerId=/^[1-9][0-9]{0,18}$/;
+      const repository=/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/;
+      const login=/^[A-Za-z0-9-]{1,100}$/;
+      const owner=sessionView;
+      if(owner.status!=="authenticated")throw Error("public-account-session-required");
+      if(!uuid.test(challengeId))throw Error("mcp-owner-github-challenge-invalid");
+      const value=await loadJson("/account/mcp/github/repository-candidates?challenge_id="+challengeId,
+        signal,{maxBytes:128*1024});
+      if(!value||value.ok!==true||value.schema!=="ordax.owner-github-repository-candidates/1"
+          ||value.challenge_id!==challengeId||!uuid.test(value.project_id)
+          ||!Array.isArray(value.repositories)||value.repositories.length>500
+          ||new Set(value.repositories.map(r=>r?.repository_id)).size!==value.repositories.length
+          ||!value.repositories.every(r=>r&&providerId.test(r.repository_id)
+            &&BigInt(r.repository_id)<=9223372036854775807n
+            &&typeof r.repository_full_name==="string"&&r.repository_full_name.length<=200
+            &&repository.test(r.repository_full_name)
+            &&(r.default_branch===null||(typeof r.default_branch==="string"
+              &&r.default_branch.length>=1&&r.default_branch.length<=255
+              &&!/[\u0000-\u001f\u007f]/.test(r.default_branch)))
+            &&typeof r.installation_account_login==="string"&&login.test(r.installation_account_login))
+          ||typeof value.expires_at!=="string"||!Number.isFinite(Date.parse(value.expires_at)))
+        throw Error("mcp-owner-github-candidates-invalid");
+      if(owner!==sessionView||sessionView.status!=="authenticated")
+        throw Error("public-account-session-changed");
+      return value;
+    },
+    async selectMcpGithubRepository(input, signal) {
+      const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const providerId=/^[1-9][0-9]{0,18}$/;
+      const repository=/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/;
+      const owner=sessionView;
+      if(owner.status!=="authenticated")throw Error("public-account-session-required");
+      if(!input||Object.keys(input).sort().join(",")!=="challenge_id,confirm,repository_id"
+          ||!uuid.test(input.challenge_id)||!providerId.test(input.repository_id)
+          ||BigInt(input.repository_id)>9223372036854775807n
+          ||input.confirm!=="select_repository")
+        throw Error("mcp-owner-github-selection-invalid");
+      const value=await loadJson("/account/mcp/github/repository-selections",signal,
+        {maxBytes:8192,method:"POST",jsonBody:input});
+      if(!value||value.ok!==true||value.schema!=="ordax.owner-github-repository-selected/1"
+          ||value.challenge_id!==input.challenge_id||!uuid.test(value.connection_id)
+          ||!uuid.test(value.project_id)||value.repository_id!==input.repository_id
+          ||typeof value.repository_full_name!=="string"||value.repository_full_name.length>200
+          ||!repository.test(value.repository_full_name)
+          ||!(value.default_branch===null||(typeof value.default_branch==="string"
+            &&value.default_branch.length>=1&&value.default_branch.length<=255
+            &&!/[\u0000-\u001f\u007f]/.test(value.default_branch)))
+          ||value.state!=="active"||value.next_state!=="needs_device_binding")
+        throw Error("mcp-owner-github-selection-unconfirmed");
       if(owner!==sessionView||sessionView.status!=="authenticated")
         throw Error("public-account-session-changed");
       return value;

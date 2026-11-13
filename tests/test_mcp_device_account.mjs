@@ -33,6 +33,15 @@ test("real same-origin gate permits only a single exact MCP authority UUID query
   assert.equal(sameOriginPath("/account/mcp/project-onboarding/projects"),false);
   assert.equal(sameOriginPath("/account/mcp/project-onboarding/projects","POST"),true);
   assert.equal(sameOriginPath("/account/mcp/project-onboarding/projects","GET"),false);
+  assert.equal(sameOriginPath("/account/mcp/github/authorization-challenges","POST"),true);
+  assert.equal(sameOriginPath("/account/mcp/github/authorization-challenges","GET"),false);
+  assert.equal(sameOriginPath("/account/mcp/github/repository-selections","POST"),true);
+  assert.equal(sameOriginPath("/account/mcp/github/repository-selections","GET"),false);
+  const githubCandidates="/account/mcp/github/repository-candidates?challenge_id="+deviceId;
+  assert.equal(sameOriginPath(githubCandidates),true);
+  assert.equal(sameOriginPath("/account/mcp/github/repository-candidates"),false);
+  assert.equal(sameOriginPath(githubCandidates+"&repository_id=1"),false);
+  assert.equal(sameOriginPath("/account/mcp/github/callback?code=x&state=y"),false);
   assert.equal(sameOriginPath("/account/mcp/devices"),true);
   assert.equal(sameOriginPath("/account/mcp/revoke"),true);
   for(const bad of [
@@ -166,7 +175,7 @@ function centralHarness(session,fetcher){
 const projectReadStart=source.indexOf("    async readMcpProjectOnboarding(deviceId, signal) {");
 const projectReadEnd=source.indexOf("\n    },\n    async createMcpProject(input, signal) {",projectReadStart);
 const projectCreateStart=source.indexOf("    async createMcpProject(input, signal) {");
-const projectCreateEnd=source.indexOf("\n    },\n    // Reuse Account's authenticated",projectCreateStart);
+const projectCreateEnd=source.indexOf("\n    },\n    async startMcpGithubAuthorization(projectId, signal) {",projectCreateStart);
 assert.ok(projectReadStart>0&&projectReadEnd>projectReadStart,"Owner project read port missing");
 assert.ok(projectCreateStart>0&&projectCreateEnd>projectCreateStart,"Owner project create port missing");
 function projectHarness(session,fetcher){
@@ -235,6 +244,105 @@ test("Account project creation accepts only exact project fields and one same-or
   await assert.rejects(projectHarness({status:"authenticated"},async()=>({...created,
     next_state:"ready_without_grants"})).create(input),/project-create-unconfirmed/);
 });
+
+const githubStartStart=source.indexOf("    async startMcpGithubAuthorization(projectId, signal) {");
+const githubStartEnd=source.indexOf("\n    },\n    async readMcpGithubCandidates(challengeId, signal) {",githubStartStart);
+const githubReadStart=source.indexOf("    async readMcpGithubCandidates(challengeId, signal) {");
+const githubReadEnd=source.indexOf("\n    },\n    async selectMcpGithubRepository(input, signal) {",githubReadStart);
+const githubSelectStart=source.indexOf("    async selectMcpGithubRepository(input, signal) {");
+const githubSelectEnd=source.indexOf("\n    },\n    // Reuse Account's authenticated",githubSelectStart);
+assert.ok(githubStartStart>0&&githubStartEnd>githubStartStart,"GitHub authorization port missing");
+assert.ok(githubReadStart>0&&githubReadEnd>githubReadStart,"GitHub candidates port missing");
+assert.ok(githubSelectStart>0&&githubSelectEnd>githubSelectStart,"GitHub selection port missing");
+function githubHarness(session,fetcher){
+  const body=(start,end,head)=>source.slice(start+head.length,end);
+  return new Function("loadJson","initial",`let sessionView=initial;
+    return {
+      start: async function(projectId,signal) {${body(githubStartStart,githubStartEnd,
+        "    async startMcpGithubAuthorization(projectId, signal) {")}
+      },
+      read: async function(challengeId,signal) {${body(githubReadStart,githubReadEnd,
+        "    async readMcpGithubCandidates(challengeId, signal) {")}
+      },
+      select: async function(input,signal) {${body(githubSelectStart,githubSelectEnd,
+        "    async selectMcpGithubRepository(input, signal) {")}
+      },
+      change(next){sessionView=next}
+    };`)(fetcher,session);
+}
+
+const githubChallenge="77777777-7777-4777-8777-777777777777";
+const githubRepoId="123456789";
+const githubAuth=(()=>{
+  const url=new URL("https://github.com/login/oauth/authorize");
+  url.searchParams.set("client_id","Iv1.1234567890abcdef");
+  url.searchParams.set("redirect_uri","https://ordax.com.br/account/mcp/github/callback");
+  url.searchParams.set("state",githubChallenge+"."+"A".repeat(43));
+  url.searchParams.set("code_challenge","B".repeat(43));
+  url.searchParams.set("code_challenge_method","S256");
+  url.searchParams.set("allow_signup","false");
+  url.searchParams.set("prompt","select_account");
+  return url.toString();
+})();
+const githubStart={ok:true,schema:"ordax.owner-github-authorization-challenge/1",
+  challenge_id:githubChallenge,project_id:project,authorization_url:githubAuth,
+  install_url:"https://github.com/apps/ordax/installations/new",
+  expires_at:"2026-11-14T00:00:00Z"};
+const githubCandidates={ok:true,schema:"ordax.owner-github-repository-candidates/1",
+  challenge_id:githubChallenge,project_id:project,repositories:[{
+    repository_id:githubRepoId,repository_full_name:"ordaxsystems/ordax-platform",
+    default_branch:"main",installation_account_login:"ordaxsystems",
+  }],expires_at:"2026-11-14T00:00:00Z"};
+const githubSelected={ok:true,schema:"ordax.owner-github-repository-selected/1",
+  challenge_id:githubChallenge,connection_id:"88888888-8888-4888-8888-888888888888",
+  project_id:project,repository_id:githubRepoId,
+  repository_full_name:"ordaxsystems/ordax-platform",default_branch:"main",
+  state:"active",next_state:"needs_device_binding"};
+
+test("Account GitHub port navigates only to validated GitHub OAuth and never accepts provider IDs",async()=>{
+  const calls=[];
+  const h=githubHarness({status:"authenticated"},async(...args)=>{calls.push(args);return githubStart});
+  const value=await h.start(project);
+  assert.equal(value.authorization_url,githubAuth);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0][0],"/account/mcp/github/authorization-challenges");
+  assert.equal(calls[0][2].method,"POST");
+  assert.deepEqual(calls[0][2].jsonBody,{project_id:project,confirm:"connect_github"});
+  await assert.rejects(githubHarness({status:"authenticated"},async()=>({
+    ...githubStart,authorization_url:githubAuth+"&installation_id=1",
+  })).start(project),/start-unconfirmed/);
+  await assert.rejects(githubHarness({status:"authenticated"},async()=>({
+    ...githubStart,authorization_url:githubAuth.replace("github.com","evil.invalid"),
+  })).start(project),/start-unconfirmed/);
+});
+
+test("Account GitHub candidate and selection ports expose only verified repository choice",async()=>{
+  const calls=[];
+  const h=githubHarness({status:"authenticated"},async(...args)=>{
+    calls.push(args);
+    return args[0].includes("repository-candidates")?githubCandidates:githubSelected;
+  });
+  assert.deepEqual(await h.read(githubChallenge),githubCandidates);
+  assert.equal(calls[0][0],"/account/mcp/github/repository-candidates?challenge_id="+githubChallenge);
+  const input={challenge_id:githubChallenge,repository_id:githubRepoId,confirm:"select_repository"};
+  assert.deepEqual(await h.select(input),githubSelected);
+  assert.equal(calls[1][0],"/account/mcp/github/repository-selections");
+  assert.equal(calls[1][2].method,"POST");
+  assert.deepEqual(calls[1][2].jsonBody,input);
+  for(const extra of [
+    {installation_id:"1"},{repository_full_name:"ordaxsystems/ordax-platform"},
+    {device_id:first.device_id},{grant_profile:"project-native-terminal"},{metadata:{}},
+  ]) {
+    const before=calls.length;
+    await assert.rejects(h.select({...input,...extra}),/selection-invalid/);
+    assert.equal(calls.length,before);
+  }
+  await assert.rejects(githubHarness({status:"authenticated"},async()=>({
+    ...githubCandidates,repositories:[...githubCandidates.repositories,
+      githubCandidates.repositories[0]],
+  })).read(githubChallenge),/candidates-invalid/);
+});
+
 
 const challenge="99999999-9999-4999-8999-999999999999";
 const expiry=new Date(Date.now()+100000).toISOString();
@@ -449,6 +557,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
     'const dialog={open:false,close:()=>{}};',
     'const closeMore=()=>{},renderNavigation=()=>{},renderContent=()=>{};',
     'let mcpRevoking=revoking,mcpCentralSelecting=selecting,mcpProjectCreating=creating,mcpDevicesRevision=3,mcpAuthorityRevision=5;',
+    'const mcpGithubConnecting=false,mcpGithubSelecting=false,mcpGithubChallenge=null,mcpGithubStatus="idle";',
     'let mcpDevices=[{device_id:"old"}],mcpDevicesStatus="ready";',
     'let mcpAuthority={grant_groups:[{grant_group_id:"old"}]},mcpAuthorityDevice="old",',
     '    mcpAuthorityStatus="ready",mcpRevocationNotice="old";',
@@ -510,13 +619,17 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   assert.equal(creating.projectResets(),0,"revisit must preserve an uncertain project receipt");
 });
 
-test("Project UI remains fail-closed after creation and never renders a GitHub/grant shortcut",()=>{
+test("Project UI exposes only verified GitHub choice; device binding and grants remain separate",()=>{
   const portal=readFileSync(new URL("../site/assets/account-portal.js",import.meta.url),"utf8");
   assert.match(portal,/data-mcp-project-form/);
-  assert.match(portal,/Criar o projeto não conecta GitHub, não vincula o dispositivo e não concede permissões/);
-  assert.match(portal,/await account\.createMcpProject\(/);
-  assert.match(portal,/await account\.readMcpProjectOnboarding\(deviceId\)/);
-  assert.match(portal,/Never replay an uncertain Project POST/);
+  assert.match(portal,/data-mcp-github-connect/);
+  assert.match(portal,/data-mcp-github-selection/);
+  assert.match(portal,/await account\.startMcpGithubAuthorization\(projectId\)/);
+  assert.match(portal,/await account\.readMcpGithubCandidates\(challengeId\)/);
+  assert.match(portal,/await account\.selectMcpGithubRepository\(/);
+  assert.match(portal,/Never replay an uncertain repository-selection POST/);
   assert.match(portal,/needs_github_installation:"GitHub ainda não conectado"/);
-  assert.doesNotMatch(portal,/data-mcp-github-connect|data-mcp-project-grant|data-mcp-device-bind/);
+  assert.match(portal,/next_state !== "needs_device_binding"/);
+  assert.doesNotMatch(portal,/name="installation_id"|data-mcp-project-grant|data-mcp-device-bind/);
+  assert.doesNotMatch(portal,/searchParams\.get\("code"\)|searchParams\.get\("state"\)/);
 });
