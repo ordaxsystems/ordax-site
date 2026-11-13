@@ -18,15 +18,18 @@
     // The central selection POST has no query; its GET sibling must carry
     // exactly one OAuth client ID. Keep this distinction at the URL gate.
     if (value === "/account/mcp/central-selections" && method === "POST") return true;
+    if (value === "/account/mcp/project-onboarding/projects") {
+      return method === "POST";
+    }
     // Only the exact Owner device and OAuth-client reads accept a UUID query.
     // Never allow arbitrary parameters, URL normalization or other Identity routes.
     if (typeof value === "string" &&
-        /^[/]account[/]mcp[/](?:authority[?]device_id|central-(?:targets|selections)[?]client_id)=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {
+        /^[/]account[/]mcp[/](?:(?:authority|project-onboarding)[?]device_id|central-(?:targets|selections)[?]client_id)=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {
       return true;
     }
-    // This admin read requires exactly one chosen device, not a bare route.
-    if (["/account/mcp/authority","/account/mcp/central-targets",
-      "/account/mcp/central-selections"].includes(value)) return false;
+    // These admin reads require exactly one scoped UUID, not a bare route.
+    if (["/account/mcp/authority","/account/mcp/project-onboarding",
+      "/account/mcp/central-targets","/account/mcp/central-selections"].includes(value)) return false;
     // Keep browser links aligned with the Site catalog's canonical path gate.
     // Disallow encoded separators/dots, traversals and URL normalization aliases.
     return (
@@ -786,6 +789,68 @@
           ||value.attested!==false||value.dispatch_authorized!==false
           ||typeof value.expires_at!=="string"||!Number.isFinite(Date.parse(value.expires_at)))
         throw Error("mcp-owner-central-selection-unconfirmed");
+      if(owner!==sessionView||sessionView.status!=="authenticated")
+        throw Error("public-account-session-changed");
+      return value;
+    },
+    async readMcpProjectOnboarding(deviceId, signal) {
+      const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const kinds=new Set(["general","development","creative","legal","business","research"]);
+      const states=new Set(["needs_github_installation","needs_repository_selection",
+        "needs_device_binding","ready_without_grants"]);
+      const rootStates=new Set(["needs_space","needs_project"]);
+      const repository=/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/;
+      const owner=sessionView;
+      if(owner.status!=="authenticated")throw Error("public-account-session-required");
+      if(!uuid.test(deviceId))throw Error("mcp-owner-device-invalid");
+      const value=await loadJson("/account/mcp/project-onboarding?device_id="+deviceId,signal,
+        {maxBytes:128*1024});
+      const spaces=value?.spaces,projects=value?.projects;
+      if(!value||value.ok!==true||value.schema!=="ordax.owner-project-onboarding-view/1"
+          ||value.device_id!==deviceId||!Array.isArray(spaces)||spaces.length>64
+          ||!Array.isArray(projects)||projects.length>512
+          ||new Set(spaces.map(s=>s?.space_id)).size!==spaces.length
+          ||new Set(projects.map(p=>p?.project_id)).size!==projects.length
+          ||!spaces.every(s=>s&&uuid.test(s.space_id)&&typeof s.name==="string"
+            &&s.name.length>0&&s.name.length<=120&&typeof s.kind==="string"
+            &&s.kind.length>0&&s.kind.length<=80&&s.state==="active")
+          ||!projects.every(p=>p&&uuid.test(p.project_id)&&uuid.test(p.space_id)
+            &&spaces.some(s=>s.space_id===p.space_id)&&typeof p.name==="string"
+            &&p.name.length>0&&p.name.length<=120&&kinds.has(p.kind)&&p.state==="active"
+            &&Number.isSafeInteger(p.github_connection_count)&&p.github_connection_count>=0
+            &&typeof p.space_device_execute==="boolean"&&typeof p.project_device_bound==="boolean"
+            &&states.has(p.next_state)
+            &&(p.repository_full_name===null||(typeof p.repository_full_name==="string"
+              &&p.repository_full_name.length<=220&&repository.test(p.repository_full_name)))
+            &&((p.github_connection_count===1)===(p.repository_full_name!==null)))
+          ||!(value.next_state===null||rootStates.has(value.next_state))
+          ||(value.next_state==="needs_space"&&spaces.length!==0)
+          ||(value.next_state==="needs_project"&&(spaces.length===0||projects.length!==0))
+          ||(value.next_state===null&&(spaces.length===0||projects.length===0)))
+        throw Error("mcp-owner-project-onboarding-invalid");
+      if(owner!==sessionView||sessionView.status!=="authenticated")
+        throw Error("public-account-session-changed");
+      return value;
+    },
+    async createMcpProject(input, signal) {
+      const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const kinds=new Set(["general","development","creative","legal","business","research"]);
+      const owner=sessionView;
+      if(owner.status!=="authenticated")throw Error("public-account-session-required");
+      if(!input||Object.keys(input).sort().join(",")!=="confirm,kind,name,space_id"
+          ||!uuid.test(input.space_id)||!kinds.has(input.kind)
+          ||typeof input.name!=="string"||input.name.trim().length<1
+          ||input.name.trim().length>120||/[\u0000-\u001f\u007f]/.test(input.name)
+          ||input.confirm!=="create_project")
+        throw Error("mcp-owner-project-create-invalid");
+      const request={space_id:input.space_id,name:input.name.trim(),
+        kind:input.kind,confirm:"create_project"};
+      const value=await loadJson("/account/mcp/project-onboarding/projects",signal,
+        {maxBytes:4096,method:"POST",jsonBody:request});
+      if(!value||value.ok!==true||value.schema!=="ordax.owner-project-created/1"
+          ||!uuid.test(value.project_id)||value.space_id!==request.space_id
+          ||value.state!=="active"||value.next_state!=="needs_github_installation")
+        throw Error("mcp-owner-project-create-unconfirmed");
       if(owner!==sessionView||sessionView.status!=="authenticated")
         throw Error("public-account-session-changed");
       return value;
