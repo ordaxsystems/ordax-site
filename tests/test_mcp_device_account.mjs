@@ -228,7 +228,11 @@ test("Account central results never imply attestation and reject session changes
   assert.match(portal,/data-mcp-central-select/);
   assert.match(portal,/mcpCentralSelections\?\.count === 1/);
   assert.match(portal,/window\.confirm\(/);
-  assert.match(portal,/mcpCentralNotice = "Seleção enviada/);
+  assert.match(portal,/mcpCentralNotice = "Vínculo solicitado/);
+  assert.match(portal,/expires_at belongs only to this pending Owner challenge/);
+  assert.match(portal,/conversation -> device binding is persistent in Platform/);
+  assert.match(portal,/offline, heartbeat atrasado ou reinício não escolhem outro computador/);
+  assert.doesNotMatch(portal,/Selecionar sessão MCP/);
 });
 
 test("Account grant inspection is scoped to one UUID, rejects forgery and duplicate grants", async () => {
