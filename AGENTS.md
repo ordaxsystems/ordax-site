@@ -35,7 +35,7 @@ Para correções localizadas, leia apenas os arquivos e contratos afetados. O ro
 - Não alterar domínio, deploy de produção nem credenciais sem aprovação específica.
 - Recuperação e Conta continuam fail-closed enquanto seus gates reais não estiverem aprovados.
 - O catálogo público vem exclusivamente de projeção autorizada do publicador de releases; sem publicação, catálogo vazio.
-- Não alterar API/comportamento de `ordax-os` sem reconciliação das PRs da Surface.
+- Não alterar API/comportamento de `ordax-os` a partir do Site. Se um contrato público realmente precisar mudar, altere-o no owner e adote a nova versão explicitamente; não reconciliar PRs da Surface por rotina.
 - Preservar commits da `main`; não usar force-push/rebase da main.
 
 ## Fluxo
