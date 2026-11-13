@@ -235,6 +235,13 @@
   let mcpRevoking = false;
   let mcpRevocationNotice = "";
 
+  let mcpProjectOnboarding = null;
+  let mcpProjectDevice = null;
+  let mcpProjectStatus = "unavailable";
+  let mcpProjectRevision = 0;
+  let mcpProjectCreating = false;
+  let mcpProjectNotice = "";
+
   let mcpCentralClient = null;
   let mcpCentralTargets = null;
   let mcpCentralSelections = null;
@@ -242,6 +249,15 @@
   let mcpCentralRevision = 0;
   let mcpCentralSelecting = false;
   let mcpCentralNotice = "";
+
+  function resetMcpProjectOnboarding() {
+    mcpProjectRevision += 1;
+    mcpProjectOnboarding = null;
+    mcpProjectDevice = null;
+    mcpProjectStatus = "unavailable";
+    mcpProjectCreating = false;
+    mcpProjectNotice = "";
+  }
 
   function resetMcpCentral() {
     mcpCentralRevision += 1;
@@ -363,6 +379,92 @@
       mcpAuthorityStatus = "unavailable";
     }
     if (state.section === "dispositivos") renderContent();
+  }
+
+  async function loadMcpProjectOnboarding(deviceId) {
+    if (!signedIn() || mcpProjectCreating || mcpDevicesStatus !== "ready"
+        || !mcpDevices?.some(d => d.device_id === deviceId)) return;
+    const revision = ++mcpProjectRevision;
+    const owner = session;
+    mcpProjectDevice = deviceId;
+    mcpProjectOnboarding = null;
+    mcpProjectStatus = "loading";
+    mcpProjectNotice = "";
+    if (state.section === "dispositivos") renderContent();
+    try {
+      const value = await account.readMcpProjectOnboarding(deviceId);
+      if (revision !== mcpProjectRevision || session !== owner || !signedIn()
+          || mcpProjectDevice !== deviceId) return;
+      mcpProjectOnboarding = value;
+      mcpProjectStatus = "ready";
+    } catch {
+      if (revision !== mcpProjectRevision || session !== owner || !signedIn()) return;
+      mcpProjectOnboarding = null;
+      mcpProjectStatus = "unavailable";
+    }
+    if (state.section === "dispositivos") renderContent();
+  }
+
+  async function createMcpProject(form) {
+    if (mcpProjectCreating || !signedIn() || mcpProjectStatus !== "ready"
+        || !mcpProjectOnboarding || !mcpProjectDevice
+        || mcpProjectDevice !== mcpAuthorityDevice) return;
+    const data = new FormData(form);
+    const spaceId = String(data.get("space_id") ?? "");
+    const name = String(data.get("name") ?? "").trim();
+    const kind = String(data.get("kind") ?? "");
+    const kinds = new Set(["general","development","creative","legal","business","research"]);
+    if (!mcpProjectOnboarding.spaces.some(space => space.space_id === spaceId)
+        || name.length < 1 || name.length > 120 || /[\u0000-\u001f\u007f]/.test(name)
+        || !kinds.has(kind)) return;
+    if (!window.confirm(
+      `${tx("Criar projeto MCP")} — ${name}?\n\n${tx("Criar o projeto não conecta GitHub, não vincula o dispositivo e não concede permissões.")}`
+    )) return;
+
+    const revision = ++mcpProjectRevision;
+    const owner = session;
+    const deviceId = mcpProjectDevice;
+    mcpProjectCreating = true;
+    mcpProjectNotice = "";
+    renderContent();
+    let posted = false;
+    try {
+      posted = true;
+      const created = await account.createMcpProject({
+        space_id:spaceId, name, kind, confirm:"create_project",
+      });
+      if (revision !== mcpProjectRevision || session !== owner || !signedIn()
+          || mcpProjectDevice !== deviceId) return;
+      const confirmed = await account.readMcpProjectOnboarding(deviceId);
+      if (revision !== mcpProjectRevision || session !== owner || !signedIn()) return;
+      if (!confirmed.projects.some(project => project.project_id === created.project_id
+          && project.space_id === spaceId))
+        throw new Error("mcp-owner-project-create-not-reflected");
+      mcpProjectOnboarding = confirmed;
+      mcpProjectStatus = "ready";
+      mcpProjectNotice = "Projeto criado e verificado. O próximo passo continua sendo conectar um repositório GitHub verificado.";
+    } catch {
+      if (revision !== mcpProjectRevision || session !== owner || !signedIn()) return;
+      if (posted) {
+        // Safe reconciliation only. Never replay an uncertain Project POST.
+        try {
+          const reconciled = await account.readMcpProjectOnboarding(deviceId);
+          if (revision !== mcpProjectRevision || session !== owner || !signedIn()) return;
+          mcpProjectOnboarding = reconciled;
+          mcpProjectStatus = "ready";
+          mcpProjectNotice = "O resultado da criação não foi confirmado. O estado foi consultado novamente; revise os projetos antes de tentar outra criação.";
+        } catch {
+          mcpProjectOnboarding = null;
+          mcpProjectStatus = "unavailable";
+          mcpProjectNotice = "A criação não foi confirmada e o estado atual não pôde ser consultado. Nenhuma nova tentativa será feita automaticamente.";
+        }
+      }
+    } finally {
+      if (revision === mcpProjectRevision && session === owner && signedIn()) {
+        mcpProjectCreating = false;
+        if (state.section === "dispositivos") renderContent();
+      }
+    }
   }
 
   async function revokeMcpDeviceGrant(control) {
@@ -627,9 +729,71 @@
     return `<table class="records-table"><caption class="sr-only">${tx("Computadores OrdaX MCP")}</caption><thead><tr>${["Dispositivo", "Última atividade", "Estado", "Autorizações"].map(x => `<th scope="col">${tx(x)}</th>`).join("")}</tr></thead><tbody>${mcpDevices.map(device => {
       const state = device.online ? device.runtime_ready ? "Online · Runtime pronto" : "Online · Runtime não confirmado" : "Offline";
       const seen = device.last_seen_at ? new Date(device.last_seen_at).toLocaleString(i18n.getLocale()) : "Sem atividade registrada";
-      return `<tr><th scope="row"><strong>${esc(device.name)}</strong><small translate="no">${esc(device.device_id)}</small></th><td>${esc(seen)}</td><td><span class="status-tag${device.online && device.runtime_ready ? " is-verified" : ""}">${tx(state)}</span></td><td>${action("Autorizações", null, { disabled:mcpRevoking || mcpCentralSelecting, small:true, data:`data-mcp-device="${esc(device.device_id)}"` })}</td></tr>`;
+      return `<tr><th scope="row"><strong>${esc(device.name)}</strong><small translate="no">${esc(device.device_id)}</small></th><td>${esc(seen)}</td><td><span class="status-tag${device.online && device.runtime_ready ? " is-verified" : ""}">${tx(state)}</span></td><td>${action("Autorizações", null, { disabled:mcpRevoking || mcpCentralSelecting || mcpProjectCreating, small:true, data:`data-mcp-device="${esc(device.device_id)}"` })}</td></tr>`;
     }).join("")}</tbody></table>`;
   }
+  function mcpProjectPanel() {
+    if (!mcpAuthorityDevice) return "";
+    const device = mcpDevices?.find(d => d.device_id === mcpAuthorityDevice);
+    if (!device) return "";
+    const notice = mcpProjectNotice
+      ? `<p class="device-revoke-note" role="status">${icon("info")}${tx(mcpProjectNotice)}</p>` : "";
+    if (mcpProjectDevice !== mcpAuthorityDevice || mcpProjectStatus !== "ready"
+        || !mcpProjectOnboarding) {
+      const label = mcpProjectStatus === "loading" && mcpProjectDevice === mcpAuthorityDevice
+        ? "Consultando projetos" : "Projetos indisponíveis";
+      return `<section class="settings-section" aria-labelledby="mcp-projects-heading">
+        <h3 id="mcp-projects-heading">${tx("Projetos MCP")} · ${esc(device.name)}</h3>
+        <p role="status">${tx(label)}</p>${notice}</section>`;
+    }
+
+    const value = mcpProjectOnboarding;
+    const stateLabels = {
+      needs_github_installation:"GitHub ainda não conectado",
+      needs_repository_selection:"Repositório ainda não selecionado",
+      needs_device_binding:"Dispositivo ainda não vinculado ao projeto",
+      ready_without_grants:"Pronto para autorizações explícitas",
+    };
+    const rows = value.projects.map(project => `<tr>
+      <th scope="row"><strong>${esc(project.name)}</strong><small translate="no">${esc(project.project_id)}</small></th>
+      <td>${esc(project.kind)}</td>
+      <td>${project.repository_full_name ? `<span translate="no">${esc(project.repository_full_name)}</span>` : tx("Nenhum repositório verificado")}</td>
+      <td><span class="status-tag">${tx(stateLabels[project.next_state] || project.next_state)}</span></td>
+    </tr>`).join("");
+    const table = value.projects.length
+      ? `<table class="records-table"><caption class="sr-only">${tx("Projetos MCP")}</caption>
+        <thead><tr><th scope="col">${tx("Projeto")}</th><th scope="col">${tx("Tipo")}</th>
+        <th scope="col">${tx("GitHub")}</th><th scope="col">${tx("Próximo passo")}</th></tr></thead>
+        <tbody>${rows}</tbody></table>`
+      : `<p>${tx(value.next_state === "needs_project"
+          ? "Nenhum projeto foi criado neste Space."
+          : "Nenhum projeto MCP foi confirmado.")}</p>`;
+    const options = value.spaces.map(space =>
+      `<option value="${esc(space.space_id)}">${esc(space.name)} · ${esc(space.kind)}</option>`).join("");
+    const form = value.spaces.length ? `<form data-mcp-project-form class="profile-field-group">
+      <p class="panel-description">${tx("Criar um projeto apenas registra o escopo canônico. GitHub, vínculo do dispositivo e grants continuam etapas separadas.")}</p>
+      <div class="form-grid">
+        <label class="form-field"><span>${tx("Space")}</span><select name="space_id" required>${options}</select></label>
+        <label class="form-field"><span>${tx("Nome do projeto")}</span><input name="name" type="text" maxlength="120" required autocomplete="off" placeholder="${tx("Ex.: OrdaX Platform")}"></label>
+        <label class="form-field"><span>${tx("Tipo")}</span><select name="kind" required>
+          <option value="development">${tx("Desenvolvimento")}</option>
+          <option value="general">${tx("Geral")}</option>
+          <option value="creative">${tx("Criativo")}</option>
+          <option value="research">${tx("Pesquisa")}</option>
+          <option value="business">${tx("Negócios")}</option>
+          <option value="legal">${tx("Jurídico")}</option>
+        </select></label>
+      </div>
+      <div class="form-actions"><span>${icon("info")}${tx("Nenhuma permissão é concedida por esta criação.")}</span>
+        <button type="submit" class="button outline h-8"${mcpProjectCreating ? " disabled" : ""}>${tx(mcpProjectCreating ? "Criando projeto" : "Criar projeto")}</button>
+      </div>
+    </form>` : `<p class="device-revoke-note">${icon("info")}${tx("Nenhum Space administrável foi confirmado. Crie ou recupere um Space antes de criar um projeto.")}</p>`;
+    return `<section class="settings-section" aria-labelledby="mcp-projects-heading">
+      <h3 id="mcp-projects-heading">${tx("Projetos MCP")} · ${esc(device.name)}</h3>
+      <p class="panel-description">${tx("O estado abaixo vem da Platform. Um projeto sem GitHub verificado não autoriza execução remota.")}</p>
+      ${table}${form}${notice}</section>`;
+  }
+
   function mcpAuthorityPanel() {
     if (!mcpAuthorityDevice) return "";
     const device = mcpDevices?.find(d => d.device_id === mcpAuthorityDevice);
@@ -834,6 +998,7 @@
       <p class="device-scope">${tx("Identidade do dispositivo, saúde do Runtime e grants dos aplicativos são estados distintos.")}</p>
       ${mcpDeviceRecords()}
       ${mcpAuthorityPanel()}
+      ${mcpProjectPanel()}
       <p class="device-revoke-note" id="device-revoke-note">${icon("info")}${tx("Revogar um grant OAuth não desliga nem remove o computador. A ação exige confirmação e verificação pela Platform.")}</p>
       <div class="panel-actions device-actions">${link("integracoes", "", "text-link", `${tx("Ver autorizações de aplicativos")}${icon("arrow-right")}`)}${link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`)}</div>
     </section>${relatedAreas(["seguranca", "atividade"], "Proteção e histórico da conta")}`;
@@ -940,7 +1105,7 @@
     const changed = requested !== state.section;
     state.section = requested;
     if (changed && requested === "dispositivos" && signedIn()
-        && !mcpRevoking && !mcpCentralSelecting) {
+        && !mcpRevoking && !mcpCentralSelecting && !mcpProjectCreating) {
       // In-flight Owner selection must retain its exact POST receipt. A
       // section revisit cannot reset the revision and permit a second choice.
       // A new idle visit must re-read the Platform, never show old Owner grants
@@ -954,6 +1119,7 @@
       mcpAuthorityDevice = null;
       mcpAuthorityStatus = "unavailable";
       mcpRevocationNotice = "";
+      resetMcpProjectOnboarding();
       resetMcpCentral();
     }
     closeMore();
@@ -1031,7 +1197,10 @@
       if (!layoutPreview) void loadMcpCentralClient(control.dataset.mcpCentralClient);
     } else if (control.matches("[data-mcp-device]") && !control.matches("[data-mcp-revoke]")) {
       event.preventDefault();
-      if (!layoutPreview) void loadMcpAuthority(control.dataset.mcpDevice);
+      if (!layoutPreview) {
+        void loadMcpAuthority(control.dataset.mcpDevice);
+        void loadMcpProjectOnboarding(control.dataset.mcpDevice);
+      }
     } else if (control.matches("[data-mcp-revoke]")) {
       event.preventDefault();
       if (!layoutPreview) void revokeMcpDeviceGrant(control);
@@ -1068,6 +1237,12 @@
       if (dialog.open) dialog.close(); closeMore();
       if (control.getAttribute("href") === location.hash) route();
     }
+  });
+  document.addEventListener("submit", event => {
+    const form = event.target?.closest?.("[data-mcp-project-form]");
+    if (!form) return;
+    event.preventDefault();
+    if (!layoutPreview) void createMcpProject(form);
   });
   document.addEventListener("input", event => {
     if (event.target.id === "dialog-search") { state.searchQuery = event.target.value; document.getElementById("search-results").innerHTML = searchResults(); updateSearchStatus(); }
@@ -1134,6 +1309,7 @@
         mcpAuthorityStatus = "unavailable";
         mcpRevoking = false;
         mcpRevocationNotice = "";
+        resetMcpProjectOnboarding();
         resetMcpCentral();
         if (signedIn() && state.section === "dispositivos") void loadMcpDevices();
       }
