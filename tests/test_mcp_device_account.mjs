@@ -26,7 +26,13 @@ const sameOriginPath = new Function(source.slice(gateStart,gateEnd) +
 test("real same-origin gate permits only a single exact MCP authority UUID query",()=>{
   const deviceId="14cef8f4-3c06-4b1b-9e3a-42c74ef7dec5";
   const valid="/account/mcp/authority?device_id="+deviceId;
+  const projectRead="/account/mcp/project-onboarding?device_id="+deviceId;
   assert.equal(sameOriginPath(valid),true);
+  assert.equal(sameOriginPath(projectRead),true);
+  assert.equal(sameOriginPath("/account/mcp/project-onboarding"),false);
+  assert.equal(sameOriginPath("/account/mcp/project-onboarding/projects"),false);
+  assert.equal(sameOriginPath("/account/mcp/project-onboarding/projects","POST"),true);
+  assert.equal(sameOriginPath("/account/mcp/project-onboarding/projects","GET"),false);
   assert.equal(sameOriginPath("/account/mcp/devices"),true);
   assert.equal(sameOriginPath("/account/mcp/revoke"),true);
   for(const bad of [
@@ -35,6 +41,9 @@ test("real same-origin gate permits only a single exact MCP authority UUID query
     "/account/mcp/authority?owner_id="+deviceId,
     "/account/mcp/authority?device_id="+deviceId.toUpperCase(),
     "/account/mcp/authority?device_id=%31"+deviceId.slice(1),
+    projectRead+"&device_id="+deviceId,
+    projectRead+"&repository_id=123",
+    "/account/mcp/project-onboarding?device_id=bad",
     valid+"#fragment", "/auth/session?device_id="+deviceId,
     "/account/usage/mcp?device_id="+deviceId,
     "/account/mcp/authority?device_id="+deviceId+"/../../auth/session",
@@ -120,6 +129,8 @@ function ownerHarness(session, loadJson) {
 const other = "44444444-4444-4444-8444-444444444444";
 const client = "22222222-2222-4222-8222-222222222222";
 const group = "33333333-3333-4333-8333-333333333333";
+const space = "55555555-5555-4555-8555-555555555555";
+const project = "66666666-6666-4666-8666-666666666666";
 const groupItem = {grant_group_id:group,client_id:client,profile_key:"full-computer-control",valid_until:null,client_consent_active:true};
 const authority = {ok:true,schema:"ordax.owner-mcp-authority-view/1",device_id:first.device_id,
   clients:[{client_id:client,client_name:"ChatGPT"}],grant_groups:[groupItem]};
@@ -152,6 +163,79 @@ function centralHarness(session,fetcher){
       change(next){sessionView=next}
     };`)(fetcher,session);
 }
+const projectReadStart=source.indexOf("    async readMcpProjectOnboarding(deviceId, signal) {");
+const projectReadEnd=source.indexOf("\n    },\n    async createMcpProject(input, signal) {",projectReadStart);
+const projectCreateStart=source.indexOf("    async createMcpProject(input, signal) {");
+const projectCreateEnd=source.indexOf("\n    },\n    // Reuse Account's authenticated",projectCreateStart);
+assert.ok(projectReadStart>0&&projectReadEnd>projectReadStart,"Owner project read port missing");
+assert.ok(projectCreateStart>0&&projectCreateEnd>projectCreateStart,"Owner project create port missing");
+function projectHarness(session,fetcher){
+  const readBody=source.slice(projectReadStart+"    async readMcpProjectOnboarding(deviceId, signal) {".length,projectReadEnd);
+  const createBody=source.slice(projectCreateStart+"    async createMcpProject(input, signal) {".length,projectCreateEnd);
+  return new Function("loadJson","initial",`let sessionView=initial;
+    return {
+      read: async function(deviceId,signal) {${readBody}
+      },
+      create: async function(input,signal) {${createBody}
+      },
+      change(next){sessionView=next}
+    };`)(fetcher,session);
+}
+const projectState={ok:true,schema:"ordax.owner-project-onboarding-view/1",
+  device_id:first.device_id,
+  spaces:[{space_id:space,name:"Owner",kind:"work",state:"active"}],
+  projects:[],next_state:"needs_project"};
+const projectStateWithProject={...projectState,next_state:null,projects:[{
+  project_id:project,space_id:space,name:"OrdaX Platform",kind:"development",
+  state:"active",github_connection_count:0,repository_full_name:null,
+  space_device_execute:false,project_device_bound:false,
+  next_state:"needs_github_installation",
+}]};
+
+test("Account project onboarding is scoped to one device and never invents GitHub readiness",async()=>{
+  const calls=[];
+  const h=projectHarness({status:"authenticated"},async(...args)=>{calls.push(args);return projectState});
+  assert.deepEqual(await h.read(first.device_id),projectState);
+  assert.equal(calls[0][0],"/account/mcp/project-onboarding?device_id="+first.device_id);
+  assert.deepEqual(calls[0][2],{maxBytes:128*1024});
+  for(const invalid of [
+    {...projectState,schema:"other"},
+    {...projectState,device_id:other},
+    {...projectState,next_state:null},
+    {...projectStateWithProject,projects:[{...projectStateWithProject.projects[0],
+      github_connection_count:1,repository_full_name:null}]},
+    {...projectStateWithProject,projects:[{...projectStateWithProject.projects[0],
+      next_state:"ready"}]},
+  ]) await assert.rejects(projectHarness({status:"authenticated"},async()=>invalid).read(first.device_id));
+  await assert.rejects(projectHarness({status:"anonymous"},async()=>projectState).read(first.device_id),
+    /session-required/);
+});
+
+test("Account project creation accepts only exact project fields and one same-origin POST",async()=>{
+  const input={space_id:space,name:" OrdaX Platform ",kind:"development",confirm:"create_project"};
+  const created={ok:true,schema:"ordax.owner-project-created/1",project_id:project,
+    space_id:space,state:"active",next_state:"needs_github_installation"};
+  const calls=[];
+  const h=projectHarness({status:"authenticated"},async(...args)=>{calls.push(args);return created});
+  assert.deepEqual(await h.create(input),created);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0][0],"/account/mcp/project-onboarding/projects");
+  assert.equal(calls[0][2].method,"POST");
+  assert.deepEqual(calls[0][2].jsonBody,
+    {space_id:space,name:"OrdaX Platform",kind:"development",confirm:"create_project"});
+  for(const extra of [
+    {repository_id:123},{installation_id:456},
+    {repository_full_name:"ordaxsystems/ordax-platform"},
+    {grant_profile:"project-native-terminal"},{device_id:first.device_id},{metadata:{}},
+  ]) {
+    const before=calls.length;
+    await assert.rejects(h.create({...input,...extra}),/project-create-invalid/);
+    assert.equal(calls.length,before,"invalid provider/grant fields must fail before transport");
+  }
+  await assert.rejects(projectHarness({status:"authenticated"},async()=>({...created,
+    next_state:"ready_without_grants"})).create(input),/project-create-unconfirmed/);
+});
+
 const challenge="99999999-9999-4999-8999-999999999999";
 const expiry=new Date(Date.now()+100000).toISOString();
 const centralTargets={ok:true,schema:"ordax.owner-central-targets/1",client_id:client,
@@ -288,7 +372,7 @@ test("denied MCP device selection cannot invalidate an active grant revocation",
   // Exercise the actual portal controller, not a duplicate implementation.
   const portal=readFileSync(new URL("../site/assets/account-portal.js",import.meta.url),"utf8");
   const start=portal.indexOf("  async function loadMcpAuthority(deviceId) {");
-  const end=portal.indexOf("\n  async function revokeMcpDeviceGrant(control) {",start);
+  const end=portal.indexOf("\n  async function loadMcpProjectOnboarding(deviceId) {",start);
   assert.ok(start>=0 && end>start);
   const realFunction=portal.slice(start,end);
   const run=new Function("deviceId","answer",[
@@ -317,11 +401,11 @@ test("MCP device presentation never marks offline Runtime as verified or exposes
   // Exercise the real Account renderer; readiness alone never proves online state.
   const portal=readFileSync(new URL("../site/assets/account-portal.js",import.meta.url),"utf8");
   const start=portal.indexOf("  function mcpDeviceRecords() {");
-  const end=portal.indexOf("\n  function mcpAuthorityPanel() {",start);
+  const end=portal.indexOf("\n  function mcpProjectPanel() {",start);
   assert.ok(start>0 && end>start,"real MCP device renderer missing");
-  const render=new Function("devices","selecting","revoking",[
+  const render=new Function("devices","selecting","revoking","creating",[
     'const mcpDevicesStatus="ready",mcpDevices=devices;',
-    'const mcpRevoking=revoking,mcpCentralSelecting=selecting;',
+    'const mcpRevoking=revoking,mcpCentralSelecting=selecting,mcpProjectCreating=creating;',
     'const i18n={getLocale:()=>"pt-BR"};',
     'const esc=value=>String(value??""),tx=value=>String(value);',
     'const icon=()=>"",pendingRecords=()=>"",empty=()=>"";',
@@ -331,18 +415,19 @@ test("MCP device presentation never marks offline Runtime as verified or exposes
   ].join("\n"));
   const target={device_id:first.device_id,name:"Product",
     last_seen_at:"2026-11-12T06:00:00Z",online:false,runtime_ready:true};
-  const offline=render([target],false,false);
+  const offline=render([target],false,false,false);
   assert.match(offline,/Offline/);
   assert.doesNotMatch(offline,/status-tag is-verified/,"offline is not attested");
   assert.match(offline,/<button>Autorizações<\/button>/);
-  const online=render([{...target,online:true}],false,false);
+  const online=render([{...target,online:true}],false,false,false);
   assert.match(online,/status-tag is-verified/);
-  assert.match(render([{...target,online:true,runtime_ready:false}],false,false),
+  assert.match(render([{...target,online:true,runtime_ready:false}],false,false,false),
     /Runtime não confirmado/);
-  assert.doesNotMatch(render([{...target,online:true,runtime_ready:false}],false,false),
+  assert.doesNotMatch(render([{...target,online:true,runtime_ready:false}],false,false,false),
     /status-tag is-verified/);
-  assert.match(render([target],true,false),/<button disabled>Autorizações<\/button>/);
-  assert.match(render([target],false,true),/<button disabled>Autorizações<\/button>/);
+  assert.match(render([target],true,false,false),/<button disabled>Autorizações<\/button>/);
+  assert.match(render([target],false,true,false),/<button disabled>Autorizações<\/button>/);
+  assert.match(render([target],false,false,true),/<button disabled>Autorizações<\/button>/);
   const panel=portal.slice(portal.indexOf("  function mcpAuthorityPanel() {"),
     portal.indexOf("\n  function field(",portal.indexOf("  function mcpAuthorityPanel() {")));
   assert.match(panel,/disabled:mcpRevoking \|\| mcpCentralSelecting, small:true/);
@@ -355,7 +440,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   const end=portal.indexOf("\n  const dialog = document.getElementById(\"account-dialog\");",start);
   assert.ok(start>0 && end>start,"real Account router missing");
   const realRoute=portal.slice(start,end);
-  const harness=new Function("revoking","selecting",[
+  const harness=new Function("revoking","selecting","creating",[
     'let state={section:"visao-geral"};',
     'const byId=new Map([["visao-geral",{}],["dispositivos",{}]]);',
     'const location={hash:"#dispositivos"};',
@@ -363,22 +448,23 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
     'const document={getElementById:()=>({focus:()=>{}})};',
     'const dialog={open:false,close:()=>{}};',
     'const closeMore=()=>{},renderNavigation=()=>{},renderContent=()=>{};',
-    'let mcpRevoking=revoking,mcpCentralSelecting=selecting,mcpDevicesRevision=3,mcpAuthorityRevision=5;',
+    'let mcpRevoking=revoking,mcpCentralSelecting=selecting,mcpProjectCreating=creating,mcpDevicesRevision=3,mcpAuthorityRevision=5;',
     'let mcpDevices=[{device_id:"old"}],mcpDevicesStatus="ready";',
     'let mcpAuthority={grant_groups:[{grant_group_id:"old"}]},mcpAuthorityDevice="old",',
     '    mcpAuthorityStatus="ready",mcpRevocationNotice="old";',
     'const signedIn=()=>true;',
     'let centralResets=0;const resetMcpCentral=()=>{centralResets++};',
+    'let projectResets=0;const resetMcpProjectOnboarding=()=>{projectResets++};',
     'let loads=0;',
     'async function loadMcpDevices(){loads++;mcpDevicesStatus="loading";}',
     realRoute,
-    'return {run:route, setHash:v=>{location.hash=v}, resets:()=>centralResets,',
+    'return {run:route, setHash:v=>{location.hash=v}, resets:()=>centralResets, projectResets:()=>projectResets,',
     '  view:()=>({loads,deviceRev:mcpDevicesRevision,authRev:mcpAuthorityRevision,',
     '  devices:mcpDevices,authority:mcpAuthority,chosen:mcpAuthorityDevice,',
     '  deviceStatus:mcpDevicesStatus,notice:mcpRevocationNotice})};',
   ].join("\n"));
 
-  const normal=harness(false,false);
+  const normal=harness(false,false,false);
   normal.run();
   assert.deepEqual(normal.view(),{
     loads:1,deviceRev:4,authRev:6,devices:null,authority:null,
@@ -390,7 +476,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   normal.setHash("#dispositivos");normal.run();
   assert.equal(normal.view().loads,2,"new visit refreshes instead of showing stale grants");
 
-  const pending=harness(true,false);
+  const pending=harness(true,false,false);
   pending.run();
   assert.equal(pending.view().loads,0,"do not start a new fetch during revoke");
   assert.equal(pending.view().authRev,5,"do not cancel in-flight revocation receipt");
@@ -399,7 +485,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   // A user may navigate away and back after confirming the Owner choice
   // while the single POST is still in flight. Never invalidate its receipt
   // or permit a fresh selection while the original outcome is uncertain.
-  const selecting=harness(false,true);
+  const selecting=harness(false,true,false);
   selecting.run();
   assert.equal(selecting.view().loads,0,"do not refresh while selecting");
   assert.equal(selecting.view().authRev,5);
@@ -413,4 +499,24 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   assert.equal(selecting.view().deviceRev,3,"revisit preserves current device scope");
   assert.equal(selecting.view().chosen,"old");
   assert.equal(selecting.resets(),0,"revisit must not cancel the pending selection");
+  assert.equal(selecting.projectResets(),0,"revisit must not cancel project state during selection");
+
+  const creating=harness(false,false,true);
+  creating.run();
+  assert.equal(creating.view().loads,0,"do not refresh inventory during project POST");
+  creating.setHash("#visao-geral");creating.run();
+  creating.setHash("#dispositivos");creating.run();
+  assert.equal(creating.view().loads,0,"revisit cannot restart inventory during project POST");
+  assert.equal(creating.projectResets(),0,"revisit must preserve an uncertain project receipt");
+});
+
+test("Project UI remains fail-closed after creation and never renders a GitHub/grant shortcut",()=>{
+  const portal=readFileSync(new URL("../site/assets/account-portal.js",import.meta.url),"utf8");
+  assert.match(portal,/data-mcp-project-form/);
+  assert.match(portal,/Criar o projeto não conecta GitHub, não vincula o dispositivo e não concede permissões/);
+  assert.match(portal,/await account\.createMcpProject\(/);
+  assert.match(portal,/await account\.readMcpProjectOnboarding\(deviceId\)/);
+  assert.match(portal,/Never replay an uncertain Project POST/);
+  assert.match(portal,/needs_github_installation:"GitHub ainda não conectado"/);
+  assert.doesNotMatch(portal,/data-mcp-github-connect|data-mcp-project-grant|data-mcp-device-bind/);
 });
