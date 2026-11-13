@@ -31,6 +31,11 @@ class GatewaySourceTests(unittest.TestCase):
         self.assertEqual(gateway.validate_lock(self.lock), self.lock)
         self.assertEqual(self.lock["status"], gateway.STATUS)
         self.assertEqual(self.lock["repository"], gateway.REPOSITORY)
+        self.assertEqual(self.lock["bridge"]["owner_repository"], gateway.REPOSITORY)
+        self.assertEqual(self.lock["bridge"]["consumer_repository"], gateway.CONSUMER_REPOSITORY)
+        self.assertFalse(self.lock["bridge"]["permanent"])
+        self.assertFalse(self.lock["bridge"]["production_authorized"])
+        self.assertEqual(self.lock["bridge"]["removal_condition"], gateway.REMOVAL_CONDITION)
         self.assertTrue(all(entry["path"].endswith(".mjs") for entry in self.lock["files"]))
 
     def test_atomically_materializes_only_verified_files(self):
@@ -78,6 +83,10 @@ class GatewaySourceTests(unittest.TestCase):
             lambda v: v.update({"status": "production"}),
             lambda v: v.update({"repository": "attacker/ordax-os"}),
             lambda v: v.update({"commit": "main"}),
+            lambda v: v["bridge"].update({"permanent": True}),
+            lambda v: v["bridge"].update({"production_authorized": True}),
+            lambda v: v["bridge"].update({"owner_repository": "ordaxsystems/ordax-site"}),
+            lambda v: v["bridge"].update({"removal_condition": ""}),
             lambda v: v["files"][0].update({"path": "api/../../oops.mjs"}),
             lambda v: v["files"][0].update({"size": True}),
             lambda v: v["files"].append(copy.deepcopy(v["files"][0])),
