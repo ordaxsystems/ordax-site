@@ -298,12 +298,15 @@
     const ticket = mcpCentralSelections.pending_selections[0];
     const available = mcpCentralTargets.targets.some(t =>
       t.device_id === deviceId && t.reported_online && t.runtime_ready);
+    // expires_at belongs only to this pending Owner challenge. A confirmed
+    // conversation -> device binding is persistent in Platform and is never
+    // renewed, expired or auto-switched here because of heartbeat/offline state.
     if (!available || !ticket || Date.parse(ticket.expires_at) <= Date.now()) return;
     const device = mcpDevices?.find(d => d.device_id === deviceId);
     const client = mcpAuthority.clients.find(c => c.client_id === mcpCentralClient);
     if (!window.confirm(
-      `${tx("Selecionar sessão MCP")} — ${client?.client_name || mcpCentralClient}
-      / ${device?.name || deviceId}?\n\n${tx("O Runtime precisará confirmar a sessão. Esta ação não concede novas permissões.")}`
+      `${tx("Vincular conversa MCP a este computador")} — ${client?.client_name || mcpCentralClient}
+      / ${device?.name || deviceId}?\n\n${tx("O Runtime precisará confirmar o vínculo. Esta ação não concede novas permissões. Depois da confirmação, offline ou reinício não trocam o computador vinculado.")}`
     )) return;
     const revision = ++mcpCentralRevision, owner = session;
     const clientId = mcpCentralClient;
@@ -320,7 +323,7 @@
       if (selected.status !== "pending" || selected.attested !== false
           || selected.dispatch_authorized !== false)
         throw new Error("mcp-central-unconfirmed");
-      mcpCentralNotice = "Seleção enviada. Aguarde confirmação do Runtime; controle remoto ainda não atestado.";
+      mcpCentralNotice = "Vínculo solicitado. Aguarde confirmação do Runtime; controle remoto ainda não atestado.";
       mcpCentralStatus = "pending";
     } catch {
       if (revision !== mcpCentralRevision || session !== owner || !signedIn()) return;
@@ -664,7 +667,7 @@
     const centralButtons = availableClients.map(c =>
       `<button type="button" class="button outline h-8"
         data-mcp-central-client="${esc(c.client_id)}"${mcpRevoking || mcpCentralSelecting ? " disabled" : ""}>
-        ${icon("plug")}${tx("Sessão MCP")} · ${esc(c.client_name)}</button>`).join("");
+        ${icon("plug")}${tx("Vínculo MCP")} · ${esc(c.client_name)}</button>`).join("");
     let centralDetail = "";
     if (mcpCentralClient) {
       const target = mcpCentralTargets?.targets.find(t =>
@@ -680,20 +683,20 @@
           ? "Aguardando confirmação do Runtime."
           : mcpCentralStatus === "ready"
             ? !target
-              ? "Este dispositivo não possui grant de ação e Runtime elegível para esta sessão."
+              ? "Este dispositivo não possui grant de ação e Runtime elegível para este novo vínculo."
               : !ticket
                 ? "Não existe um desafio único e válido aguardando seleção."
                 : "O dispositivo e o desafio foram verificados para seleção Owner."
-            : "A seleção de sessão MCP está indisponível.";
+            : "A criação de vínculo MCP está indisponível.";
       centralDetail = `<div class="device-revoke-note" role="status">${tx(description)}
-        ${ready ? action("Selecionar computador para esta sessão", "shield", {
+        ${ready ? action("Vincular esta conversa ao computador", "shield", {
           disabled:mcpRevoking || mcpCentralSelecting, small:true,
           data:`data-mcp-central-select="${esc(mcpCentralClient)}"`,
         }) : ""}</div>`;
     }
     const centralPanel = availableClients.length
-      ? `<div class="panel-actions" aria-label="${tx("Sessão MCP Owner")}">
-        <p>${tx("Selecione o cliente OAuth autorizado. A escolha não concede grants nem prova controle remoto.")}</p>
+      ? `<div class="panel-actions" aria-label="${tx("Vínculo MCP Owner")}">
+        <p>${tx("Selecione o cliente OAuth autorizado somente para um desafio pendente. O vínculo confirmado persiste na Platform até revogação explícita; offline, heartbeat atrasado ou reinício não escolhem outro computador.")}</p>
         <div>${centralButtons}</div></div>${centralDetail}`
       : "";
     const centralNotice = mcpCentralNotice
