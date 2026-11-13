@@ -557,6 +557,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
     'const dialog={open:false,close:()=>{}};',
     'const closeMore=()=>{},renderNavigation=()=>{},renderContent=()=>{};',
     'let mcpRevoking=revoking,mcpCentralSelecting=selecting,mcpProjectCreating=creating,mcpDevicesRevision=3,mcpAuthorityRevision=5;',
+    'const mcpGithubConnecting=false,mcpGithubSelecting=false,mcpGithubChallenge=null,mcpGithubStatus="idle";',
     'let mcpDevices=[{device_id:"old"}],mcpDevicesStatus="ready";',
     'let mcpAuthority={grant_groups:[{grant_group_id:"old"}]},mcpAuthorityDevice="old",',
     '    mcpAuthorityStatus="ready",mcpRevocationNotice="old";',
