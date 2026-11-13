@@ -880,8 +880,8 @@
       const expected=new Set(["allow_signup","client_id","code_challenge","code_challenge_method",
         "prompt","redirect_uri","state"]);
       const state=value.challenge_id+"\\.";
-      if(authorization.origin!=="https://github.com"
-          ||authorization.pathname!=="/login/oauth/authorize"
+      if(authorization.protocol!=="https:"||authorization.hostname!=="github.com"
+          ||authorization.port||authorization.pathname!=="/login/oauth/authorize"
           ||authorization.username||authorization.password||authorization.hash
           ||authorization.searchParams.size!==expected.size
           ||[...authorization.searchParams.keys()].some(key=>!expected.has(key))
@@ -894,7 +894,7 @@
           ||!(authorization.searchParams.get("state")||"").startsWith(state.slice(0,-1))
           ||!new RegExp("^"+value.challenge_id.replace(/-/g,"\\-")+"\\.[A-Za-z0-9_-]{43}$")
             .test(authorization.searchParams.get("state")||"")
-          ||install.origin!=="https://github.com"
+          ||install.protocol!=="https:"||install.hostname!=="github.com"||install.port
           ||!/^[/]apps[/][A-Za-z0-9-]+[/]installations[/]new$/.test(install.pathname)
           ||install.search||install.hash||install.username||install.password)
         throw Error("mcp-owner-github-start-unconfirmed");
