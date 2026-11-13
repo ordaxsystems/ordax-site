@@ -18,8 +18,14 @@ test("only the pinned OS entrypoint is exposed, never a copied Site identity imp
   const adapter = fs.readFileSync(new URL("../api/account-proxy.mjs", import.meta.url), "utf8");
   assert.match(adapter, /\.gateway-source\/api\/account-proxy\.mjs/);
   assert.doesNotMatch(adapter, /authorization|set-cookie|createClient|jwtVerify/);
+  assert.equal(lock.$schema, "ordax.site-canonical-gateway-source/2");
   assert.equal(lock.status, "staging-only-not-authorized-for-production");
   assert.equal(lock.repository, "ordaxsystems/ordax-os");
+  assert.equal(lock.bridge.owner_repository, "ordaxsystems/ordax-os");
+  assert.equal(lock.bridge.consumer_repository, "ordaxsystems/ordax-site");
+  assert.equal(lock.bridge.permanent, false);
+  assert.equal(lock.bridge.production_authorized, false);
+  assert.match(lock.bridge.removal_condition, /^remove-source-materialization-/);
 });
 
 test("same-origin routes use the one canonical proxy and disable caching", () => {

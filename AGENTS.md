@@ -9,7 +9,7 @@ Este repositório é o **owner do código de apresentação do site público** a
 `ordax-site` é apresentação/distribuição pública e **não participa da composição Native**.
 
 - O Site consome somente catálogos de download/release autorizados e assets públicos publicados pelos owners.
-- Não importar source de Surface/OS/Apps/Creator nem disparar builds Native por mudança do Site.
+- Não importar source de Surface/OS/Apps/Creator nem disparar builds Native por mudança do Site. **Única exceção atual e temporária:** o host Dev materializa a closure exata do gateway de Conta do owner `ordax-os`, exclusivamente pelo lock `contracts/canonical-gateway-source.json`; o lock precisa declarar owner, consumer, `permanent=false`, `production_authorized=false` e condição de remoção. Não ampliar essa exceção nem criar outro import de source.
 - Uma alteração de landing/conta/apresentação fica neste repo se os contratos públicos continuam compatíveis.
 - Mudança de produto em OS/Desktop/Surface não exige PR no Site até existir algo público que o Site realmente precise apresentar/distribuir.
 - Estados de PR, SHA histórico ou artefato Dev não autorizam catálogo/download público.
