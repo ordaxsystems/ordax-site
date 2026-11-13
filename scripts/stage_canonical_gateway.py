@@ -19,7 +19,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCK = ROOT / "contracts/canonical-gateway-source.json"
-SCHEMA = "ordax.site-canonical-gateway-source/1"
+SCHEMA = "ordax.site-canonical-gateway-source/2"
 STATUS = "staging-only-not-authorized-for-production"
 REPOSITORY = "ordaxsystems/ordax-os"
 CONSUMER_REPOSITORY = "ordaxsystems/ordax-site"
