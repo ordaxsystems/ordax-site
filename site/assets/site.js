@@ -880,6 +880,9 @@
       const expected=new Set(["allow_signup","client_id","code_challenge","code_challenge_method",
         "prompt","redirect_uri","state"]);
       const stateValue=authorization.searchParams.get("state")||"";
+      let callback;
+      try { callback=new URL(authorization.searchParams.get("redirect_uri")||""); }
+      catch { throw Error("mcp-owner-github-start-unconfirmed"); }
       if(authorization.protocol!=="https:"||authorization.hostname!=="github.com"
           ||authorization.port||authorization.pathname!=="/login/oauth/authorize"
           ||authorization.username||authorization.password||authorization.hash
@@ -888,7 +891,9 @@
           ||!/^[A-Za-z0-9_.-]{8,160}$/.test(authorization.searchParams.get("client_id")||"")
           ||!/^[A-Za-z0-9_-]{43}$/.test(authorization.searchParams.get("code_challenge")||"")
           ||authorization.searchParams.get("code_challenge_method")!=="S256"
-          ||authorization.searchParams.get("redirect_uri")!=="https://ordax.com.br/account/mcp/github/callback"
+          ||callback.protocol!=="https:"||callback.hostname!=="ordax.com.br"||callback.port
+          ||callback.pathname!=="/account/mcp/github/callback"
+          ||callback.search||callback.hash||callback.username||callback.password
           ||authorization.searchParams.get("allow_signup")!=="false"
           ||authorization.searchParams.get("prompt")!=="select_account"
           ||!new RegExp("^"+value.challenge_id.replace(/-/g,"\\-")+"\\.[A-Za-z0-9_-]{43}$")
