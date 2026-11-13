@@ -215,6 +215,21 @@
     { id: "privacy", section: "privacidade", q: "Posso exportar ou excluir meus dados?", a: "Os controles ficam em Dados e privacidade. Para sua proteção, a exportação e a exclusão exigem uma conta autenticada e o serviço de privacidade conectado." }
   ]);
   const state = { section: "visao-geral", period: "month", activityPeriod: "month", tab: "overview", faq: "plan", helpQuery: "", searchQuery: "", dialog: null };
+  const githubReturn = (() => {
+    const url = new URL(window.location.href);
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    const challenges = url.searchParams.getAll("mcp_github_challenge");
+    const statuses = url.searchParams.getAll("mcp_github");
+    const challenge = challenges.length === 1 && uuid.test(challenges[0]) ? challenges[0] : null;
+    const status = statuses.length === 1 && ["erro","indisponivel"].includes(statuses[0])
+      ? statuses[0] : null;
+    if (challenges.length || statuses.length) {
+      url.searchParams.delete("mcp_github_challenge");
+      url.searchParams.delete("mcp_github");
+      history.replaceState(history.state, "", url.pathname + url.search + url.hash);
+    }
+    return { challenge, status };
+  })();
   let session = account.getSnapshot();
   let disposeMenu = () => {};
   // Observational data only. Never an entitlement, quota or invoice.
@@ -242,6 +257,19 @@
   let mcpProjectCreating = false;
   let mcpProjectNotice = "";
 
+  let mcpGithubChallenge = githubReturn.challenge;
+  let mcpGithubCandidates = null;
+  let mcpGithubStatus = githubReturn.challenge ? "unavailable" : "idle";
+  let mcpGithubRevision = 0;
+  let mcpGithubConnecting = false;
+  let mcpGithubSelecting = false;
+  let mcpGithubSession = null;
+  let mcpGithubNotice = githubReturn.status === "erro"
+    ? "A autorização GitHub não foi confirmada. Nenhuma conexão foi criada automaticamente."
+    : githubReturn.status === "indisponivel"
+      ? "A conexão GitHub ainda não está disponível."
+      : "";
+
   let mcpCentralClient = null;
   let mcpCentralTargets = null;
   let mcpCentralSelections = null;
@@ -257,6 +285,128 @@
     mcpProjectStatus = "unavailable";
     mcpProjectCreating = false;
     mcpProjectNotice = "";
+  }
+
+  function resetMcpGithubSession() {
+    mcpGithubRevision += 1;
+    mcpGithubCandidates = null;
+    mcpGithubStatus = mcpGithubChallenge ? "unavailable" : "idle";
+    mcpGithubConnecting = false;
+    mcpGithubSelecting = false;
+  }
+
+  async function loadMcpGithubCandidates(challengeId = mcpGithubChallenge) {
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    if (!signedIn() || mcpGithubConnecting || mcpGithubSelecting
+        || !uuid.test(challengeId || "")) return;
+    const revision = ++mcpGithubRevision, owner = session;
+    mcpGithubChallenge = challengeId;
+    mcpGithubCandidates = null;
+    mcpGithubStatus = "loading";
+    if (state.section === "dispositivos") renderContent();
+    try {
+      const value = await account.readMcpGithubCandidates(challengeId);
+      if (revision !== mcpGithubRevision || session !== owner || !signedIn()
+          || mcpGithubChallenge !== challengeId) return;
+      mcpGithubCandidates = value;
+      mcpGithubStatus = "ready";
+      mcpGithubNotice = value.repositories.length
+        ? "GitHub verificado. Escolha um dos repositórios confirmados pela Platform."
+        : "A autorização GitHub não retornou repositórios disponíveis para este projeto.";
+    } catch {
+      if (revision !== mcpGithubRevision || session !== owner || !signedIn()) return;
+      mcpGithubCandidates = null;
+      mcpGithubStatus = "unavailable";
+      mcpGithubNotice = "Os repositórios GitHub verificados não puderam ser consultados. Nenhuma seleção foi feita.";
+    }
+    if (state.section === "dispositivos") renderContent();
+  }
+
+  async function startMcpGithubAuthorization(control) {
+    if (mcpGithubConnecting || mcpGithubSelecting || mcpProjectCreating
+        || !signedIn() || mcpProjectStatus !== "ready" || !mcpProjectOnboarding) return;
+    const projectId = control.dataset.mcpGithubConnect;
+    const project = mcpProjectOnboarding.projects.find(item => item.project_id === projectId);
+    if (!project || !["needs_github_installation","needs_repository_selection"].includes(project.next_state))
+      return;
+    const revision = ++mcpGithubRevision, owner = session;
+    mcpGithubConnecting = true;
+    mcpGithubNotice = "";
+    renderContent();
+    try {
+      const result = await account.startMcpGithubAuthorization(projectId);
+      if (revision !== mcpGithubRevision || session !== owner || !signedIn()) return;
+      // Navigation only after the Account port has independently validated the
+      // fixed github.com OAuth URL, callback, state and PKCE parameters.
+      window.location.assign(result.authorization_url);
+    } catch {
+      if (revision !== mcpGithubRevision || session !== owner || !signedIn()) return;
+      mcpGithubNotice = "A autorização GitHub não foi iniciada. O projeto continua sem conexão.";
+      mcpGithubStatus = mcpGithubChallenge ? "unavailable" : "idle";
+      mcpGithubConnecting = false;
+      if (state.section === "dispositivos") renderContent();
+    }
+  }
+
+  async function selectMcpGithubRepository(form) {
+    if (mcpGithubSelecting || mcpGithubConnecting || !signedIn()
+        || mcpGithubStatus !== "ready" || !mcpGithubCandidates || !mcpGithubChallenge)
+      return;
+    const repositoryId = String(new FormData(form).get("repository_id") ?? "");
+    const candidate = mcpGithubCandidates.repositories.find(
+      item => item.repository_id === repositoryId);
+    if (!candidate) return;
+    const revision = ++mcpGithubRevision, owner = session;
+    const challengeId = mcpGithubChallenge;
+    const projectId = mcpGithubCandidates.project_id;
+    const deviceId = mcpProjectDevice;
+    mcpGithubSelecting = true;
+    mcpGithubNotice = "";
+    renderContent();
+    try {
+      const selected = await account.selectMcpGithubRepository({
+        challenge_id:challengeId, repository_id:repositoryId, confirm:"select_repository",
+      });
+      if (revision !== mcpGithubRevision || session !== owner || !signedIn()) return;
+      if (selected.project_id !== projectId
+          || selected.repository_full_name !== candidate.repository_full_name
+          || selected.next_state !== "needs_device_binding")
+        throw new Error("mcp-github-selection-unconfirmed");
+      // If a device-scoped Project view is already open, reconcile against the
+      // canonical onboarding read. Never infer device binding from selection.
+      if (deviceId && deviceId === mcpAuthorityDevice) {
+        const confirmed = await account.readMcpProjectOnboarding(deviceId);
+        if (revision !== mcpGithubRevision || session !== owner || !signedIn()) return;
+        const project = confirmed.projects.find(item => item.project_id === projectId);
+        if (!project || project.repository_full_name !== candidate.repository_full_name
+            || project.next_state !== "needs_device_binding")
+          throw new Error("mcp-github-selection-not-reflected");
+        mcpProjectOnboarding = confirmed;
+        mcpProjectStatus = "ready";
+      }
+      mcpGithubCandidates = null;
+      mcpGithubStatus = "selected";
+      mcpGithubNotice = "Repositório GitHub verificado e conectado. O vínculo do dispositivo continua uma etapa separada.";
+    } catch {
+      if (revision !== mcpGithubRevision || session !== owner || !signedIn()) return;
+      // Never replay an uncertain repository-selection POST. When a device
+      // scope is available, reconcile only through the canonical Project read.
+      if (deviceId && deviceId === mcpAuthorityDevice) {
+        try {
+          const reconciled = await account.readMcpProjectOnboarding(deviceId);
+          if (revision !== mcpGithubRevision || session !== owner || !signedIn()) return;
+          mcpProjectOnboarding = reconciled;
+          mcpProjectStatus = "ready";
+        } catch { /* The uncertainty remains visible below. */ }
+      }
+      mcpGithubStatus = "unavailable";
+      mcpGithubNotice = "A seleção do repositório não foi confirmada. Consulte o projeto antes de tentar outra seleção.";
+    } finally {
+      if (revision === mcpGithubRevision && session === owner && signedIn()) {
+        mcpGithubSelecting = false;
+        if (state.section === "dispositivos") renderContent();
+      }
+    }
   }
 
   function resetMcpCentral() {
@@ -754,12 +904,25 @@
       needs_device_binding:"Dispositivo ainda não vinculado ao projeto",
       ready_without_grants:"Pronto para autorizações explícitas",
     };
-    const rows = value.projects.map(project => `<tr>
-      <th scope="row"><strong>${esc(project.name)}</strong><small translate="no">${esc(project.project_id)}</small></th>
-      <td>${esc(project.kind)}</td>
-      <td>${project.repository_full_name ? `<span translate="no">${esc(project.repository_full_name)}</span>` : tx("Nenhum repositório verificado")}</td>
-      <td><span class="status-tag">${tx(stateLabels[project.next_state] || project.next_state)}</span></td>
-    </tr>`).join("");
+    const rows = value.projects.map(project => {
+      const githubReady = mcpGithubStatus === "ready"
+        && mcpGithubCandidates?.project_id === project.project_id;
+      const canAuthorize = ["needs_github_installation","needs_repository_selection"].includes(
+        project.next_state) && !githubReady;
+      const githubControl = canAuthorize
+        ? `<button type="button" class="button outline h-8"
+            data-mcp-github-connect="${esc(project.project_id)}"
+            ${mcpGithubConnecting || mcpGithubSelecting || mcpProjectCreating ? "disabled" : ""}>
+            ${icon("globe")}${tx(project.next_state === "needs_repository_selection"
+              ? "Verificar GitHub novamente" : "Conectar GitHub")}</button>`
+        : "";
+      return `<tr>
+        <th scope="row"><strong>${esc(project.name)}</strong><small translate="no">${esc(project.project_id)}</small></th>
+        <td>${esc(project.kind)}</td>
+        <td>${project.repository_full_name ? `<span translate="no">${esc(project.repository_full_name)}</span>` : tx("Nenhum repositório verificado")}</td>
+        <td><span class="status-tag">${tx(stateLabels[project.next_state] || project.next_state)}</span>${githubControl}</td>
+      </tr>`;
+    }).join("");
     const table = value.projects.length
       ? `<table class="records-table"><caption class="sr-only">${tx("Projetos MCP")}</caption>
         <thead><tr><th scope="col">${tx("Projeto")}</th><th scope="col">${tx("Tipo")}</th>
@@ -792,6 +955,41 @@
       <h3 id="mcp-projects-heading">${tx("Projetos MCP")} · ${esc(device.name)}</h3>
       <p class="panel-description">${tx("O estado abaixo vem da Platform. Um projeto sem GitHub verificado não autoriza execução remota.")}</p>
       ${table}${form}${notice}</section>`;
+  }
+
+  function mcpGithubPanel() {
+    if (!mcpGithubChallenge && !mcpGithubNotice) return "";
+    const notice = mcpGithubNotice
+      ? `<p class="device-revoke-note" role="status">${icon("info")}${tx(mcpGithubNotice)}</p>` : "";
+    if (mcpGithubStatus === "loading") {
+      return `<section class="settings-section" aria-labelledby="mcp-github-heading">
+        <h3 id="mcp-github-heading">${tx("GitHub do projeto")}</h3>
+        <p role="status">${tx("Consultando repositórios GitHub verificados")}</p>${notice}</section>`;
+    }
+    if (mcpGithubStatus !== "ready" || !mcpGithubCandidates) {
+      return notice ? `<section class="settings-section" aria-labelledby="mcp-github-heading">
+        <h3 id="mcp-github-heading">${tx("GitHub do projeto")}</h3>${notice}</section>` : "";
+    }
+    const repositories = mcpGithubCandidates.repositories;
+    const options = repositories.map(repository =>
+      `<option value="${esc(repository.repository_id)}">${esc(repository.repository_full_name)}
+        · ${esc(repository.installation_account_login)}</option>`).join("");
+    const selection = repositories.length
+      ? `<form data-mcp-github-selection class="profile-field-group">
+          <p class="panel-description">${tx("Escolha somente entre os repositórios que o GitHub confirmou para esta autorização.")}</p>
+          <label class="form-field"><span>${tx("Repositório GitHub")}</span>
+            <select name="repository_id" required>${options}</select></label>
+          <div class="form-actions">
+            <span>${icon("info")}${tx("Conectar o repositório não vincula um dispositivo nem concede grants.")}</span>
+            <button type="submit" class="button outline h-8"${mcpGithubSelecting ? " disabled" : ""}>
+              ${tx(mcpGithubSelecting ? "Conectando repositório" : "Conectar repositório")}</button>
+          </div>
+        </form>`
+      : `<p>${tx("Nenhum repositório foi confirmado pelo GitHub nesta autorização.")}</p>`;
+    return `<section class="settings-section" aria-labelledby="mcp-github-heading">
+      <h3 id="mcp-github-heading">${tx("GitHub do projeto")}</h3>
+      <p class="panel-description">${tx("A lista abaixo veio da Platform após verificação server-side no GitHub. IDs de instalação não são aceitos nesta tela.")}</p>
+      ${selection}${notice}</section>`;
   }
 
   function mcpAuthorityPanel() {
@@ -999,6 +1197,7 @@
       ${mcpDeviceRecords()}
       ${mcpAuthorityPanel()}
       ${mcpProjectPanel()}
+      ${mcpGithubPanel()}
       <p class="device-revoke-note" id="device-revoke-note">${icon("info")}${tx("Revogar um grant OAuth não desliga nem remove o computador. A ação exige confirmação e verificação pela Platform.")}</p>
       <div class="panel-actions device-actions">${link("integracoes", "", "text-link", `${tx("Ver autorizações de aplicativos")}${icon("arrow-right")}`)}${link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`)}</div>
     </section>${relatedAreas(["seguranca", "atividade"], "Proteção e histórico da conta")}`;
@@ -1105,7 +1304,8 @@
     const changed = requested !== state.section;
     state.section = requested;
     if (changed && requested === "dispositivos" && signedIn()
-        && !mcpRevoking && !mcpCentralSelecting && !mcpProjectCreating) {
+        && !mcpRevoking && !mcpCentralSelecting && !mcpProjectCreating
+        && !mcpGithubConnecting && !mcpGithubSelecting) {
       // In-flight Owner selection must retain its exact POST receipt. A
       // section revisit cannot reset the revision and permit a second choice.
       // A new idle visit must re-read the Platform, never show old Owner grants
@@ -1127,6 +1327,8 @@
     renderNavigation();
     renderContent({ focus: !initial });
     if (state.section === "dispositivos" && signedIn() && mcpDevicesStatus === "unavailable") void loadMcpDevices();
+    if (state.section === "dispositivos" && signedIn() && mcpGithubChallenge
+        && mcpGithubStatus === "unavailable") void loadMcpGithubCandidates();
     if (changed || !initial) window.scrollTo({ top: 0, behavior: "instant" });
     if (contentAnchor) document.getElementById("conteudo").focus({ preventScroll: true });
   }
@@ -1189,7 +1391,10 @@
       document.getElementById("conteudo").focus();
       return;
     }
-    if (control.matches("[data-mcp-central-select]")) {
+    if (control.matches("[data-mcp-github-connect]")) {
+      event.preventDefault();
+      if (!layoutPreview) void startMcpGithubAuthorization(control);
+    } else if (control.matches("[data-mcp-central-select]")) {
       event.preventDefault();
       if (!layoutPreview) void selectMcpCentralDevice(control);
     } else if (control.matches("[data-mcp-central-client]")) {
@@ -1239,6 +1444,12 @@
     }
   });
   document.addEventListener("submit", event => {
+    const githubForm = event.target?.closest?.("[data-mcp-github-selection]");
+    if (githubForm) {
+      event.preventDefault();
+      if (!layoutPreview) void selectMcpGithubRepository(githubForm);
+      return;
+    }
     const form = event.target?.closest?.("[data-mcp-project-form]");
     if (!form) return;
     event.preventDefault();
@@ -1311,7 +1522,14 @@
         mcpRevocationNotice = "";
         resetMcpProjectOnboarding();
         resetMcpCentral();
-        if (signedIn() && state.section === "dispositivos") void loadMcpDevices();
+        if (mcpGithubSession !== session) {
+          mcpGithubSession = session;
+          resetMcpGithubSession();
+        }
+        if (signedIn() && state.section === "dispositivos") {
+          void loadMcpDevices();
+          if (mcpGithubChallenge) void loadMcpGithubCandidates();
+        }
       }
       renderSession();
       // Revalidation must clear personal data, but not replace unrelated controls
