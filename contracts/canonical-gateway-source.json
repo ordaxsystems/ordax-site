@@ -44,5 +44,13 @@
       "git_blob_sha1": "06fd91d33250bfb88e81c4c07ffd5224b2309541",
       "size": 2056
     }
-  ]
+  ],
+  "bridge": {
+    "kind": "temporary-staging-source-adapter",
+    "owner_repository": "ordaxsystems/ordax-os",
+    "consumer_repository": "ordaxsystems/ordax-site",
+    "permanent": false,
+    "production_authorized": false,
+    "removal_condition": "remove-source-materialization-when-the-identity-owner-provides-a-versioned-deployed-same-origin-gateway-or-owner-published-artifact-that-the-site-can-consume-without-importing-os-source"
+  }
 }
