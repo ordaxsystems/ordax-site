@@ -19,9 +19,12 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCK = ROOT / "contracts/canonical-gateway-source.json"
-SCHEMA = "ordax.site-canonical-gateway-source/1"
+SCHEMA = "ordax.site-canonical-gateway-source/2"
 STATUS = "staging-only-not-authorized-for-production"
 REPOSITORY = "ordaxsystems/ordax-os"
+CONSUMER_REPOSITORY = "ordaxsystems/ordax-site"
+BRIDGE_KIND = "temporary-staging-source-adapter"
+REMOVAL_CONDITION = "remove-source-materialization-when-the-identity-owner-provides-a-versioned-deployed-same-origin-gateway-or-owner-published-artifact-that-the-site-can-consume-without-importing-os-source"
 ENTRY = "api/account-proxy.mjs"
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 SOURCE_PATH = re.compile(r"(?:api/|lib/|infra/supabase/functions/)[a-zA-Z0-9_./-]+\.mjs\Z")
@@ -39,13 +42,23 @@ def git_blob_sha1(data: bytes) -> str:
 
 
 def validate_lock(value: object) -> dict[str, object]:
-    if not isinstance(value, dict) or set(value) != {"$schema", "status", "repository", "commit", "files"}:
+    if not isinstance(value, dict) or set(value) != {"$schema", "status", "repository", "commit", "bridge", "files"}:
         raise GatewaySourceError("gateway-lock-schema-invalid")
     if (value["$schema"] != SCHEMA or value["status"] != STATUS
             or value["repository"] != REPOSITORY
             or not isinstance(value["commit"], str)
             or not SHA40.fullmatch(value["commit"])):
         raise GatewaySourceError("gateway-lock-authority-invalid")
+    bridge = value["bridge"]
+    if (not isinstance(bridge, dict)
+            or set(bridge) != {"kind", "owner_repository", "consumer_repository", "permanent", "production_authorized", "removal_condition"}
+            or bridge["kind"] != BRIDGE_KIND
+            or bridge["owner_repository"] != REPOSITORY
+            or bridge["consumer_repository"] != CONSUMER_REPOSITORY
+            or bridge["permanent"] is not False
+            or bridge["production_authorized"] is not False
+            or bridge["removal_condition"] != REMOVAL_CONDITION):
+        raise GatewaySourceError("gateway-lock-bridge-invalid")
     rows = value["files"]
     if not isinstance(rows, list) or not 2 <= len(rows) <= MAX_FILES:
         raise GatewaySourceError("gateway-lock-files-invalid")

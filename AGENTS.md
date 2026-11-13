@@ -1,8 +1,24 @@
 # OrdaX Site — instruções para agentes
 
+> **Execução DEV — Evolução Rápida (regra transversal obrigatória):** aplicar a [política canônica OrdaX](https://github.com/ordaxsystems/ordax-os/blob/main/docs/DEVELOPMENT-WORKFLOW.md#regra-operacional-transversal--evolucao-rapida-dev-2026-11-04) antes de iniciar trabalho. Entregar a alteração no owner correto primeiro e validar com testes proporcionais depois; não ampliar escopo com auditorias, documentação, CI ou workflows sem causalidade. Preservar gates obrigatórios, integridade, segurança e autorização.
+
 Este repositório é o **owner do código de apresentação do site público** após cutover aprovado, não do OS, Surface Web, Identity, cobranças ou publicação de releases.
 
-## Ordem de leitura
+## Integração canônica no produto — 13/11/2026
+
+`ordax-site` é apresentação/distribuição pública e **não participa da composição Native**.
+
+- O Site consome somente catálogos de download/release autorizados e assets públicos publicados pelos owners.
+- Não importar source de Surface/OS/Apps/Creator nem disparar builds Native por mudança do Site. **Única exceção atual e temporária:** o host Dev materializa a closure exata do gateway de Conta do owner `ordax-os`, exclusivamente pelo lock `contracts/canonical-gateway-source.json`; o lock precisa declarar owner, consumer, `permanent=false`, `production_authorized=false` e condição de remoção. Não ampliar essa exceção nem criar outro import de source.
+- Uma alteração de landing/conta/apresentação fica neste repo se os contratos públicos continuam compatíveis.
+- Mudança de produto em OS/Desktop/Surface não exige PR no Site até existir algo público que o Site realmente precise apresentar/distribuir.
+- Estados de PR, SHA histórico ou artefato Dev não autorizam catálogo/download público.
+
+Regra transversal: [`ordax-os/docs/DEVELOPMENT-WORKFLOW.md`](https://github.com/ordaxsystems/ordax-os/blob/main/docs/DEVELOPMENT-WORKFLOW.md#integração-multi-repositório--composição-do-produto-2026-11-13), ADR-031.
+
+## Leitura por impacto
+
+Para correções localizadas, leia apenas os arquivos e contratos afetados. O roteiro abaixo é para mudanças transversais ou de publicação e não exige auditoria integral antes de cada edição.
 1. `README.md`
 2. `docs/AUDIT.md`
 3. `docs/DECISIONS.md`
@@ -19,7 +35,7 @@ Este repositório é o **owner do código de apresentação do site público** a
 - Não alterar domínio, deploy de produção nem credenciais sem aprovação específica.
 - Recuperação e Conta continuam fail-closed enquanto seus gates reais não estiverem aprovados.
 - O catálogo público vem exclusivamente de projeção autorizada do publicador de releases; sem publicação, catálogo vazio.
-- Não alterar API/comportamento de `ordax-os` sem reconciliação das PRs da Surface.
+- Não alterar API/comportamento de `ordax-os` a partir do Site. Se um contrato público realmente precisar mudar, altere-o no owner e adote a nova versão explicitamente; não reconciliar PRs da Surface por rotina.
 - Preservar commits da `main`; não usar force-push/rebase da main.
 
 ## Fluxo
