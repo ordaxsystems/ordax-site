@@ -1,5 +1,5 @@
 {
-  "$schema": "ordax.site-canonical-gateway-source/1",
+  "$schema": "ordax.site-canonical-gateway-source/2",
   "status": "staging-only-not-authorized-for-production",
   "repository": "ordaxsystems/ordax-os",
   "commit": "a0cd6dbc6a3e6c0ffa19b2d7874f85fbdc1c2be2",
