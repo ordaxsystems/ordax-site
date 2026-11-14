@@ -35,6 +35,8 @@ test("real same-origin gate permits only a single exact MCP authority UUID query
   assert.equal(sameOriginPath("/account/mcp/project-onboarding/projects","GET"),false);
   assert.equal(sameOriginPath("/account/mcp/project-onboarding/device-binding-intents","POST"),true);
   assert.equal(sameOriginPath("/account/mcp/project-onboarding/device-binding-intents","GET"),false);
+  assert.equal(sameOriginPath("/account/mcp/project-grants","POST"),true);
+  assert.equal(sameOriginPath("/account/mcp/project-grants","GET"),false);
   assert.equal(sameOriginPath("/account/mcp/github/authorization-challenges","POST"),true);
   assert.equal(sameOriginPath("/account/mcp/github/authorization-challenges","GET"),false);
   assert.equal(sameOriginPath("/account/mcp/github/repository-selections","POST"),true);
@@ -67,6 +69,7 @@ test("Account JSON transport keeps the exact state-changing Owner routes explici
   assert.match(source,/if \(!sameOriginPath\(path, method\)\) throw new Error\("api-path-invalid"\)/);
   for (const route of [
     "/account/mcp/revoke",
+    "/account/mcp/project-grants",
     "/account/mcp/central-selections",
     "/account/mcp/project-onboarding/projects",
     "/account/mcp/project-onboarding/device-binding-intents",
@@ -127,18 +130,24 @@ test("an authenticated, verified empty list is distinct from an unavailable serv
 });
 
 const authorityStart = source.indexOf("    async readMcpAuthority(deviceId, signal) {");
-const authorityEnd = source.indexOf("\n    },\n    async revokeMcpGrant(input, signal) {", authorityStart);
+const authorityEnd = source.indexOf("\n    },\n    async createMcpProjectGrant(input, signal) {", authorityStart);
+const grantStart = source.indexOf("    async createMcpProjectGrant(input, signal) {");
+const grantEnd = source.indexOf("\n    },\n    async revokeMcpGrant(input, signal) {", grantStart);
 const revokeStart = source.indexOf("    async revokeMcpGrant(input, signal) {");
 const revokeEnd = source.indexOf("\n    },\n    async readMcpCentralTargets(clientId, signal) {", revokeStart);
 assert.ok(authorityStart > 0 && authorityEnd > authorityStart, "Owner authority read port missing");
+assert.ok(grantStart > 0 && grantEnd > grantStart, "Owner Project grant port missing");
 assert.ok(revokeStart > 0 && revokeEnd > revokeStart, "Owner revoke port missing");
 
 function ownerHarness(session, loadJson) {
   const authorityBody = source.slice(authorityStart + "    async readMcpAuthority(deviceId, signal) {".length, authorityEnd);
+  const grantBody = source.slice(grantStart + "    async createMcpProjectGrant(input, signal) {".length, grantEnd);
   const revokeBody = source.slice(revokeStart + "    async revokeMcpGrant(input, signal) {".length, revokeEnd);
   return new Function("loadJson", "initial", `let sessionView=initial;
     return {
       authority: async function(deviceId,signal) {${authorityBody}
+      },
+      grant: async function(input,signal) {${grantBody}
       },
       revoke: async function(input,signal) {${revokeBody}
       },
@@ -150,7 +159,8 @@ const client = "22222222-2222-4222-8222-222222222222";
 const group = "33333333-3333-4333-8333-333333333333";
 const space = "55555555-5555-4555-8555-555555555555";
 const project = "66666666-6666-4666-8666-666666666666";
-const groupItem = {grant_group_id:group,client_id:client,profile_key:"full-computer-control",valid_until:null,client_consent_active:true};
+const groupItem = {grant_group_id:group,client_id:client,profile_key:"full-computer-control",
+  scope_kind:"device",space_id:null,project_id:null,valid_until:null,client_consent_active:true};
 const authority = {ok:true,schema:"ordax.owner-mcp-authority-view/1",device_id:first.device_id,
   clients:[{client_id:client,client_name:"ChatGPT"}],grant_groups:[groupItem]};
 
