@@ -518,7 +518,8 @@
   async function loadMcpAuthority(deviceId) {
     // A denied/late selection must not invalidate an in-flight revocation.
     // Advancing revision first would strand mcpRevoking=true in its finally.
-    if (!signedIn() || mcpRevoking || mcpCentralSelecting || mcpDevicesStatus !== "ready"
+    if (!signedIn() || mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating
+        || mcpDevicesStatus !== "ready"
         || !mcpDevices?.some(d => d.device_id === deviceId)) return;
     const revision = ++mcpAuthorityRevision;
     resetMcpCentral();
@@ -542,7 +543,8 @@
   }
 
   async function loadMcpProjectOnboarding(deviceId) {
-    if (!signedIn() || mcpProjectCreating || mcpProjectBinding || mcpDevicesStatus !== "ready"
+    if (!signedIn() || mcpProjectCreating || mcpProjectBinding || mcpProjectGrantCreating
+        || mcpDevicesStatus !== "ready"
         || !mcpDevices?.some(d => d.device_id === deviceId)) return;
     const revision = ++mcpProjectRevision;
     const owner = session;
