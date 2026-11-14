@@ -132,22 +132,28 @@ test("an authenticated, verified empty list is distinct from an unavailable serv
 const authorityStart = source.indexOf("    async readMcpAuthority(deviceId, signal) {");
 const authorityEnd = source.indexOf("\n    },\n    async createMcpProjectGrant(input, signal) {", authorityStart);
 const grantStart = source.indexOf("    async createMcpProjectGrant(input, signal) {");
-const grantEnd = source.indexOf("\n    },\n    async revokeMcpGrant(input, signal) {", grantStart);
+const grantEnd = source.indexOf("\n    },\n    async reauthorizeMcpGrant(input, signal) {", grantStart);
+const reauthorizeStart = source.indexOf("    async reauthorizeMcpGrant(input, signal) {");
+const reauthorizeEnd = source.indexOf("\n    },\n    async revokeMcpGrant(input, signal) {", reauthorizeStart);
 const revokeStart = source.indexOf("    async revokeMcpGrant(input, signal) {");
 const revokeEnd = source.indexOf("\n    },\n    async readMcpCentralTargets(clientId, signal) {", revokeStart);
 assert.ok(authorityStart > 0 && authorityEnd > authorityStart, "Owner authority read port missing");
 assert.ok(grantStart > 0 && grantEnd > grantStart, "Owner Project grant port missing");
+assert.ok(reauthorizeStart > 0 && reauthorizeEnd > reauthorizeStart, "Owner reauthorization port missing");
 assert.ok(revokeStart > 0 && revokeEnd > revokeStart, "Owner revoke port missing");
 
 function ownerHarness(session, loadJson) {
   const authorityBody = source.slice(authorityStart + "    async readMcpAuthority(deviceId, signal) {".length, authorityEnd);
   const grantBody = source.slice(grantStart + "    async createMcpProjectGrant(input, signal) {".length, grantEnd);
+  const reauthorizeBody = source.slice(reauthorizeStart + "    async reauthorizeMcpGrant(input, signal) {".length, reauthorizeEnd);
   const revokeBody = source.slice(revokeStart + "    async revokeMcpGrant(input, signal) {".length, revokeEnd);
   return new Function("loadJson", "initial", `let sessionView=initial;
     return {
       authority: async function(deviceId,signal) {${authorityBody}
       },
       grant: async function(input,signal) {${grantBody}
+      },
+      reauthorize: async function(input,signal) {${reauthorizeBody}
       },
       revoke: async function(input,signal) {${revokeBody}
       },
@@ -605,6 +611,37 @@ test("Project grant browser port fails closed on response drift and superseded s
   h.change({status:"authenticated"});
   release(reply);
   await assert.rejects(pending,/session-changed/);
+});
+
+test("Device profile reauthorization posts only existing grant identity and sanitizes receipt", async () => {
+  const input={device_id:first.device_id,client_id:client,grant_group_id:group,confirm:"reauthorize"};
+  const nextGroup="77777777-7777-4777-8777-777777777777";
+  const reply={ok:true,schema:"ordax.owner-profile-reauthorization/1",
+    device_id:first.device_id,client_id:client,previous_grant_group_id:group,
+    grant_group_id:nextGroup,profile_key:"full-computer-control",valid_until:null,
+    capability_count:40,capabilities:["forbidden.browser.detail"]};
+  const calls=[];
+  const h=ownerHarness({status:"authenticated"},async(...args)=>{calls.push(args);return reply});
+  const value=await h.reauthorize(input);
+  assert.equal(value.grant_group_id,nextGroup);
+  assert.equal(value.profile_key,"full-computer-control");
+  assert.equal("capabilities" in value,false);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0][0],"/account/mcp/reauthorize");
+  assert.equal(calls[0][2].method,"POST");
+  assert.deepEqual(calls[0][2].jsonBody,input);
+  for(const extra of [{profile_key:"full-computer-control"},{capabilities:["computer.transfer_begin"]},
+    {valid_until:null},{space_id:space},{project_id:project}]) {
+    const before=calls.length;
+    await assert.rejects(h.reauthorize({...input,...extra}),/reauthorize-invalid/);
+    assert.equal(calls.length,before,"browser cannot choose reauthorization authority");
+  }
+  for(const invalid of [{...reply,schema:"other"},{...reply,grant_group_id:"bad"},
+    {...reply,previous_grant_group_id:other},{...reply,device_id:other},
+    {...reply,client_id:other},{...reply,capability_count:0}]) {
+    await assert.rejects(ownerHarness({status:"authenticated"},async()=>invalid).reauthorize(input),
+      /reauthorize-unconfirmed/);
+  }
 });
 
 test("Revocation is an explicit same-origin POST and rejects unconfirmed outcomes", async () => {
