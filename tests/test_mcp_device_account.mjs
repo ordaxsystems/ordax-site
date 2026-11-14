@@ -651,7 +651,7 @@ test("denied MCP device selection cannot invalidate an active grant revocation",
     'let mcpRevoking=true, mcpAuthorityRevision=7, mcpAuthority=null;',
     'let mcpAuthorityDevice=null, mcpAuthorityStatus="unavailable";',
     'let mcpRevocationNotice="", mcpDevicesStatus="ready";',
-    'let mcpCentralSelecting=false;const resetMcpCentral=()=>{};',
+    'let mcpCentralSelecting=false,mcpProjectGrantCreating=false;const resetMcpCentral=()=>{};',
     'let mcpDevices=[{device_id:deviceId}], calls=0;',
     'const state={section:"dispositivos"};',
     'const signedIn=()=>true, renderContent=()=>{};',
@@ -702,7 +702,7 @@ test("MCP device presentation never marks offline Runtime as verified or exposes
   assert.match(render([target],false,false,true,false),/<button disabled>Autorizações<\/button>/);
   const panel=portal.slice(portal.indexOf("  function mcpAuthorityPanel() {"),
     portal.indexOf("\n  function field(",portal.indexOf("  function mcpAuthorityPanel() {")));
-  assert.match(panel,/disabled:mcpRevoking \|\| mcpCentralSelecting, small:true/);
+  assert.match(panel,/disabled:mcpRevoking \|\| mcpCentralSelecting \|\| mcpProjectGrantCreating, small:true/);
 });
 
 test("re-entering devices refreshes Owner data without interrupting a revocation",()=>{
