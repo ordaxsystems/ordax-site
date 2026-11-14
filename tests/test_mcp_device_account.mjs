@@ -524,6 +524,13 @@ test("Account grant inspection is scoped to one UUID, rejects forgery and duplic
   assert.equal((await ownerHarness({status:"authenticated"},async()=>({
     ...authority,grant_groups:[scoped],
   })).authority(first.device_id)).grant_groups[0].scope_kind,"project");
+  const rolloutDevice={grant_group_id:group,client_id:client,
+    profile_key:"full-computer-control",valid_until:null,client_consent_active:true};
+  const legacyView=await ownerHarness({status:"authenticated"},async()=>({
+    ...authority,grant_groups:[rolloutDevice],
+  })).authority(first.device_id);
+  assert.equal(legacyView.grant_groups[0].scope_kind,undefined,
+    "absent rollout scope is never inferred as Project authority");
 });
 
 test("Project grant browser port accepts only exact Process/Terminal scope and sanitizes response", async () => {
