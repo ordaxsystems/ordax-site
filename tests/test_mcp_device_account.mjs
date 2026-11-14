@@ -33,6 +33,8 @@ test("real same-origin gate permits only a single exact MCP authority UUID query
   assert.equal(sameOriginPath("/account/mcp/project-onboarding/projects"),false);
   assert.equal(sameOriginPath("/account/mcp/project-onboarding/projects","POST"),true);
   assert.equal(sameOriginPath("/account/mcp/project-onboarding/projects","GET"),false);
+  assert.equal(sameOriginPath("/account/mcp/project-onboarding/device-binding-intents","POST"),true);
+  assert.equal(sameOriginPath("/account/mcp/project-onboarding/device-binding-intents","GET"),false);
   assert.equal(sameOriginPath("/account/mcp/github/authorization-challenges","POST"),true);
   assert.equal(sameOriginPath("/account/mcp/github/authorization-challenges","GET"),false);
   assert.equal(sameOriginPath("/account/mcp/github/repository-selections","POST"),true);
@@ -61,8 +63,16 @@ test("real same-origin gate permits only a single exact MCP authority UUID query
   ]) assert.equal(sameOriginPath(bad),false,bad);
 });
 
-test("Account JSON transport always invokes the real same-origin URL gate",()=>{
+test("Account JSON transport keeps the exact state-changing Owner routes explicit",()=>{
   assert.match(source,/if \(!sameOriginPath\(path, method\)\) throw new Error\("api-path-invalid"\)/);
+  for (const route of [
+    "/account/mcp/revoke",
+    "/account/mcp/central-selections",
+    "/account/mcp/project-onboarding/projects",
+    "/account/mcp/project-onboarding/device-binding-intents",
+    "/account/mcp/github/authorization-challenges",
+    "/account/mcp/github/repository-selections",
+  ]) assert.equal(source.includes('"' + route + '"'),true,route);
 });
 
 const first = {
@@ -175,17 +185,23 @@ function centralHarness(session,fetcher){
 const projectReadStart=source.indexOf("    async readMcpProjectOnboarding(deviceId, signal) {");
 const projectReadEnd=source.indexOf("\n    },\n    async createMcpProject(input, signal) {",projectReadStart);
 const projectCreateStart=source.indexOf("    async createMcpProject(input, signal) {");
-const projectCreateEnd=source.indexOf("\n    },\n    async startMcpGithubAuthorization(projectId, signal) {",projectCreateStart);
+const projectCreateEnd=source.indexOf("\n    },\n    async requestMcpProjectDeviceBinding(input, signal) {",projectCreateStart);
+const projectBindStart=source.indexOf("    async requestMcpProjectDeviceBinding(input, signal) {");
+const projectBindEnd=source.indexOf("\n    },\n    async startMcpGithubAuthorization(projectId, signal) {",projectBindStart);
 assert.ok(projectReadStart>0&&projectReadEnd>projectReadStart,"Owner project read port missing");
 assert.ok(projectCreateStart>0&&projectCreateEnd>projectCreateStart,"Owner project create port missing");
+assert.ok(projectBindStart>0&&projectBindEnd>projectBindStart,"Owner project binding port missing");
 function projectHarness(session,fetcher){
   const readBody=source.slice(projectReadStart+"    async readMcpProjectOnboarding(deviceId, signal) {".length,projectReadEnd);
   const createBody=source.slice(projectCreateStart+"    async createMcpProject(input, signal) {".length,projectCreateEnd);
+  const bindBody=source.slice(projectBindStart+"    async requestMcpProjectDeviceBinding(input, signal) {".length,projectBindEnd);
   return new Function("loadJson","initial",`let sessionView=initial;
     return {
       read: async function(deviceId,signal) {${readBody}
       },
       create: async function(input,signal) {${createBody}
+      },
+      bind: async function(input,signal) {${bindBody}
       },
       change(next){sessionView=next}
     };`)(fetcher,session);
