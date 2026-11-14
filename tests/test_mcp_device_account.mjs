@@ -675,9 +675,9 @@ test("MCP device presentation never marks offline Runtime as verified or exposes
   const start=portal.indexOf("  function mcpDeviceRecords() {");
   const end=portal.indexOf("\n  function mcpProjectPanel() {",start);
   assert.ok(start>0 && end>start,"real MCP device renderer missing");
-  const render=new Function("devices","selecting","revoking","creating",[
+  const render=new Function("devices","selecting","revoking","creating","granting",[
     'const mcpDevicesStatus="ready",mcpDevices=devices;',
-    'const mcpRevoking=revoking,mcpCentralSelecting=selecting,mcpProjectCreating=creating,mcpProjectBinding=false;',
+    'const mcpRevoking=revoking,mcpCentralSelecting=selecting,mcpProjectCreating=creating,mcpProjectBinding=false,mcpProjectGrantCreating=granting;',
     'const i18n={getLocale:()=>"pt-BR"};',
     'const esc=value=>String(value??""),tx=value=>String(value);',
     'const icon=()=>"",pendingRecords=()=>"",empty=()=>"";',
@@ -687,19 +687,19 @@ test("MCP device presentation never marks offline Runtime as verified or exposes
   ].join("\n"));
   const target={device_id:first.device_id,name:"Product",
     last_seen_at:"2026-11-12T06:00:00Z",online:false,runtime_ready:true};
-  const offline=render([target],false,false,false);
+  const offline=render([target],false,false,false,false);
   assert.match(offline,/Offline/);
   assert.doesNotMatch(offline,/status-tag is-verified/,"offline is not attested");
   assert.match(offline,/<button>Autorizações<\/button>/);
-  const online=render([{...target,online:true}],false,false,false);
+  const online=render([{...target,online:true}],false,false,false,false);
   assert.match(online,/status-tag is-verified/);
-  assert.match(render([{...target,online:true,runtime_ready:false}],false,false,false),
+  assert.match(render([{...target,online:true,runtime_ready:false}],false,false,false,false),
     /Runtime não confirmado/);
-  assert.doesNotMatch(render([{...target,online:true,runtime_ready:false}],false,false,false),
+  assert.doesNotMatch(render([{...target,online:true,runtime_ready:false}],false,false,false,false),
     /status-tag is-verified/);
-  assert.match(render([target],true,false,false),/<button disabled>Autorizações<\/button>/);
-  assert.match(render([target],false,true,false),/<button disabled>Autorizações<\/button>/);
-  assert.match(render([target],false,false,true),/<button disabled>Autorizações<\/button>/);
+  assert.match(render([target],true,false,false,false),/<button disabled>Autorizações<\/button>/);
+  assert.match(render([target],false,true,false,false),/<button disabled>Autorizações<\/button>/);
+  assert.match(render([target],false,false,true,false),/<button disabled>Autorizações<\/button>/);
   const panel=portal.slice(portal.indexOf("  function mcpAuthorityPanel() {"),
     portal.indexOf("\n  function field(",portal.indexOf("  function mcpAuthorityPanel() {")));
   assert.match(panel,/disabled:mcpRevoking \|\| mcpCentralSelecting, small:true/);
@@ -712,7 +712,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   const end=portal.indexOf("\n  const dialog = document.getElementById(\"account-dialog\");",start);
   assert.ok(start>0 && end>start,"real Account router missing");
   const realRoute=portal.slice(start,end);
-  const harness=new Function("revoking","selecting","creating","binding",[
+  const harness=new Function("revoking","selecting","creating","binding","granting",[
     'let state={section:"visao-geral"};',
     'const byId=new Map([["visao-geral",{}],["dispositivos",{}]]);',
     'const location={hash:"#dispositivos"};',
@@ -720,7 +720,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
     'const document={getElementById:()=>({focus:()=>{}})};',
     'const dialog={open:false,close:()=>{}};',
     'const closeMore=()=>{},renderNavigation=()=>{},renderContent=()=>{};',
-    'let mcpRevoking=revoking,mcpCentralSelecting=selecting,mcpProjectCreating=creating,mcpProjectBinding=binding,mcpDevicesRevision=3,mcpAuthorityRevision=5;',
+    'let mcpRevoking=revoking,mcpCentralSelecting=selecting,mcpProjectCreating=creating,mcpProjectBinding=binding,mcpProjectGrantCreating=granting,mcpProjectGrantRevision=9,mcpDevicesRevision=3,mcpAuthorityRevision=5;',
     'const mcpGithubConnecting=false,mcpGithubSelecting=false,mcpGithubChallenge=null,mcpGithubStatus="idle";',
     'let mcpDevices=[{device_id:"old"}],mcpDevicesStatus="ready";',
     'let mcpAuthority={grant_groups:[{grant_group_id:"old"}]},mcpAuthorityDevice="old",',
@@ -737,7 +737,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
     '  deviceStatus:mcpDevicesStatus,notice:mcpRevocationNotice})};',
   ].join("\n"));
 
-  const normal=harness(false,false,false,false);
+  const normal=harness(false,false,false,false,false);
   normal.run();
   assert.deepEqual(normal.view(),{
     loads:1,deviceRev:4,authRev:6,devices:null,authority:null,
@@ -749,7 +749,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   normal.setHash("#dispositivos");normal.run();
   assert.equal(normal.view().loads,2,"new visit refreshes instead of showing stale grants");
 
-  const pending=harness(true,false,false,false);
+  const pending=harness(true,false,false,false,false);
   pending.run();
   assert.equal(pending.view().loads,0,"do not start a new fetch during revoke");
   assert.equal(pending.view().authRev,5,"do not cancel in-flight revocation receipt");
@@ -758,7 +758,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   // A user may navigate away and back after confirming the Owner choice
   // while the single POST is still in flight. Never invalidate its receipt
   // or permit a fresh selection while the original outcome is uncertain.
-  const selecting=harness(false,true,false,false);
+  const selecting=harness(false,true,false,false,false);
   selecting.run();
   assert.equal(selecting.view().loads,0,"do not refresh while selecting");
   assert.equal(selecting.view().authRev,5);
@@ -774,7 +774,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   assert.equal(selecting.resets(),0,"revisit must not cancel the pending selection");
   assert.equal(selecting.projectResets(),0,"revisit must not cancel project state during selection");
 
-  const creating=harness(false,false,true,false);
+  const creating=harness(false,false,true,false,false);
   creating.run();
   assert.equal(creating.view().loads,0,"do not refresh inventory during project POST");
   creating.setHash("#visao-geral");creating.run();
@@ -782,30 +782,44 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   assert.equal(creating.view().loads,0,"revisit cannot restart inventory during project POST");
   assert.equal(creating.projectResets(),0,"revisit must preserve an uncertain project receipt");
 
-  const binding=harness(false,false,false,true);
+  const binding=harness(false,false,false,true,false);
   binding.run();
   assert.equal(binding.view().loads,0,"do not refresh inventory during binding POST");
   binding.setHash("#visao-geral");binding.run();
   binding.setHash("#dispositivos");binding.run();
   assert.equal(binding.view().loads,0,"revisit cannot restart inventory during binding POST");
   assert.equal(binding.projectResets(),0,"revisit must preserve an uncertain binding receipt");
+
+  const granting=harness(false,false,false,false,true);
+  granting.run();
+  assert.equal(granting.view().loads,0,"do not refresh inventory during Project grant POST");
+  granting.setHash("#visao-geral");granting.run();
+  granting.setHash("#dispositivos");granting.run();
+  assert.equal(granting.view().loads,0,"revisit cannot restart inventory during Project grant POST");
+  assert.equal(granting.projectResets(),0,"revisit must preserve an uncertain Project grant receipt");
 });
 
-test("Project UI requests only Owner binding intent; Runtime confirmation and grants remain separate",()=>{
+test("Project UI keeps Runtime binding separate and exposes only explicit Terminal/Process grants after binding",()=>{
   const portal=readFileSync(new URL("../site/assets/account-portal.js",import.meta.url),"utf8");
   assert.match(portal,/data-mcp-project-form/);
   assert.match(portal,/data-mcp-github-connect/);
   assert.match(portal,/data-mcp-github-selection/);
   assert.match(portal,/data-mcp-project-bind/);
+  assert.match(portal,/data-mcp-project-grant-form/);
+  assert.match(portal,/project-native-terminal/);
+  assert.match(portal,/project-native-process/);
+  assert.match(portal,/project\.next_state === "ready_without_grants"/);
+  assert.match(portal,/await account\.createMcpProjectGrant\(/);
+  assert.match(portal,/Never replay an uncertain grant POST/);
+  assert.match(portal,/await account\.readMcpAuthority\(deviceId\)/);
+  assert.match(portal,/scope_kind === "project"/);
+  assert.match(portal,/Aguardando Runtime/);
   assert.match(portal,/await account\.requestMcpProjectDeviceBinding\(/);
   assert.match(portal,/Never replay an uncertain binding POST/);
-  assert.match(portal,/Aguardando Runtime/);
-  assert.match(portal,/ready_without_grants/);
   assert.match(portal,/await account\.startMcpGithubAuthorization\(projectId\)/);
   assert.match(portal,/await account\.readMcpGithubCandidates\(challengeId\)/);
   assert.match(portal,/await account\.selectMcpGithubRepository\(/);
-  assert.match(portal,/Never replay an uncertain repository-selection POST/);
-  assert.match(portal,/needs_github_installation:"GitHub ainda não conectado"/);
-  assert.doesNotMatch(portal,/local_project_ref|name="installation_id"|data-mcp-project-grant|data-mcp-device-bind/);
+  assert.doesNotMatch(portal,/local_project_ref|name="installation_id"|data-mcp-device-bind/);
+  assert.doesNotMatch(portal,/full-computer-control|project-browser-automation|project-workspace-read/);
   assert.doesNotMatch(portal,/searchParams\.get\("code"\)|searchParams\.get\("state"\)/);
 });
