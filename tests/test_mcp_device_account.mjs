@@ -509,6 +509,95 @@ test("Account grant inspection is scoped to one UUID, rejects forgery and duplic
   await assert.rejects(h.authority("evil-device"),/mcp-owner-device-invalid/);
   await assert.rejects(ownerHarness({status:"authenticated"},async()=>({...authority,device_id:other})).authority(first.device_id),/mcp-owner-authority-invalid/);
   await assert.rejects(ownerHarness({status:"authenticated"},async()=>({...authority,grant_groups:[groupItem,groupItem]})).authority(first.device_id),/mcp-owner-authority-invalid/);
+  for(const invalid of [
+    {...groupItem,scope_kind:"project",space_id:null,project_id:null},
+    {...groupItem,scope_kind:"device",space_id:space,project_id:project},
+    {...groupItem,scope_kind:"project",space_id:space,project_id:"bad"},
+    {...groupItem,scope_kind:"other"},
+  ]) {
+    await assert.rejects(ownerHarness({status:"authenticated"},async()=>({
+      ...authority,grant_groups:[invalid],
+    })).authority(first.device_id),/mcp-owner-authority-invalid/);
+  }
+  const scoped={...groupItem,profile_key:"project-native-terminal",
+    scope_kind:"project",space_id:space,project_id:project};
+  assert.equal((await ownerHarness({status:"authenticated"},async()=>({
+    ...authority,grant_groups:[scoped],
+  })).authority(first.device_id)).grant_groups[0].scope_kind,"project");
+});
+
+test("Project grant browser port accepts only exact Process/Terminal scope and sanitizes response", async () => {
+  const expiry=new Date(Date.now()+60*60*1000).toISOString();
+  const input={device_id:first.device_id,client_id:client,space_id:space,project_id:project,
+    profile_key:"project-native-terminal",valid_until:expiry,confirm:"authorize_project"};
+  const grantId="77777777-7777-4777-8777-777777777777";
+  const upstream={ok:true,schema:"ordax.owner-project-grant/1",grant_group_id:grantId,
+    device_id:first.device_id,client_id:client,space_id:space,project_id:project,
+    profile_key:"project-native-terminal",valid_until:expiry,
+    capabilities:["terminal.exec"],local_project_ref:"project-1",access_mode:"write"};
+  const calls=[];
+  const h=ownerHarness({status:"authenticated"},async(...args)=>{calls.push(args);return upstream});
+  const value=await h.grant(input);
+  assert.deepEqual(value,{ok:true,schema:"ordax.owner-project-grant/1",grant_group_id:grantId,
+    device_id:first.device_id,client_id:client,space_id:space,project_id:project,
+    profile_key:"project-native-terminal",valid_until:expiry});
+  assert.equal(calls.length,1);
+  assert.equal(calls[0][0],"/account/mcp/project-grants");
+  assert.equal(calls[0][2].method,"POST");
+  assert.deepEqual(calls[0][2].jsonBody,input);
+  assert.equal("capabilities" in value,false);
+  assert.equal("local_project_ref" in value,false);
+  assert.equal("access_mode" in value,false);
+
+  const unbounded={...input,profile_key:"project-native-process",valid_until:null};
+  const processReply={...upstream,profile_key:"project-native-process",valid_until:null};
+  assert.equal((await ownerHarness({status:"authenticated"},async()=>processReply).grant(unbounded)).valid_until,null);
+
+  for(const extra of [
+    {local_project_ref:"project-1"},{path:"C:/repo"},{capabilities:["terminal.exec"]},
+    {access_mode:"write"},{repository_id:"123"},{grant_group_id:grantId},{metadata:{}},
+  ]) {
+    const before=calls.length;
+    await assert.rejects(h.grant({...input,...extra}),/project-grant-invalid/);
+    assert.equal(calls.length,before,"forged authority must fail before transport");
+  }
+  for(const bad of [
+    {...input,profile_key:"full-computer-control"},
+    {...input,profile_key:"project-browser-automation"},
+    {...input,confirm:"yes"},
+    {...input,valid_until:new Date(Date.now()-1000).toISOString()},
+    {...input,valid_until:new Date(Date.now()+366*24*60*60*1000).toISOString()},
+  ]) await assert.rejects(h.grant(bad),/project-grant-invalid/);
+});
+
+test("Project grant browser port fails closed on response drift and superseded session", async () => {
+  const expiry=new Date(Date.now()+60*60*1000).toISOString();
+  const input={device_id:first.device_id,client_id:client,space_id:space,project_id:project,
+    profile_key:"project-native-terminal",valid_until:expiry,confirm:"authorize_project"};
+  const reply={ok:true,schema:"ordax.owner-project-grant/1",
+    grant_group_id:"77777777-7777-4777-8777-777777777777",
+    device_id:first.device_id,client_id:client,space_id:space,project_id:project,
+    profile_key:"project-native-terminal",valid_until:expiry};
+  for(const invalid of [
+    {...reply,schema:"other"},
+    {...reply,grant_group_id:"bad"},
+    {...reply,device_id:other},
+    {...reply,client_id:other},
+    {...reply,space_id:other},
+    {...reply,project_id:other},
+    {...reply,profile_key:"project-native-process"},
+    {...reply,valid_until:null},
+  ]) await assert.rejects(ownerHarness({status:"authenticated"},async()=>invalid).grant(input),
+    /project-grant-unconfirmed/);
+  await assert.rejects(ownerHarness({status:"anonymous"},async()=>reply).grant(input),
+    /session-required/);
+  let release;
+  const waiting=new Promise(resolve=>{release=resolve});
+  const h=ownerHarness({status:"authenticated"},()=>waiting);
+  const pending=h.grant(input);
+  h.change({status:"authenticated"});
+  release(reply);
+  await assert.rejects(pending,/session-changed/);
 });
 
 test("Revocation is an explicit same-origin POST and rejects unconfirmed outcomes", async () => {
