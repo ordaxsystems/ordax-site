@@ -18,6 +18,7 @@
     // The central selection POST has no query; its GET sibling must carry
     // exactly one OAuth client ID. Keep this distinction at the URL gate.
     if (value === "/account/mcp/central-selections" && method === "POST") return true;
+    if (value === "/account/mcp/project-grants") return method === "POST";
     if (value === "/account/mcp/project-onboarding/projects"
         || value === "/account/mcp/project-onboarding/device-binding-intents") {
       return method === "POST";
@@ -107,6 +108,7 @@
     if (!sameOriginPath(path, method)) throw new Error("api-path-invalid");
     if (method !== "GET" && (method !== "POST" || ![
       "/account/mcp/revoke",
+      "/account/mcp/project-grants",
       "/account/mcp/central-selections",
       "/account/mcp/project-onboarding/projects",
       "/account/mcp/project-onboarding/device-binding-intents",
@@ -710,6 +712,12 @@
             && typeof c.client_name === "string" && c.client_name.length <= 120)
           || !grants.every(g => g && uuid.test(g.grant_group_id) && uuid.test(g.client_id)
             && /^[a-z][a-z0-9._-]{1,79}$/.test(g.profile_key)
+            && ((g.scope_kind === undefined && g.space_id === undefined
+                && g.project_id === undefined)
+              || ((g.scope_kind === "device" || g.scope_kind === "project")
+                && (g.scope_kind === "device"
+                  ? g.space_id === null && g.project_id === null
+                  : uuid.test(g.space_id) && uuid.test(g.project_id))))
             && typeof g.client_consent_active === "boolean"
             && (g.valid_until === null || (typeof g.valid_until === "string"
               && Number.isFinite(Date.parse(g.valid_until)))))) {
@@ -718,6 +726,62 @@
       if (owner !== sessionView || sessionView.status !== "authenticated")
         throw new Error("public-account-session-changed");
       return value;
+    },
+    async createMcpProjectGrant(input, signal) {
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const profiles = new Set(["project-native-terminal", "project-native-process"]);
+      const owner = sessionView;
+      if (owner.status !== "authenticated") throw new Error("public-account-session-required");
+      if (!input || Object.keys(input).sort().join(",")
+          !== "client_id,confirm,device_id,profile_key,project_id,space_id,valid_until"
+          || !uuid.test(input.device_id) || !uuid.test(input.client_id)
+          || !uuid.test(input.space_id) || !uuid.test(input.project_id)
+          || !profiles.has(input.profile_key) || input.confirm !== "authorize_project")
+        throw new Error("mcp-owner-project-grant-invalid");
+      let validUntil = null;
+      if (input.valid_until !== null) {
+        if (typeof input.valid_until !== "string" || input.valid_until.length > 64)
+          throw new Error("mcp-owner-project-grant-invalid");
+        const timestamp = Date.parse(input.valid_until);
+        const now = Date.now();
+        if (!Number.isFinite(timestamp) || timestamp <= now
+            || timestamp > now + 365 * 24 * 60 * 60 * 1000)
+          throw new Error("mcp-owner-project-grant-invalid");
+        validUntil = new Date(timestamp).toISOString();
+      }
+      const canonical = {
+        device_id: input.device_id,
+        client_id: input.client_id,
+        space_id: input.space_id,
+        project_id: input.project_id,
+        profile_key: input.profile_key,
+        valid_until: validUntil,
+        confirm: "authorize_project",
+      };
+      const value = await loadJson("/account/mcp/project-grants", signal,
+        { maxBytes: 4096, method: "POST", jsonBody: canonical });
+      const sameExpiry = (a, b) => a === null || b === null
+        ? a === b : Date.parse(a) === Date.parse(b);
+      if (!value || value.ok !== true || value.schema !== "ordax.owner-project-grant/1"
+          || !uuid.test(value.grant_group_id)
+          || value.device_id !== canonical.device_id || value.client_id !== canonical.client_id
+          || value.space_id !== canonical.space_id || value.project_id !== canonical.project_id
+          || value.profile_key !== canonical.profile_key
+          || !sameExpiry(value.valid_until, canonical.valid_until))
+        throw new Error("mcp-owner-project-grant-unconfirmed");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return {
+        ok: true,
+        schema: "ordax.owner-project-grant/1",
+        grant_group_id: value.grant_group_id,
+        device_id: canonical.device_id,
+        client_id: canonical.client_id,
+        space_id: canonical.space_id,
+        project_id: canonical.project_id,
+        profile_key: canonical.profile_key,
+        valid_until: canonical.valid_until,
+      };
     },
     async revokeMcpGrant(input, signal) {
       const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
