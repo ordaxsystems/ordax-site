@@ -18,7 +18,8 @@
     // The central selection POST has no query; its GET sibling must carry
     // exactly one OAuth client ID. Keep this distinction at the URL gate.
     if (value === "/account/mcp/central-selections" && method === "POST") return true;
-    if (value === "/account/mcp/project-onboarding/projects") {
+    if (value === "/account/mcp/project-onboarding/projects"
+        || value === "/account/mcp/project-onboarding/device-binding-intents") {
       return method === "POST";
     }
     if (value === "/account/mcp/github/authorization-challenges"
@@ -105,7 +106,12 @@
     // legal-policy readiness; never follow redirects or accept alias responses.
     if (!sameOriginPath(path, method)) throw new Error("api-path-invalid");
     if (method !== "GET" && (method !== "POST" || ![
-      "/account/mcp/revoke", "/account/mcp/central-selections",
+      "/account/mcp/revoke",
+      "/account/mcp/central-selections",
+      "/account/mcp/project-onboarding/projects",
+      "/account/mcp/project-onboarding/device-binding-intents",
+      "/account/mcp/github/authorization-challenges",
+      "/account/mcp/github/repository-selections",
     ].includes(path))) {
       throw new Error("api-method-not-allowed");
     }
@@ -859,6 +865,35 @@
       if(owner!==sessionView||sessionView.status!=="authenticated")
         throw Error("public-account-session-changed");
       return value;
+    },
+    async requestMcpProjectDeviceBinding(input, signal) {
+      const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const owner=sessionView;
+      if(owner.status!=="authenticated")throw Error("public-account-session-required");
+      if(!input||Object.keys(input).sort().join(",")!=="confirm,device_id,project_id"
+          ||!uuid.test(input.project_id)||!uuid.test(input.device_id)
+          ||input.confirm!=="bind_project_device")
+        throw Error("mcp-owner-project-binding-intent-invalid");
+      const value=await loadJson("/account/mcp/project-onboarding/device-binding-intents",signal,
+        {maxBytes:4096,method:"POST",jsonBody:input});
+      if(!value||value.ok!==true
+          ||value.schema!=="ordax.owner-project-device-binding-intent/1"
+          ||!uuid.test(value.intent_id)
+          ||value.project_id!==input.project_id||value.device_id!==input.device_id
+          ||typeof value.expires_at!=="string"||!Number.isFinite(Date.parse(value.expires_at))
+          ||value.next_state!=="awaiting_device_confirmation")
+        throw Error("mcp-owner-project-binding-intent-unconfirmed");
+      if(owner!==sessionView||sessionView.status!=="authenticated")
+        throw Error("public-account-session-changed");
+      return {
+        ok:true,
+        schema:"ordax.owner-project-device-binding-intent/1",
+        intent_id:value.intent_id,
+        project_id:value.project_id,
+        device_id:value.device_id,
+        expires_at:value.expires_at,
+        next_state:"awaiting_device_confirmation",
+      };
     },
     async startMcpGithubAuthorization(projectId, signal) {
       const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
