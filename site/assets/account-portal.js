@@ -1109,7 +1109,7 @@
       const githubControl = canAuthorize
         ? `<button type="button" class="button outline h-8"
             data-mcp-github-connect="${esc(project.project_id)}"
-            ${mcpGithubConnecting || mcpGithubSelecting || mcpProjectCreating || mcpProjectBinding ? "disabled" : ""}>
+            ${mcpGithubConnecting || mcpGithubSelecting || mcpProjectCreating || mcpProjectBinding || mcpProjectGrantCreating ? "disabled" : ""}>
             ${icon("globe")}${tx(project.next_state === "needs_repository_selection"
               ? "Verificar GitHub novamente" : "Conectar GitHub")}</button>`
         : "";
@@ -1120,15 +1120,59 @@
       const bindingControl = project.next_state === "needs_device_binding"
         ? `<button type="button" class="button outline h-8"
             data-mcp-project-bind="${esc(project.project_id)}"
-            ${mcpProjectBinding || mcpProjectCreating || mcpGithubConnecting || mcpGithubSelecting
-              || pendingBinding ? "disabled" : ""}>
+            ${mcpProjectBinding || mcpProjectCreating || mcpProjectGrantCreating
+              || mcpGithubConnecting || mcpGithubSelecting || pendingBinding ? "disabled" : ""}>
             ${icon("devices")}${tx(pendingBinding ? "Aguardando Runtime" : "Vincular a este dispositivo")}</button>`
         : "";
+      const activeProjectGrants = mcpAuthorityStatus === "ready" && mcpAuthority
+        ? mcpAuthority.grant_groups.filter(group =>
+          group.scope_kind === "project"
+            && group.space_id === project.space_id
+            && group.project_id === project.project_id
+            && group.client_consent_active
+            && (group.valid_until === null || Date.parse(group.valid_until) > Date.now()))
+        : [];
+      const grantNames = activeProjectGrants.map(group =>
+        group.profile_key === "project-native-terminal" ? tx("Terminal do projeto")
+          : group.profile_key === "project-native-process" ? tx("Processos do projeto")
+            : esc(group.profile_key));
+      const grantSummary = grantNames.length
+        ? `<small class="device-revoke-note">${tx("Autorizações ativas")}: ${grantNames.join(" · ")}</small>`
+        : "";
+      const grantClients = mcpAuthorityStatus === "ready" && mcpAuthority
+        ? mcpAuthority.clients : [];
+      const clientOptions = grantClients.map(client =>
+        `<option value="${esc(client.client_id)}">${esc(client.client_name)}</option>`).join("");
+      const grantForm = project.next_state === "ready_without_grants" && clientOptions
+        ? `<form data-mcp-project-grant-form="${esc(project.project_id)}"
+            data-mcp-project-space="${esc(project.space_id)}" class="profile-field-group">
+            <div class="form-grid">
+              <label class="form-field"><span>${tx("Cliente OAuth")}</span>
+                <select name="client_id" required>${clientOptions}</select></label>
+              <label class="form-field"><span>${tx("Perfil de acesso")}</span>
+                <select name="profile_key" required>
+                  <option value="project-native-terminal">${tx("Terminal do projeto")}</option>
+                  <option value="project-native-process">${tx("Processos do projeto")}</option>
+                </select></label>
+              <label class="form-field"><span>${tx("Validade")}</span>
+                <input name="valid_until" type="datetime-local" autocomplete="off"></label>
+              <label class="form-field"><span>${tx("Sem expiração")}</span>
+                <input name="unbounded" type="checkbox"></label>
+            </div>
+            <button type="submit" class="button outline h-8"
+              ${mcpProjectGrantCreating || mcpProjectCreating || mcpProjectBinding
+                || mcpGithubConnecting || mcpGithubSelecting || mcpRevoking ? "disabled" : ""}>
+              ${icon("shield")}${tx(mcpProjectGrantCreating ? "Autorizando" : "Autorizar ações")}</button>
+          </form>`
+        : project.next_state === "ready_without_grants"
+          ? `<small class="device-revoke-note">${tx("Nenhum cliente OAuth consentido está disponível para receber um grant de projeto.")}</small>`
+          : "";
       return `<tr>
         <th scope="row"><strong>${esc(project.name)}</strong><small translate="no">${esc(project.project_id)}</small></th>
         <td>${esc(project.kind)}</td>
         <td>${project.repository_full_name ? `<span translate="no">${esc(project.repository_full_name)}</span>` : tx("Nenhum repositório verificado")}</td>
-        <td><span class="status-tag">${tx(stateLabels[project.next_state] || project.next_state)}</span>${githubControl}${bindingControl}</td>
+        <td><span class="status-tag">${tx(stateLabels[project.next_state] || project.next_state)}</span>
+          ${githubControl}${bindingControl}${grantSummary}${grantForm}</td>
       </tr>`;
     }).join("");
     const table = value.projects.length
@@ -1156,7 +1200,7 @@
         </select></label>
       </div>
       <div class="form-actions"><span>${icon("info")}${tx("Nenhuma permissão é concedida por esta criação.")}</span>
-        <button type="submit" class="button outline h-8"${mcpProjectCreating || mcpProjectBinding ? " disabled" : ""}>${tx(mcpProjectCreating ? "Criando projeto" : "Criar projeto")}</button>
+        <button type="submit" class="button outline h-8"${mcpProjectCreating || mcpProjectBinding || mcpProjectGrantCreating ? " disabled" : ""}>${tx(mcpProjectCreating ? "Criando projeto" : "Criar projeto")}</button>
       </div>
     </form>` : `<p class="device-revoke-note">${icon("info")}${tx("Nenhum Space administrável foi confirmado. Crie ou recupere um Space antes de criar um projeto.")}</p>`;
     return `<section class="settings-section" aria-labelledby="mcp-projects-heading">
@@ -1221,7 +1265,7 @@
         ? new Date(grant.valid_until).toLocaleString(i18n.getLocale()) : tx("Sem prazo de expiração");
       const revokedConsent = grant.client_consent_active ? "" : ` · ${tx("Consentimento OAuth inativo")}`;
       const actionControl = action("Revogar", "close", {
-        disabled:mcpRevoking || mcpCentralSelecting, small:true,
+        disabled:mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating, small:true,
         data:`data-mcp-revoke data-mcp-device="${esc(device.device_id)}" data-mcp-client="${esc(grant.client_id)}" data-mcp-group="${esc(grant.grant_group_id)}"`,
       });
       return `<tr><th scope="row"><strong>${esc(label)}</strong><small translate="no">${esc(grant.client_id)}</small></th>
@@ -1236,7 +1280,7 @@
         && (!g.valid_until || Date.parse(g.valid_until) > Date.now())));
     const centralButtons = availableClients.map(c =>
       `<button type="button" class="button outline h-8"
-        data-mcp-central-client="${esc(c.client_id)}"${mcpRevoking || mcpCentralSelecting ? " disabled" : ""}>
+        data-mcp-central-client="${esc(c.client_id)}"${mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating ? " disabled" : ""}>
         ${icon("plug")}${tx("Vínculo MCP")} · ${esc(c.client_name)}</button>`).join("");
     let centralDetail = "";
     if (mcpCentralClient) {
@@ -1260,7 +1304,7 @@
             : "A criação de vínculo MCP está indisponível.";
       centralDetail = `<div class="device-revoke-note" role="status">${tx(description)}
         ${ready ? action("Vincular esta conversa ao computador", "shield", {
-          disabled:mcpRevoking || mcpCentralSelecting, small:true,
+          disabled:mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating, small:true,
           data:`data-mcp-central-select="${esc(mcpCentralClient)}"`,
         }) : ""}</div>`;
     }
