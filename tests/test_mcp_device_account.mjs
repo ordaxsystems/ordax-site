@@ -261,6 +261,54 @@ test("Account project creation accepts only exact project fields and one same-or
     next_state:"ready_without_grants"})).create(input),/project-create-unconfirmed/);
 });
 
+test("Account project binding port sends only Owner project/device identity and sanitizes Runtime authority",async()=>{
+  const input={project_id:project,device_id:first.device_id,confirm:"bind_project_device"};
+  const intent="99999999-9999-4999-8999-999999999999";
+  const upstream={ok:true,schema:"ordax.owner-project-device-binding-intent/1",
+    intent_id:intent,project_id:project,device_id:first.device_id,
+    expires_at:"2026-11-14T00:10:00Z",next_state:"awaiting_device_confirmation",
+    local_project_ref:"project-1",allowed_capabilities:["terminal.exec"],grant_id:other};
+  const calls=[];
+  const h=projectHarness({status:"authenticated"},async(...args)=>{calls.push(args);return upstream});
+  const value=await h.bind(input);
+  assert.deepEqual(value,{ok:true,schema:"ordax.owner-project-device-binding-intent/1",
+    intent_id:intent,project_id:project,device_id:first.device_id,
+    expires_at:"2026-11-14T00:10:00Z",next_state:"awaiting_device_confirmation"});
+  assert.equal(calls.length,1);
+  assert.equal(calls[0][0],"/account/mcp/project-onboarding/device-binding-intents");
+  assert.equal(calls[0][2].method,"POST");
+  assert.deepEqual(calls[0][2].jsonBody,input);
+  assert.equal("local_project_ref" in value,false);
+  assert.equal("allowed_capabilities" in value,false);
+  assert.equal("grant_id" in value,false);
+
+  for(const extra of [
+    {local_project_ref:"project-1"},{path:"C:/repo"},{allowed_capabilities:["terminal.exec"]},
+    {repository_id:"123"},{repository_full_name:"ordaxsystems/ordax-platform"},
+    {installation_id:"456"},{space_id:space},{grant_profile:"project-native-terminal"},
+    {metadata:{}},
+  ]) {
+    const before=calls.length;
+    await assert.rejects(h.bind({...input,...extra}),/binding-intent-invalid/);
+    assert.equal(calls.length,before,"browser-only authority must fail before transport");
+  }
+  await assert.rejects(h.bind({...input,confirm:"yes"}),/binding-intent-invalid/);
+
+  for(const invalid of [
+    {...upstream,schema:"other"},
+    {...upstream,intent_id:"bad"},
+    {...upstream,project_id:other},
+    {...upstream,device_id:other},
+    {...upstream,expires_at:"bad"},
+    {...upstream,next_state:"ready_without_grants"},
+  ]) {
+    await assert.rejects(projectHarness({status:"authenticated"},async()=>invalid).bind(input),
+      /binding-intent-unconfirmed/);
+  }
+  await assert.rejects(projectHarness({status:"anonymous"},async()=>upstream).bind(input),
+    /session-required/);
+});
+
 const githubStartStart=source.indexOf("    async startMcpGithubAuthorization(projectId, signal) {");
 const githubStartEnd=source.indexOf("\n    },\n    async readMcpGithubCandidates(challengeId, signal) {",githubStartStart);
 const githubReadStart=source.indexOf("    async readMcpGithubCandidates(challengeId, signal) {");
