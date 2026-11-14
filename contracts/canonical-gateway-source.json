@@ -2,12 +2,17 @@
   "$schema": "ordax.site-canonical-gateway-source/2",
   "status": "staging-only-not-authorized-for-production",
   "repository": "ordaxsystems/ordax-os",
-  "commit": "dfc60984d5de978017227c110e9a261cabcc1ceb",
+  "commit": "06c112363189e93d3dcb85d6e832f33b17095bbb",
   "files": [
     {
       "path": "api/account-proxy.mjs",
       "git_blob_sha1": "1600ca676943ac417c88197a5e0aa651d169142a",
       "size": 104
+    },
+    {
+      "path": "api/oauth-consent.mjs",
+      "git_blob_sha1": "2a8745e4b396a7e5dc3a1cbd434b89e6c482704c",
+      "size": 9518
     },
     {
       "path": "lib/account-proxy-core.mjs",
@@ -26,8 +31,8 @@
     },
     {
       "path": "infra/supabase/functions/_shared/account_transport_admission.mjs",
-      "git_blob_sha1": "8a0cec6ff31a866257a52208ca2fc65026fe3ffc",
-      "size": 6501
+      "git_blob_sha1": "a3c08e256678982ac2db91498f7e3a9f3fbb032e",
+      "size": 6590
     },
     {
       "path": "infra/supabase/functions/_shared/account_email_confirmation.mjs",

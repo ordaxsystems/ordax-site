@@ -1087,12 +1087,15 @@ class SiteContractTests(unittest.TestCase):
         self.assertNotIn("tools/public-site", config["buildCommand"])
         self.assertNotIn("ordax-os", config["buildCommand"])
         self.assertEqual(config["git"]["deploymentEnabled"], {"**": False, "main": True})
-        # The only auth routes are same-origin transport into one pinned OS
-        # gateway; no Site-owned Identity logic, bypass or public activation.
+        # Auth/account transport and OAuth consent are same-origin adapters
+        # into one pinned OS-owned source closure; Site owns no Identity/OAuth logic.
         self.assertEqual(config["rewrites"], [
-            {"source": f"/{prefix}/:path*",
-             "destination": f"/api/account-proxy?ordax_path=/{prefix}/:path*"}
-            for prefix in ("auth", "sync", "account")
+            {"source": "/oauth/consent", "destination": "/api/oauth-consent"},
+            *[
+                {"source": f"/{prefix}/:path*",
+                 "destination": f"/api/account-proxy?ordax_path=/{prefix}/:path*"}
+                for prefix in ("auth", "sync", "account")
+            ],
         ])
         self.assertIn("npm ci --omit=dev --ignore-scripts", config["installCommand"])
         self.assertIn("stage_canonical_gateway.py --out .gateway-source", config["installCommand"])
@@ -1100,6 +1103,10 @@ class SiteContractTests(unittest.TestCase):
         self.assertIn('../.gateway-source/api/account-proxy.mjs', adapter)
         self.assertNotIn("jwtVerify", adapter)
         self.assertNotIn("createClient", adapter)
+        oauth_adapter = (ROOT / "api/oauth-consent.mjs").read_text(encoding="utf-8")
+        self.assertIn('../.gateway-source/api/oauth-consent.mjs', oauth_adapter)
+        self.assertNotIn("approveAuthorization", oauth_adapter)
+        self.assertNotIn("createClient", oauth_adapter)
         self.assertEqual(
             json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["dependencies"],
             {"@vercel/oidc": "4.0.0"},

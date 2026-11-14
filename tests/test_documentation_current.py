@@ -33,8 +33,8 @@ class CurrentDocsTests(unittest.TestCase):
             for legacy in removed:
                 with self.subTest(file=relative, legacy=legacy):
                     self.assertNotIn(legacy, text)
-        self.assertNotIn("--migration-lock", (ROOT / "README.md").read_text())
-        self.assertNotIn("--migration-lock", (ROOT / "AGENTS.md").read_text())
+        self.assertNotIn("--migration-lock", (ROOT / "README.md").read_text(encoding="utf-8"))
+        self.assertNotIn("--migration-lock", (ROOT / "AGENTS.md").read_text(encoding="utf-8"))
 
     def test_build_instructions_match_current_single_dev_lock(self):
         lock_path = "contracts/dev-artifact-lock.json"
@@ -88,8 +88,16 @@ class CurrentDocsTests(unittest.TestCase):
         self.assertIn("stage_canonical_gateway.py --out .gateway-source", vercel["installCommand"])
         self.assertEqual(
             [row["source"] for row in vercel["rewrites"]],
-            ["/auth/:path*", "/sync/:path*", "/account/:path*"],
+            ["/oauth/consent", "/auth/:path*", "/sync/:path*", "/account/:path*"],
         )
+        self.assertEqual(
+            vercel["rewrites"][0],
+            {"source": "/oauth/consent", "destination": "/api/oauth-consent"},
+        )
+        oauth_adapter = (ROOT / "api/oauth-consent.mjs").read_text(encoding="utf-8")
+        self.assertIn('../.gateway-source/api/oauth-consent.mjs', oauth_adapter)
+        self.assertNotIn("approveAuthorization", oauth_adapter)
+        self.assertNotIn("createClient", oauth_adapter)
         self.assertNotIn("domains", vercel)
         self.assertIn("X-Robots-Tag", str(vercel["headers"]))
         self.assertIn("noindex", str(vercel["headers"]))

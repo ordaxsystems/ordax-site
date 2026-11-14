@@ -34,6 +34,19 @@
       ]
     },
     {
+      "source": "/oauth/consent",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
+    },
+    {
       "source": "/auth/:path*",
       "headers": [
         {
@@ -80,6 +93,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/oauth/consent",
+      "destination": "/api/oauth-consent"
+    },
     {
       "source": "/auth/:path*",
       "destination": "/api/account-proxy?ordax_path=/auth/:path*"
