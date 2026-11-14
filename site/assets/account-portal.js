@@ -257,6 +257,8 @@
   let mcpProjectCreating = false;
   let mcpProjectBinding = false;
   let mcpProjectBindingIntent = null;
+  let mcpProjectGrantCreating = false;
+  let mcpProjectGrantRevision = 0;
   let mcpProjectNotice = "";
 
   let mcpGithubChallenge = githubReturn.challenge;
@@ -288,6 +290,8 @@
     mcpProjectCreating = false;
     mcpProjectBinding = false;
     mcpProjectBindingIntent = null;
+    mcpProjectGrantCreating = false;
+    mcpProjectGrantRevision += 1;
     mcpProjectNotice = "";
   }
 
@@ -328,6 +332,7 @@
 
   async function startMcpGithubAuthorization(control) {
     if (mcpGithubConnecting || mcpGithubSelecting || mcpProjectCreating || mcpProjectBinding
+        || mcpProjectGrantCreating
         || !signedIn() || mcpProjectStatus !== "ready" || !mcpProjectOnboarding) return;
     const projectId = control.dataset.mcpGithubConnect;
     const project = mcpProjectOnboarding.projects.find(item => item.project_id === projectId);
@@ -353,7 +358,8 @@
   }
 
   async function selectMcpGithubRepository(form) {
-    if (mcpGithubSelecting || mcpGithubConnecting || mcpProjectBinding || !signedIn()
+    if (mcpGithubSelecting || mcpGithubConnecting || mcpProjectBinding || mcpProjectGrantCreating
+        || !signedIn()
         || mcpGithubStatus !== "ready" || !mcpGithubCandidates || !mcpGithubChallenge)
       return;
     const repositoryId = String(new FormData(form).get("repository_id") ?? "");
@@ -424,7 +430,7 @@
   }
 
   async function loadMcpCentralClient(clientId) {
-    if (!signedIn() || mcpRevoking || mcpCentralSelecting
+    if (!signedIn() || mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating
         || mcpAuthorityStatus !== "ready" || !mcpAuthority
         || !mcpAuthority.clients.some(c => c.client_id === clientId)
         || !mcpAuthority.grant_groups.some(g => g.client_id === clientId
@@ -567,7 +573,8 @@
   }
 
   async function createMcpProject(form) {
-    if (mcpProjectCreating || mcpProjectBinding || !signedIn() || mcpProjectStatus !== "ready"
+    if (mcpProjectCreating || mcpProjectBinding || mcpProjectGrantCreating
+        || !signedIn() || mcpProjectStatus !== "ready"
         || !mcpProjectOnboarding || !mcpProjectDevice
         || mcpProjectDevice !== mcpAuthorityDevice) return;
     const data = new FormData(form);
@@ -629,7 +636,8 @@
   }
 
   async function requestMcpProjectDeviceBinding(control) {
-    if (mcpProjectBinding || mcpProjectCreating || mcpGithubConnecting || mcpGithubSelecting
+    if (mcpProjectBinding || mcpProjectCreating || mcpProjectGrantCreating
+        || mcpGithubConnecting || mcpGithubSelecting
         || !signedIn() || mcpProjectStatus !== "ready" || !mcpProjectOnboarding
         || !mcpProjectDevice || mcpProjectDevice !== mcpAuthorityDevice) return;
     const projectId = control.dataset.mcpProjectBind;
@@ -692,8 +700,122 @@
     }
   }
 
+  async function createMcpProjectGrant(form) {
+    if (mcpProjectGrantCreating || mcpProjectCreating || mcpProjectBinding
+        || mcpRevoking || mcpCentralSelecting || mcpGithubConnecting || mcpGithubSelecting
+        || !signedIn() || mcpProjectStatus !== "ready" || !mcpProjectOnboarding
+        || mcpAuthorityStatus !== "ready" || !mcpAuthority
+        || !mcpProjectDevice || mcpProjectDevice !== mcpAuthorityDevice) return;
+    const projectId = form.dataset.mcpProjectGrantForm;
+    const spaceId = form.dataset.mcpProjectSpace;
+    const project = mcpProjectOnboarding.projects.find(item =>
+      item.project_id === projectId && item.space_id === spaceId);
+    if (!project || project.next_state !== "ready_without_grants"
+        || project.space_device_execute !== true || project.project_device_bound !== true
+        || !project.repository_full_name) return;
+
+    const data = new FormData(form);
+    const clientId = String(data.get("client_id") ?? "");
+    const profileKey = String(data.get("profile_key") ?? "");
+    const unbounded = data.get("unbounded") === "on";
+    const localExpiry = String(data.get("valid_until") ?? "").trim();
+    const client = mcpAuthority.clients.find(item => item.client_id === clientId);
+    if (!client || !["project-native-terminal","project-native-process"].includes(profileKey))
+      return;
+    let validUntil = null;
+    if (!unbounded) {
+      if (!localExpiry) {
+        mcpProjectNotice = "Escolha uma data de expiração ou marque Sem expiração.";
+        renderContent();
+        return;
+      }
+      const timestamp = Date.parse(localExpiry);
+      const now = Date.now();
+      if (!Number.isFinite(timestamp) || timestamp <= now
+          || timestamp > now + 365 * 24 * 60 * 60 * 1000) {
+        mcpProjectNotice = "A validade precisa estar no futuro e dentro de um ano.";
+        renderContent();
+        return;
+      }
+      validUntil = new Date(timestamp).toISOString();
+    }
+
+    const device = mcpDevices?.find(item => item.device_id === mcpProjectDevice);
+    const profileLabel = profileKey === "project-native-terminal"
+      ? tx("Terminal do projeto") : tx("Processos do projeto");
+    const expiryLabel = validUntil
+      ? new Date(validUntil).toLocaleString(i18n.getLocale()) : tx("Sem expiração");
+    if (!window.confirm(
+      `${tx("Autorizar ações do projeto")} — ${project.name}?\n\n${client.client_name} · ${profileLabel}\n${tx("Validade")}: ${expiryLabel}\n${device?.name || mcpProjectDevice}`
+    )) return;
+
+    const revision = ++mcpProjectGrantRevision;
+    const owner = session;
+    const deviceId = mcpProjectDevice;
+    mcpProjectGrantCreating = true;
+    mcpProjectNotice = "";
+    renderContent();
+    const expected = {
+      device_id:deviceId, client_id:clientId, space_id:spaceId, project_id:projectId,
+      profile_key:profileKey, valid_until:validUntil,
+    };
+    try {
+      const receipt = await account.createMcpProjectGrant({
+        ...expected, confirm:"authorize_project",
+      });
+      if (revision !== mcpProjectGrantRevision || session !== owner || !signedIn()
+          || mcpProjectDevice !== deviceId) return;
+      const confirmed = await account.readMcpAuthority(deviceId);
+      if (revision !== mcpProjectGrantRevision || session !== owner || !signedIn()) return;
+      const exact = confirmed.grant_groups.filter(group =>
+        group.grant_group_id === receipt.grant_group_id
+          && group.client_id === clientId && group.profile_key === profileKey
+          && group.scope_kind === "project" && group.space_id === spaceId
+          && group.project_id === projectId && group.client_consent_active
+          && (validUntil === null ? group.valid_until === null
+            : group.valid_until !== null
+              && Date.parse(group.valid_until) === Date.parse(validUntil)));
+      if (exact.length !== 1) throw new Error("mcp-project-grant-not-reflected");
+      mcpAuthority = confirmed;
+      mcpAuthorityStatus = "ready";
+      resetMcpCentral();
+      mcpProjectNotice = "Autorização do projeto criada e verificada na Platform.";
+    } catch {
+      if (revision !== mcpProjectGrantRevision || session !== owner || !signedIn()) return;
+      // Never replay an uncertain grant POST. Reconcile only by reading the
+      // canonical authority and accept success only for one exact scoped grant.
+      try {
+        const reconciled = await account.readMcpAuthority(deviceId);
+        if (revision !== mcpProjectGrantRevision || session !== owner || !signedIn()) return;
+        const matching = reconciled.grant_groups.filter(group =>
+          group.client_id === clientId && group.profile_key === profileKey
+            && group.scope_kind === "project" && group.space_id === spaceId
+            && group.project_id === projectId && group.client_consent_active
+            && (validUntil === null ? group.valid_until === null
+              : group.valid_until !== null
+                && Date.parse(group.valid_until) === Date.parse(validUntil)));
+        mcpAuthority = reconciled;
+        mcpAuthorityStatus = "ready";
+        resetMcpCentral();
+        mcpProjectNotice = matching.length === 1
+          ? "A resposta do POST foi incerta, mas a autorização exata foi confirmada pela leitura canônica."
+          : "A autorização não foi confirmada. O estado foi consultado novamente; revise antes de tentar outra ação.";
+      } catch {
+        mcpAuthority = null;
+        mcpAuthorityStatus = "unavailable";
+        mcpProjectNotice = "A autorização não foi confirmada e o estado atual não pôde ser consultado. Nenhuma nova tentativa será feita automaticamente.";
+      }
+    } finally {
+      if (revision === mcpProjectGrantRevision && session === owner && signedIn()) {
+        mcpProjectGrantCreating = false;
+        if (state.section === "dispositivos") renderContent();
+      }
+    }
+  }
+
   async function revokeMcpDeviceGrant(control) {
-    if (mcpRevoking || mcpCentralSelecting || !signedIn() || mcpAuthorityStatus !== "ready" || !mcpAuthority) return;
+    if (mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating
+        || !signedIn() || mcpAuthorityStatus !== "ready" || !mcpAuthority) return;
     const deviceId = control.dataset.mcpDevice;
     const clientId = control.dataset.mcpClient;
     const groupId = control.dataset.mcpGroup;
@@ -1391,7 +1513,7 @@
     state.section = requested;
     if (changed && requested === "dispositivos" && signedIn()
         && !mcpRevoking && !mcpCentralSelecting && !mcpProjectCreating && !mcpProjectBinding
-        && !mcpGithubConnecting && !mcpGithubSelecting) {
+        && !mcpProjectGrantCreating && !mcpGithubConnecting && !mcpGithubSelecting) {
       // In-flight Owner selection must retain its exact POST receipt. A
       // section revisit cannot reset the revision and permit a second choice.
       // A new idle visit must re-read the Platform, never show old Owner grants
@@ -1533,6 +1655,12 @@
     }
   });
   document.addEventListener("submit", event => {
+    const grantForm = event.target?.closest?.("[data-mcp-project-grant-form]");
+    if (grantForm) {
+      event.preventDefault();
+      if (!layoutPreview) void createMcpProjectGrant(grantForm);
+      return;
+    }
     const githubForm = event.target?.closest?.("[data-mcp-github-selection]");
     if (githubForm) {
       event.preventDefault();
@@ -1609,6 +1737,8 @@
         mcpAuthorityStatus = "unavailable";
         mcpRevoking = false;
         mcpRevocationNotice = "";
+        mcpProjectGrantCreating = false;
+        mcpProjectGrantRevision += 1;
         resetMcpProjectOnboarding();
         resetMcpCentral();
         if (mcpGithubSession !== session) {
