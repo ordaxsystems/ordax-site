@@ -815,6 +815,55 @@
     }
   }
 
+  async function reauthorizeMcpDeviceGrant(control) {
+    if (mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating
+        || !signedIn() || mcpAuthorityStatus !== "ready" || !mcpAuthority) return;
+    const deviceId = control.dataset.mcpDevice;
+    const clientId = control.dataset.mcpClient;
+    const groupId = control.dataset.mcpGroup;
+    const grant = mcpAuthority.grant_groups.find(g => g.grant_group_id === groupId
+      && g.client_id === clientId && g.scope_kind === "device"
+      && g.client_consent_active === true);
+    if (deviceId !== mcpAuthorityDevice || deviceId !== mcpAuthority.device_id || !grant) return;
+    const device = mcpDevices?.find(d => d.device_id === deviceId);
+    const client = mcpAuthority.clients.find(c => c.client_id === clientId);
+    const clientName = client?.client_name || clientId;
+    if (!window.confirm(`${tx("Reautorizar perfil")} — ${clientName} / ${device?.name || deviceId}?\n\n${tx("A Platform aplicará novamente o mesmo perfil canônico atual. Nenhuma capability é escolhida no navegador.")}`)) return;
+    const revision = ++mcpAuthorityRevision;
+    mcpRevoking = true;
+    mcpRevocationNotice = "";
+    renderContent();
+    try {
+      const receipt = await account.reauthorizeMcpGrant({
+        device_id:deviceId, client_id:clientId, grant_group_id:groupId, confirm:"reauthorize",
+      });
+      if (revision !== mcpAuthorityRevision || !signedIn()
+          || mcpAuthorityDevice !== deviceId) return;
+      const confirmed = await account.readMcpAuthority(deviceId);
+      if (revision !== mcpAuthorityRevision || !signedIn()) return;
+      const replacement = confirmed.grant_groups.find(g =>
+        g.grant_group_id === receipt.grant_group_id && g.client_id === clientId
+          && g.profile_key === receipt.profile_key && g.scope_kind === "device");
+      if (!replacement || (receipt.grant_group_id !== groupId
+          && confirmed.grant_groups.some(g => g.grant_group_id === groupId)))
+        throw new Error("mcp-owner-reauthorize-not-reflected");
+      mcpAuthority = confirmed;
+      mcpAuthorityStatus = "ready";
+      resetMcpCentral();
+      mcpRevocationNotice = "Perfil reautorizado e verificado pela autoridade canônica.";
+    } catch {
+      if (revision !== mcpAuthorityRevision || !signedIn()) return;
+      mcpAuthority = null;
+      mcpAuthorityStatus = "unavailable";
+      mcpRevocationNotice = "A reautorização não foi confirmada. Consulte novamente antes de tentar outra ação.";
+    } finally {
+      if (revision === mcpAuthorityRevision && signedIn()) {
+        mcpRevoking = false;
+        if (state.section === "dispositivos") renderContent();
+      }
+    }
+  }
+
   async function revokeMcpDeviceGrant(control) {
     if (mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating
         || !signedIn() || mcpAuthorityStatus !== "ready" || !mcpAuthority) return;
@@ -1266,12 +1315,17 @@
       const expiry = grant.valid_until
         ? new Date(grant.valid_until).toLocaleString(i18n.getLocale()) : tx("Sem prazo de expiração");
       const revokedConsent = grant.client_consent_active ? "" : ` · ${tx("Consentimento OAuth inativo")}`;
-      const actionControl = action("Revogar", "close", {
+      const revokeControl = action("Revogar", "close", {
         disabled:mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating, small:true,
         data:`data-mcp-revoke data-mcp-device="${esc(device.device_id)}" data-mcp-client="${esc(grant.client_id)}" data-mcp-group="${esc(grant.grant_group_id)}"`,
       });
+      const reauthorizeControl = grant.scope_kind === "device" && grant.client_consent_active
+        ? action("Reautorizar", "shield", {
+            disabled:mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating, small:true,
+            data:`data-mcp-reauthorize data-mcp-device="${esc(device.device_id)}" data-mcp-client="${esc(grant.client_id)}" data-mcp-group="${esc(grant.grant_group_id)}"`,
+          }) : "";
       return `<tr><th scope="row"><strong>${esc(label)}</strong><small translate="no">${esc(grant.client_id)}</small></th>
-        <td>${esc(grant.profile_key)}${revokedConsent}</td><td>${esc(expiry)}</td><td>${actionControl}</td></tr>`;
+        <td>${esc(grant.profile_key)}${revokedConsent}</td><td>${esc(expiry)}</td><td>${reauthorizeControl}${revokeControl}</td></tr>`;
     }).join("");
     const table = grants.length ? `<table class="records-table"><caption class="sr-only">${tx("Autorizações de aplicativos")}</caption>
       <thead><tr><th scope="col">${tx("Cliente OAuth")}</th><th scope="col">${tx("Perfil de acesso")}</th>
@@ -1319,7 +1373,7 @@
       ? `<p class="device-revoke-note" role="status">${icon("info")}${tx(mcpCentralNotice)}</p>` : "";
     return `<section class="settings-section" aria-labelledby="mcp-grants-heading">
       <h3 id="mcp-grants-heading">${tx("Autorizações de aplicativos")} · ${esc(device.name)}</h3>
-      <p class="panel-description">${tx("Revogar remove apenas o grant selecionado, sem desconectar outros computadores.")}</p>
+      <p class="panel-description">${tx("Reautorizar reaplica o mesmo perfil canônico atual; revogar remove apenas o grant selecionado, sem desconectar outros computadores.")}</p>
       ${table}${centralPanel}${centralNotice}${notice}</section>`;
   }
   function field(label, placeholder, type = "text", capabilityId = "", { id = "", hint = "" } = {}) {
@@ -1663,6 +1717,9 @@
         void loadMcpAuthority(control.dataset.mcpDevice);
         void loadMcpProjectOnboarding(control.dataset.mcpDevice);
       }
+    } else if (control.matches("[data-mcp-reauthorize]")) {
+      event.preventDefault();
+      if (!layoutPreview) void reauthorizeMcpDeviceGrant(control);
     } else if (control.matches("[data-mcp-revoke]")) {
       event.preventDefault();
       if (!layoutPreview) void revokeMcpDeviceGrant(control);

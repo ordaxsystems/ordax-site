@@ -18,7 +18,8 @@
     // The central selection POST has no query; its GET sibling must carry
     // exactly one OAuth client ID. Keep this distinction at the URL gate.
     if (value === "/account/mcp/central-selections" && method === "POST") return true;
-    if (value === "/account/mcp/project-grants") return method === "POST";
+    if (value === "/account/mcp/project-grants"
+        || value === "/account/mcp/reauthorize") return method === "POST";
     if (value === "/account/mcp/project-onboarding/projects"
         || value === "/account/mcp/project-onboarding/device-binding-intents") {
       return method === "POST";
@@ -108,6 +109,7 @@
     if (!sameOriginPath(path, method)) throw new Error("api-path-invalid");
     if (method !== "GET" && (method !== "POST" || ![
       "/account/mcp/revoke",
+      "/account/mcp/reauthorize",
       "/account/mcp/project-grants",
       "/account/mcp/central-selections",
       "/account/mcp/project-onboarding/projects",
@@ -781,6 +783,37 @@
         project_id: canonical.project_id,
         profile_key: canonical.profile_key,
         valid_until: canonical.valid_until,
+      };
+    },
+    async reauthorizeMcpGrant(input, signal) {
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      const owner = sessionView;
+      if (owner.status !== "authenticated") throw new Error("public-account-session-required");
+      if (!input || Object.keys(input).sort().join(",") !== "client_id,confirm,device_id,grant_group_id"
+          || !uuid.test(input.device_id) || !uuid.test(input.client_id)
+          || !uuid.test(input.grant_group_id) || input.confirm !== "reauthorize")
+        throw new Error("mcp-owner-reauthorize-invalid");
+      const value = await loadJson("/account/mcp/reauthorize", signal,
+        { maxBytes: 4096, method: "POST", jsonBody: input });
+      if (!value || value.ok !== true
+          || value.schema !== "ordax.owner-profile-reauthorization/1"
+          || value.device_id !== input.device_id || value.client_id !== input.client_id
+          || value.previous_grant_group_id !== input.grant_group_id
+          || !uuid.test(value.grant_group_id)
+          || typeof value.profile_key !== "string"
+          || !/^[a-z][a-z0-9._-]{1,79}$/.test(value.profile_key)
+          || !(value.valid_until === null || (typeof value.valid_until === "string"
+            && Number.isFinite(Date.parse(value.valid_until))))
+          || !Number.isSafeInteger(value.capability_count) || value.capability_count < 1)
+        throw new Error("mcp-owner-reauthorize-unconfirmed");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return {
+        ok:true,schema:"ordax.owner-profile-reauthorization/1",
+        device_id:value.device_id,client_id:value.client_id,
+        previous_grant_group_id:value.previous_grant_group_id,
+        grant_group_id:value.grant_group_id,profile_key:value.profile_key,
+        valid_until:value.valid_until,capability_count:value.capability_count,
       };
     },
     async revokeMcpGrant(input, signal) {
