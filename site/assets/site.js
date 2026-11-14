@@ -712,10 +712,12 @@
             && typeof c.client_name === "string" && c.client_name.length <= 120)
           || !grants.every(g => g && uuid.test(g.grant_group_id) && uuid.test(g.client_id)
             && /^[a-z][a-z0-9._-]{1,79}$/.test(g.profile_key)
-            && (g.scope_kind === "device" || g.scope_kind === "project")
-            && (g.scope_kind === "device"
-              ? g.space_id === null && g.project_id === null
-              : uuid.test(g.space_id) && uuid.test(g.project_id))
+            && ((g.scope_kind === undefined && g.space_id === undefined
+                && g.project_id === undefined)
+              || ((g.scope_kind === "device" || g.scope_kind === "project")
+                && (g.scope_kind === "device"
+                  ? g.space_id === null && g.project_id === null
+                  : uuid.test(g.space_id) && uuid.test(g.project_id))))
             && typeof g.client_consent_active === "boolean"
             && (g.valid_until === null || (typeof g.valid_until === "string"
               && Number.isFinite(Date.parse(g.valid_until)))))) {
