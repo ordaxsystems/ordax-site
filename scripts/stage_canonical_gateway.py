@@ -26,6 +26,7 @@ CONSUMER_REPOSITORY = "ordaxsystems/ordax-site"
 BRIDGE_KIND = "temporary-staging-source-adapter"
 REMOVAL_CONDITION = "remove-source-materialization-when-the-identity-owner-provides-a-versioned-deployed-same-origin-gateway-or-owner-published-artifact-that-the-site-can-consume-without-importing-os-source"
 ENTRY = "api/account-proxy.mjs"
+OAUTH_ENTRY = "api/oauth-consent.mjs"
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 SOURCE_PATH = re.compile(r"(?:api/|lib/|infra/supabase/functions/)[a-zA-Z0-9_./-]+\.mjs\Z")
 STATIC_IMPORT = re.compile(r"""(?:\bfrom\s*|\bimport\s*)[\x22\x27](\.[^\x22\x27]+)[\x22\x27]""")
@@ -75,7 +76,8 @@ def validate_lock(value: object) -> dict[str, object]:
             raise GatewaySourceError("gateway-lock-entry-invalid")
         seen.add(path)
         total += size
-    if ENTRY not in seen or "lib/account-proxy-core.mjs" not in seen or total > MAX_BYTES:
+    if (ENTRY not in seen or OAUTH_ENTRY not in seen
+            or "lib/account-proxy-core.mjs" not in seen or total > MAX_BYTES):
         raise GatewaySourceError("gateway-lock-incomplete")
     return value
 

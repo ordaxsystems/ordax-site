@@ -20,6 +20,10 @@ class GatewaySourceTests(unittest.TestCase):
     def fixture(self):
         values = {row["path"]: b"export const fixture = true;\n" for row in self.lock["files"]}
         values[gateway.ENTRY] = b'export { default } from "../lib/account-proxy-core.mjs";\n'
+        values[gateway.OAUTH_ENTRY] = (
+            b'import "../infra/supabase/functions/_shared/account_email_confirmation.mjs";\n'
+            b"export const oauthFixture = true;\n"
+        )
         fixture = copy.deepcopy(self.lock)
         for row in fixture["files"]:
             payload = values[row["path"]]
@@ -36,7 +40,23 @@ class GatewaySourceTests(unittest.TestCase):
         self.assertFalse(self.lock["bridge"]["permanent"])
         self.assertFalse(self.lock["bridge"]["production_authorized"])
         self.assertEqual(self.lock["bridge"]["removal_condition"], gateway.REMOVAL_CONDITION)
+        paths = {entry["path"] for entry in self.lock["files"]}
+        self.assertIn(gateway.ENTRY, paths)
+        self.assertIn(gateway.OAUTH_ENTRY, paths)
         self.assertTrue(all(entry["path"].endswith(".mjs") for entry in self.lock["files"]))
+
+    def test_site_routes_oauth_consent_through_the_pinned_owner_adapter(self):
+        adapter = (ROOT / "api/oauth-consent.mjs").read_text(encoding="utf-8")
+        self.assertIn('../.gateway-source/api/oauth-consent.mjs', adapter)
+        self.assertNotIn("approveAuthorization", adapter)
+        deployment = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+        consent = [row for row in deployment["rewrites"] if row["source"] == "/oauth/consent"]
+        self.assertEqual(consent, [{"source": "/oauth/consent", "destination": "/api/oauth-consent"}])
+        headers = [row for row in deployment["headers"] if row["source"] == "/oauth/consent"]
+        self.assertEqual(len(headers), 1)
+        by_name = {item["key"].lower(): item["value"] for item in headers[0]["headers"]}
+        self.assertIn("no-store", by_name["cache-control"])
+        self.assertEqual(by_name["referrer-policy"], "no-referrer")
 
     def test_atomically_materializes_only_verified_files(self):
         lock, values = self.fixture()
