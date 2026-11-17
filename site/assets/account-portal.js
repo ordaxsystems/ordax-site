@@ -480,9 +480,13 @@
     if (!available || !ticket || Date.parse(ticket.expires_at) <= Date.now()) return;
     const device = mcpDevices?.find(d => d.device_id === deviceId);
     const client = mcpAuthority.clients.find(c => c.client_id === mcpCentralClient);
+    // The challenge belongs to this conversation, not simply any OAuth client.
+    // Show the exact code and endpoint in the *first-party* Owner confirmation.
+    // No user reply inside ChatGPT is a device-selection authorization.
     if (!window.confirm(
-      `${tx("Vincular conversa MCP a este computador")} — ${client?.client_name || mcpCentralClient}
-      / ${device?.name || deviceId}?\n\n${tx("O Runtime precisará confirmar o vínculo. Esta ação não concede novas permissões. Depois da confirmação, offline ou reinício não trocam o computador vinculado.")}`
+      `${tx("Autorizar esta conversa para o dispositivo ou instalação OrdaX")} — ${client?.client_name || mcpCentralClient}
+      / ${device?.name || deviceId} (${deviceId})?\n\n${tx("Confira se este desafio é exatamente o mostrado pelo ChatGPT")}:
+      ${ticket.challenge_id}\n\n${tx("O Runtime precisará confirmar o vínculo. Esta ação não concede novas permissões. Depois da confirmação, a instalação escolhida não muda automaticamente quando fica offline ou reinicia.")}`
     )) return;
     const revision = ++mcpCentralRevision, owner = session;
     const clientId = mcpCentralClient;
@@ -1293,6 +1297,11 @@
       const ready = mcpCentralStatus === "ready" && target
         && mcpCentralSelections?.count === 1 && ticket
         && Date.parse(ticket.expires_at) > Date.now();
+      const challengeReceipt = mcpCentralStatus === "ready" && ticket
+        ? `<p class="panel-description"><strong>${tx("Desafio desta conversa — compare com o código do ChatGPT")}:</strong>
+          <code translate="no">${esc(ticket.challenge_id)}</code>
+          <small>${tx("Expira em")} ${esc(new Date(ticket.expires_at).toLocaleString(i18n.getLocale()))}</small></p>`
+        : "";
       const description = mcpCentralStatus === "loading"
         ? "Consultando desafios e computadores autorizados."
         : mcpCentralStatus === "pending"
@@ -1302,17 +1311,18 @@
               ? "Este dispositivo não possui grant de ação e Runtime elegível para este novo vínculo."
               : !ticket
                 ? "Não existe um desafio único e válido aguardando seleção."
-                : "O dispositivo e o desafio foram verificados para seleção Owner."
+                : "O dispositivo está elegível. Compare o código do desafio com o informado pelo ChatGPT antes de confirmar."
             : "A criação de vínculo MCP está indisponível.";
       centralDetail = `<div class="device-revoke-note" role="status">${tx(description)}
-        ${ready ? action("Vincular esta conversa ao computador", "shield", {
+        ${challengeReceipt}
+        ${ready ? action("Confirmar esta instalação para a conversa", "shield", {
           disabled:mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating, small:true,
           data:`data-mcp-central-select="${esc(mcpCentralClient)}"`,
         }) : ""}</div>`;
     }
     const centralPanel = availableClients.length
       ? `<div class="panel-actions" aria-label="${tx("Vínculo MCP Owner")}">
-        <p>${tx("Selecione o cliente OAuth autorizado somente para um desafio pendente. O vínculo confirmado persiste na Platform até revogação explícita; offline, heartbeat atrasado ou reinício não escolhem outro computador.")}</p>
+        <p>${tx("Selecione o cliente OAuth autorizado somente para um desafio pendente. O vínculo confirmado persiste na Platform até revogação explícita; offline, heartbeat atrasado ou reinício não escolhem outra instalação.")}</p>
         <div>${centralButtons}</div></div>${centralDetail}`
       : "";
     const centralNotice = mcpCentralNotice
