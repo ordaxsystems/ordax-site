@@ -497,7 +497,17 @@ test("Account central results never imply attestation and reject session changes
   assert.match(portal,/mcpCentralNotice = "Vínculo solicitado/);
   assert.match(portal,/expires_at belongs only to this pending Owner challenge/);
   assert.match(portal,/conversation -> device binding is persistent in Platform/);
-  assert.match(portal,/offline, heartbeat atrasado ou reinício não escolhem outro computador/);
+  assert.match(portal,/offline, heartbeat atrasado ou reinício não escolhem outra instalação/);
+  assert.match(portal,/Desafio desta conversa — compare com o código do ChatGPT/);
+  assert.match(portal,/\$\{esc\(ticket\.challenge_id\)\}/,
+    "the signed-in Owner sees the exact server challenge escaped for display");
+  assert.match(portal,/Confira se este desafio é exatamente o mostrado pelo ChatGPT/);
+  assert.match(portal,/\$\{ticket\.challenge_id\}/,
+    "the confirmation dialog must repeat the precise selected ticket");
+  assert.match(portal,/Confirmar esta instalação para a conversa/);
+  assert.match(portal,/\$\{device\?\.name \|\| deviceId\} \(\$\{deviceId\}\)/,
+    "the Owner must see both installation name and exact device id");
+  assert.doesNotMatch(portal,/Vincular esta conversa ao computador/);
   assert.doesNotMatch(portal,/Selecionar sessão MCP/);
 });
 
