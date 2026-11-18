@@ -40,7 +40,7 @@ test("reads only exact owner endpoint with bounded no-store JSON transport",asyn
   assert.deepEqual(await h.read(),archive);
   assert.equal(calls.length,1);
   assert.equal(calls[0][0],"/account/export");
-  assert.deepEqual(calls[0][2],{maxBytes:4194304});
+  assert.deepEqual(calls[0][2],{maxBytes:2097152});
 });
 test("untrusted export contract and foreign account identifiers fail closed",async()=>{
   for(const forged of [
