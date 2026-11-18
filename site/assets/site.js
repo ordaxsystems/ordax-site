@@ -108,6 +108,7 @@
     if (!sameOriginPath(path, method)) throw new Error("api-path-invalid");
     if (method !== "GET" && (method !== "POST" || ![
       "/account/profile/display-name",
+      "/account/preferences/locale",
       "/account/mcp/revoke",
       "/account/mcp/project-grants",
       "/account/mcp/central-selections",
@@ -480,6 +481,8 @@
         && !/[\u0000-\u001f\u007f]/.test(value.displayName)))
       && (value.profileEditEnabled === undefined || typeof value.profileEditEnabled === "boolean")
       && (value.dataExportEnabled === undefined || typeof value.dataExportEnabled === "boolean")
+      && (value.localePreferenceEditEnabled === undefined || typeof value.localePreferenceEditEnabled === "boolean")
+      && (value.preferredLocale === undefined || value.preferredLocale === "pt-BR" || value.preferredLocale === "en-US")
       && (value.registeredAt === undefined || validAuthSessionDate(value.registeredAt))
       && (value.lastSignInAt === undefined || validAuthSessionDate(value.lastSignInAt))
       && value.$schema === "prototype-ordax.public-identity-session/1"
@@ -498,9 +501,11 @@
   let sessionView = Object.freeze({ status: "checking", email: "" });
 
   function publishSessionView(status, email = "", displayName = "", profileEditEnabled = false,
-    dataExportEnabled = false, registeredAt = "", lastSignInAt = "") {
+    dataExportEnabled = false, registeredAt = "", lastSignInAt = "",
+    preferredLocale = "", localePreferenceEditEnabled = false) {
     sessionView = Object.freeze({ status, email, displayName, profileEditEnabled,
-      dataExportEnabled, registeredAt, lastSignInAt });
+      dataExportEnabled, registeredAt, lastSignInAt, preferredLocale,
+      localePreferenceEditEnabled });
     for (const observer of sessionObservers) {
       // A presentation failure must not change the canonical identity result.
       try { observer(sessionView); } catch { console.error("public-account-view-failed"); }
@@ -533,7 +538,9 @@
             session.authenticated && session.profileEditEnabled === true,
             session.authenticated && session.dataExportEnabled === true,
             session.authenticated && typeof session.registeredAt === "string" ? session.registeredAt : "",
-            session.authenticated && typeof session.lastSignInAt === "string" ? session.lastSignInAt : "");
+            session.authenticated && typeof session.lastSignInAt === "string" ? session.lastSignInAt : "",
+            session.authenticated && typeof session.preferredLocale === "string" ? session.preferredLocale : "",
+            session.authenticated && session.localePreferenceEditEnabled === true);
         }
         return session;
       }).catch(error => {
@@ -720,6 +727,26 @@
           || receipt.schema !== "ordax.account-display-name-update/1"
           || receipt.updated !== true || receipt.displayName !== displayName)
         throw new Error("account-profile-update-unconfirmed");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return receipt;
+    },
+    // A saved language is owned by the existing Account row, not localStorage.
+    // The browser carries no user ID, RLS bypass, or provider credentials.
+    async updatePreferredLocale(locale, signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated" || owner.localePreferenceEditEnabled !== true)
+        throw new Error("account-locale-edit-unavailable");
+      if (locale !== "pt-BR" && locale !== "en-US")
+        throw new Error("account-locale-invalid");
+      const receipt = await loadJson("/account/preferences/locale", signal, {
+        maxBytes: 2048, method: "POST", jsonBody: { preferred_locale: locale },
+      });
+      if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)
+          || Object.keys(receipt).sort().join(",") !== "preferredLocale,schema,updated"
+          || receipt.schema !== "ordax.account-preferred-locale-update/1"
+          || receipt.updated !== true || receipt.preferredLocale !== locale)
+        throw new Error("account-locale-update-unconfirmed");
       if (owner !== sessionView || sessionView.status !== "authenticated")
         throw new Error("public-account-session-changed");
       return receipt;
