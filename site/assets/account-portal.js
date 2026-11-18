@@ -231,6 +231,9 @@
     return { challenge, status };
   })();
   let session = account.getSnapshot();
+  // Pending profile mutations never move across an account-session boundary.
+  let profileSaveBusy = false;
+  let profileSaveNotice = "";
   let disposeMenu = () => {};
   // Observational data only. Never an entitlement, quota or invoice.
   let subscriptionView = null;
@@ -1420,7 +1423,7 @@
     const quickLinks = ["preferencias", "privacidade", "integracoes", "atividade"];
     return `<header class="account-intro"><div><h1 tabindex="-1">${tx("Minha Conta")}</h1><p>${tx("Seu perfil, seus serviços e suas escolhas.")}</p></div>${link("dados-pessoais", "", "button outline", `${icon("user")}${tx("Dados pessoais")}`)}</header>
       <section class="identity-card" aria-labelledby="overview-profile-title">
-        <div class="identity-content"><span class="eyebrow">${tx("SEU PERFIL ORDAX")}</span><div class="identity-person"><span class="identity-avatar">${icon("user")}</span><div><h2 id="overview-profile-title">${tx("Sua conta OrdaX")}</h2><p class="verified-email"${signedIn() && session.email ? ' translate="no"' : ""}>${signedIn() && session.email ? esc(session.email) : tx("E-mail não disponível")}</p></div></div><div class="identity-bottom"><dl><div><dt>${tx("Tipo de conta")}</dt><dd>${tx("Não disponível")}</dd></div><div><dt>${tx("Membro desde")}</dt><dd>${tx("Não disponível")}</dd></div></dl>${link("dados-pessoais", "", "text-link", `${tx("Ver perfil")}${icon("arrow-right")}`)}</div></div>
+        <div class="identity-content"><span class="eyebrow">${tx("SEU PERFIL ORDAX")}</span><div class="identity-person"><span class="identity-avatar">${icon("user")}</span><div><h2 id="overview-profile-title">${signedIn() && session.displayName ? esc(session.displayName) : tx("Sua conta OrdaX")}</h2><p class="verified-email"${signedIn() && session.email ? ' translate="no"' : ""}>${signedIn() && session.email ? esc(session.email) : tx("E-mail não disponível")}</p></div></div><div class="identity-bottom"><dl><div><dt>${tx("Tipo de conta")}</dt><dd>${tx("Não disponível")}</dd></div><div><dt>${tx("Membro desde")}</dt><dd>${tx("Não disponível")}</dd></div></dl>${link("dados-pessoais", "", "text-link", `${tx("Ver perfil")}${icon("arrow-right")}`)}</div></div>
         <div class="identity-art" aria-hidden="true"><img src="${LANDSCAPE}" width="1920" height="640" alt=""><span>${tx("Uma conta.")}<br>${tx("Todos os seus mundos.")}</span></div>
       </section>
       <div class="account-overview-grid"><div class="overview-primary">
@@ -1433,20 +1436,73 @@
       <section class="account-help-strip">${icon("help")}<div><h2>${tx("Precisa de ajuda?")}</h2><p>${tx("Encontre respostas sobre sua conta, assinatura e segurança.")}</p></div>${link("suporte", "", "text-link", `${tx("Central de ajuda")}${icon("arrow-right")}`)}</section>`;
   }
 
+  async function saveDisplayName() {
+    if (profileSaveBusy || !signedIn() || session.profileEditEnabled !== true) return;
+    const input = document.getElementById("profile-display-name");
+    const notice = document.getElementById("profile-edit-status");
+    if (!input || !notice) return;
+    const proposed = input.value.trim();
+    if (!proposed || [...proposed].length > 120
+        || /[\u0000-\u001f\u007f]/.test(proposed)) {
+      notice.textContent = tx("Informe um nome válido de até 120 caracteres.");
+      return;
+    }
+    const owner = session;
+    profileSaveBusy = true;
+    const button = document.querySelector("[data-profile-save]");
+    if (button) button.disabled = true;
+    notice.textContent = tx("Salvando nome de exibição");
+    try {
+      await account.updateDisplayName(proposed);
+      if (session !== owner || !signedIn()) return;
+      // Read back the persisted value through the one canonical session port.
+      await account.refreshSession();
+      if (!signedIn() || session.displayName !== proposed) {
+        throw new Error("account-display-name-readback-unconfirmed");
+      }
+      profileSaveNotice = "Nome de exibição atualizado e confirmado.";
+    } catch {
+      if (!signedIn()) return;
+      profileSaveNotice = "Não foi possível confirmar a alteração. Verifique sua sessão e tente novamente.";
+    } finally {
+      profileSaveBusy = false;
+      if (signedIn() && state.section === "dados-pessoais") {
+        if (profileSaveNotice === "Nome de exibição atualizado e confirmado.") {
+          renderContent();
+        } else {
+          // A failed write retains the user's typed text for an explicit retry.
+          const status = document.getElementById("profile-edit-status");
+          if (status) status.textContent = tx(profileSaveNotice);
+          const submit = document.querySelector("[data-profile-save]");
+          if (submit && session.profileEditEnabled === true) submit.disabled = false;
+        }
+      }
+    }
+  }
+
   function personal() {
+    const canEditDisplayName = signedIn() && session.profileEditEnabled === true;
+    const currentName = signedIn() ? (session.displayName || "") : "";
+    const nameField = `<label class="form-field"><span>${tx("Nome de exibição")}</span>
+      <input id="profile-display-name" type="text" autocomplete="nickname"
+        maxlength="120" value="${esc(currentName)}"
+        ${canEditDisplayName && !profileSaveBusy ? "" : "disabled"}
+        aria-describedby="profile-display-name-hint profile-edit-status">
+      <small id="profile-display-name-hint">${tx("Nome pelo qual você prefere ser chamado.")}</small>
+    </label>`;
     return `<section class="settings-section personal-photo" aria-labelledby="personal-photo-heading">
       ${panelHeading("Seu perfil", { id: "personal-photo-heading", iconName: "user", tone: "cyan", end: capabilityBadge("profilePhoto") })}
       <div class="profile-edit"><span class="large-avatar" aria-hidden="true">${icon("user")}</span><div><h3>${tx(capabilityDefinitions.profilePhoto.title)}</h3><p>${tx("Uma imagem para identificar seu perfil nos serviços OrdaX.")}</p><small id="profile-photo-status">${tx("A alteração da foto aguarda integração.")}</small></div>${action("Alterar foto", "camera", { small: true, describedBy: "profile-photo-status" })}</div>
     </section>
     <section class="settings-section personal-info" aria-labelledby="personal-info-heading">
       ${panelHeading("Informações pessoais", { id: "personal-info-heading", iconName: "user", tone: "cyan", end: capabilityBadge("profileEdit") })}<p class="panel-description">${tx("Como você se identifica nos serviços OrdaX.")}</p>
-      <div class="form-grid">${field("Nome completo", "Não disponível", "text", "", { id: "profile-full-name" })}${field("Nome de exibição", "Não disponível", "text", "", { id: "profile-display-name", hint: "Nome pelo qual você prefere ser chamado." })}${field("País ou região", "Não disponível", "text", "", { id: "profile-country" })}${field("Documento fiscal", "Não disponível", "text", "", { id: "profile-tax-document" })}</div>
+      <div class="form-grid">${field("Nome completo", "Não disponível", "text", "", { id: "profile-full-name" })}${nameField}${field("País ou região", "Não disponível", "text", "", { id: "profile-country" })}${field("Documento fiscal", "Não disponível", "text", "", { id: "profile-tax-document" })}</div>
     </section>
     <section class="settings-section personal-contact" aria-labelledby="personal-contact-heading">
       ${panelHeading("Contato", { id: "personal-contact-heading", iconName: "mail", tone: "cyan" })}<p class="panel-description">${tx("Seu e-mail de acesso e suas informações de contato.")}</p>
       <div class="form-grid">${field("E-mail", "Não disponível", "email", "accountEmail", { id: "profile-email", hint: "O e-mail será exibido quando a consulta da conta estiver disponível." })}${field("Telefone", "Não disponível", "tel", "", { id: "profile-phone", hint: "A consulta e a edição do telefone aguardam integração." })}</div>
     </section>
-    <div class="form-actions personal-actions"><span id="profile-edit-status">${icon("info")}${tx("As alterações de perfil e contato ainda não estão disponíveis.")}</span>${action("Salvar alterações", null, { variant: "", describedBy: "profile-edit-status" })}</div>
+    <div class="form-actions personal-actions"><span id="profile-edit-status" role="status" aria-live="polite">${icon("info")}${tx(profileSaveNotice || (canEditDisplayName ? "Somente o nome de exibição pode ser alterado aqui." : "A edição do perfil aguarda ativação do serviço oficial."))}</span>${action("Salvar nome de exibição", null, { disabled: !canEditDisplayName || profileSaveBusy, variant: "", data: "data-profile-save", describedBy: "profile-edit-status" })}</div>
     ${relatedAreas(["seguranca", "privacidade"], "Segurança e privacidade do perfil")}`;
   }
   function subscription() {
@@ -1705,7 +1761,10 @@
       document.getElementById("conteudo").focus();
       return;
     }
-    if (control.matches("[data-mcp-project-bind]")) {
+    if (control.matches("[data-profile-save]")) {
+      event.preventDefault();
+      if (!layoutPreview) void saveDisplayName();
+    } else if (control.matches("[data-mcp-project-bind]")) {
       event.preventDefault();
       if (!layoutPreview) void requestMcpProjectDeviceBinding(control);
     } else if (control.matches("[data-mcp-github-connect]")) {
@@ -1825,6 +1884,7 @@
     account.subscribe(value => {
       const focused = document.activeElement?.id;
       session = value;
+      if (session.status !== "authenticated") profileSaveNotice = "";
       if (subscriptionSession !== session) {
         subscriptionSession = session;
         subscriptionRevision += 1;
