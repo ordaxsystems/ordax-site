@@ -165,7 +165,7 @@
   const sections = Object.freeze([
     { id: "visao-geral", navigationGroup: "account", mobileLabel: "Resumo", sessionDependent: true, title: "Visão geral", icon: "dashboard", description: "Sua identidade, assinatura e recursos em um só lugar." },
     { id: "dados-pessoais", navigationGroup: "account", sessionDependent: true, title: "Dados pessoais", icon: "user", description: "Seu perfil e suas informações cadastrais.", owner: "Identidade OrdaX", capabilities: ["accountEmail", "profileEdit", "profilePhoto"] },
-    { id: "assinatura", navigationGroup: "services", mobileLabel: "Plano", title: "Plano e assinatura", icon: "crown", description: "Seu plano, benefícios e opções de assinatura.", owner: "Direitos e assinaturas OrdaX", capabilities: ["subscription", "planCatalog", "subscriptionChange"] },
+    { id: "assinatura", navigationGroup: "services", mobileLabel: "Plano", sessionDependent: true, title: "Plano e assinatura", icon: "crown", description: "Seu plano, benefícios e opções de assinatura.", owner: "Direitos e assinaturas OrdaX", capabilities: ["subscription", "planCatalog", "subscriptionChange"] },
     { id: "consumo", navigationGroup: "services", mobileLabel: "Consumo", title: "Consumo e limites", icon: "chart", description: "Acompanhe seus recursos em todo o ecossistema OrdaX.", owner: "Medição de uso OrdaX", capabilities: ["aiUsage", "storageUsage", "apiUsage", "usageHistory", "usageExport"] },
     { id: "faturamento", navigationGroup: "services", title: "Pagamentos e faturas", icon: "card", description: "Métodos de pagamento, cobranças e documentos fiscais.", owner: "Faturamento OrdaX", capabilities: ["upcomingCharge", "paymentMethods", "invoices", "fiscalDetails"] },
     { id: "seguranca", navigationGroup: "security", mobileLabel: "Segurança", sessionDependent: true, title: "Segurança e acesso", icon: "shield", description: "Proteja sua identidade e controle o acesso à sua conta.", owner: "Identidade OrdaX", capabilities: ["browserSession", "password", "twoFactor", "recovery", "accessEvents"] },
@@ -233,6 +233,10 @@
   let session = account.getSnapshot();
   let disposeMenu = () => {};
   // Observational data only. Never an entitlement, quota or invoice.
+  let subscriptionView = null;
+  let subscriptionStatus = "unavailable";
+  let subscriptionSession = null;
+  let subscriptionRevision = 0;
   let mcpUsage = null;
   let mcpUsageStatus = "unavailable";
   // Identity is the immutable published session snapshot, not a public email.
@@ -885,6 +889,47 @@
     if (state.section === "dispositivos") renderContent();
   }
 
+  async function loadSubscription() {
+    const revision = ++subscriptionRevision;
+    if (!signedIn()) return;
+    subscriptionStatus = "loading";
+    if (["assinatura", "visao-geral"].includes(state.section)) renderContent();
+    try {
+      const value = await account.readSubscription();
+      if (revision !== subscriptionRevision || !signedIn()) return;
+      subscriptionView = value;
+      subscriptionStatus = "ready";
+    } catch {
+      if (revision !== subscriptionRevision || !signedIn()) return;
+      subscriptionView = null;
+      subscriptionStatus = "unavailable";
+    }
+    if (["assinatura", "visao-geral"].includes(state.section)) renderContent();
+  }
+
+  function subscriptionPresentation() {
+    const view = subscriptionStatus === "ready" ? subscriptionView : null;
+    const recorded = view && view.status !== "unverified";
+    const name = recorded ? "OrdaX " + view.planId.charAt(0).toUpperCase()
+      + view.planId.slice(1) : "Plano não disponível";
+    const lifecycleNames = {
+      trialing: "Em avaliação", active: "Ativa", past_due: "Pagamento pendente",
+      unpaid: "Pagamento não confirmado", canceled: "Cancelada",
+      incomplete: "Incompleta", expired: "Expirada",
+    };
+    const status = recorded
+      ? view.status === "stale" ? "Vigência não confirmada"
+        : lifecycleNames[view.lifecycle]
+      : subscriptionStatus === "loading" ? "Consultando assinatura"
+        : view ? "Nenhuma assinatura confirmada no registro"
+        : "Assinatura indisponível";
+    const period = recorded && view.currentPeriodEnd
+      ? new Intl.DateTimeFormat(i18n.getLocale(), { dateStyle: "medium" })
+        .format(new Date(view.currentPeriodEnd))
+      : "Não disponível";
+    return { name, status, period, recorded, view };
+  }
+
   async function loadMcpUsage() {
     const revision = ++mcpUsageRevision;
     if (!signedIn()) return;
@@ -946,7 +991,10 @@
   function capabilityState(id) {
     const definition = capabilityDefinitions[id];
     if (!definition) throw new Error("public-account-capability-unknown");
-    const verified = signedIn() && (id === "browserSession" || (id === "accountEmail" && Boolean(session.email)));
+    const verified = signedIn() && (id === "browserSession"
+      || (id === "accountEmail" && Boolean(session.email))
+      || (id === "subscription" && subscriptionStatus === "ready"
+        && subscriptionView?.status === "verified"));
     const status = definition.local ? "local" : verified ? "verified" : "pending";
     return { ...definition, id, status };
   }
@@ -1376,7 +1424,7 @@
         <div class="identity-art" aria-hidden="true"><img src="${LANDSCAPE}" width="1920" height="640" alt=""><span>${tx("Uma conta.")}<br>${tx("Todos os seus mundos.")}</span></div>
       </section>
       <div class="account-overview-grid"><div class="overview-primary">
-        <section class="account-card account-services">${panelHeading("Plano e faturamento", { iconName: "crown", tone: "violet", end: `<span class="status-tag">${tx("Recursos pendentes")}</span>` })}<dl class="service-facts">${["Plano atual", "Próxima renovação", "Próxima cobrança"].map(label => `<div><dt>${tx(label)}</dt><dd>${tx("Não disponível")}</dd></div>`).join("")}</dl><div class="panel-actions">${link("assinatura", "", "button", `${tx("Ver assinatura")}${icon("arrow-right")}`)}${link("faturamento", "", "text-link", `${tx("Pagamentos e faturas")}${icon("chevron-right")}`)}</div></section>
+        <section class="account-card account-services">${panelHeading("Plano e faturamento", { iconName: "crown", tone: "violet", end: `<span class="status-tag">${tx("Recursos pendentes")}</span>` })}<dl class="service-facts">${[["Plano atual", subscriptionPresentation().name], ["Vigência", subscriptionPresentation().period], ["Próxima cobrança", "Não disponível"]].map(([label,value]) => `<div><dt>${tx(label)}</dt><dd>${tx(value)}</dd></div>`).join("")}</dl><div class="panel-actions">${link("assinatura", "", "button", `${tx("Ver assinatura")}${icon("arrow-right")}`)}${link("faturamento", "", "text-link", `${tx("Pagamentos e faturas")}${icon("chevron-right")}`)}</div></section>
         <section class="account-card account-usage">${panelHeading("Consumo de recursos", { iconName: "chart", tone: "cyan", end: `${link("consumo", "", "text-link", `${tx("Ver detalhes")}${icon("arrow-up-right")}`)}` })}${resourceTable()}<p class="data-note">${icon("info")}${tx("Aguardando dados de consumo")}</p><details class="usage-history"><summary>${icon("history")}<span>${tx("Histórico de consumo")}</span>${icon("chevron-down")}</summary><div class="chart-legend">${resources.map(resource => `<span><i class="legend-${resource.tone}"></i>${tx(resource.label)}</span>`).join("")}</div>${chart()}${link("consumo", "", "text-link", `${tx("Explorar consumo")}${icon("arrow-right")}`)}</details></section>
       </div><aside class="overview-aside" aria-label="${tx("Acesso e preferências")}">
         <section class="account-card account-safety">${panelHeading("Segurança e acesso", { iconName: "shield", tone: "mint" })}<p class="panel-description">${tx("Cuide do acesso à sua conta e dos dispositivos conectados.")}</p><dl class="safety-facts"><div><dt>${tx("Verificação em duas etapas")}</dt><dd>${tx("Não disponível")}</dd></div><div><dt>${tx("Sessões e dispositivos")}</dt><dd>${tx("Não disponível")}</dd></div></dl>${link("seguranca", "", "button outline", `${tx("Gerenciar segurança")}${icon("arrow-right")}`)}${link("dispositivos", "", "text-link", `${tx("Meus dispositivos")}${icon("chevron-right")}`)}</section>
@@ -1402,7 +1450,8 @@
     ${relatedAreas(["seguranca", "privacidade"], "Segurança e privacidade do perfil")}`;
   }
   function subscription() {
-    return `<section class="settings-section subscription-summary" aria-labelledby="subscription-heading">${panelHeading("Assinatura atual", { id: "subscription-heading", iconName: "crown", tone: "violet", end: capabilityBadge("subscription") })}<div class="subscription-plan"><span>${tx(capabilityDefinitions.subscription.title)}</span><h3>${tx("Plano não disponível")}</h3><p>${tx("Seu plano será exibido quando os dados da assinatura estiverem disponíveis.")}</p></div><dl class="subscription-facts">${["Ciclo de cobrança", "Próxima renovação", "Valor da assinatura"].map(label => `<div><dt>${tx(label)}</dt><dd>${tx("Não disponível")}</dd></div>`).join("")}</dl><div class="panel-actions subscription-actions"><p>${icon("info")}${tx("Alterações e cancelamento aguardam a conexão com o serviço de assinatura.")}</p><div>${action("Alterar plano", "crown")}${action("Cancelar assinatura", null, { variant: "ghost" })}</div></div></section>
+    const commercial = subscriptionPresentation();
+    return `<section class="settings-section subscription-summary" aria-labelledby="subscription-heading">${panelHeading("Assinatura atual", { id: "subscription-heading", iconName: "crown", tone: "violet", end: capabilityBadge("subscription") })}<div class="subscription-plan"><span>${tx(capabilityDefinitions.subscription.title)}</span><h3>${tx(commercial.name)}</h3><p role="status">${tx(commercial.status)}${commercial.view?.cancellationScheduled ? ` · ${tx("Cancelamento agendado")}` : ""}</p></div><dl class="subscription-facts">${[["Situação", commercial.status], ["Fim do período confirmado", commercial.period], ["Valor da assinatura", "Não disponível"]].map(([label,value]) => `<div><dt>${tx(label)}</dt><dd>${tx(value)}</dd></div>`).join("")}</dl><div class="panel-actions subscription-actions"><p>${icon("info")}${tx("Alterações e cancelamento aguardam a conexão com o serviço de assinatura.")}</p><div>${action("Alterar plano", "crown")}${action("Cancelar assinatura", null, { variant: "ghost" })}</div></div></section>
       <section class="settings-section subscription-limits">${panelHeading("Limites da conta", { iconName: "chart", tone: "cyan", end: link("consumo", "", "text-link", `${tx("Ver consumo")}${icon("arrow-right")}`) })}<p class="panel-description">${tx("Consulte a capacidade disponível para cada recurso da sua conta.")}</p>${resourceTable({ showUsage: false })}<p class="data-note">${icon("info")}${tx("Os limites serão exibidos quando os benefícios da conta estiverem conectados.")}</p></section>
       <section class="settings-section subscription-catalog">${panelHeading("Planos e benefícios", { iconName: "sparkles", tone: "cyan" })}<p class="panel-description">${tx("Consulte os benefícios previstos e os valores de referência.")}</p>${planCatalog()}<div class="catalog-availability"><p>${icon("info")}${tx("Assinaturas pagas ainda não estão disponíveis.")}</p><p><span>${tx("Contratação")}</span><strong>${tx("Em preparação")}</strong></p></div></section>${relatedAreas(["consumo", "faturamento"], "Consumo e faturamento")}`;
   }
@@ -1590,6 +1639,7 @@
     if (dialog.open) dialog.close();
     renderNavigation();
     renderContent({ focus: !initial });
+    if (["assinatura", "visao-geral"].includes(state.section) && signedIn() && subscriptionStatus === "unavailable") void loadSubscription();
     if (state.section === "dispositivos" && signedIn() && mcpDevicesStatus === "unavailable") void loadMcpDevices();
     if (state.section === "dispositivos" && signedIn() && mcpGithubChallenge
         && mcpGithubStatus === "unavailable") void loadMcpGithubCandidates();
@@ -1775,6 +1825,15 @@
     account.subscribe(value => {
       const focused = document.activeElement?.id;
       session = value;
+      if (subscriptionSession !== session) {
+        subscriptionSession = session;
+        subscriptionRevision += 1;
+        subscriptionView = null;
+        subscriptionStatus = "unavailable";
+        if (signedIn() && ["assinatura", "visao-geral"].includes(state.section)) {
+          void loadSubscription();
+        }
+      }
       if (mcpUsageSession !== session) {
         mcpUsageSession = session;
         mcpUsageRevision += 1;

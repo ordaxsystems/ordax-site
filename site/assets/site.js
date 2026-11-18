@@ -679,6 +679,41 @@
     getSnapshot: () => sessionView,
     readSession: readPublicSession,
     refreshSession: refreshPublicSession,
+    // The verified Account session authorizes read only. The owner backend
+    // distinguishes a missing record from the Free plan; the browser cannot
+    // choose a price, plan or entitlement.
+    async readSubscription(signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated")
+        throw new Error("public-account-session-required");
+      const value = await loadJson("/account/subscription", signal, { maxBytes: 4096 });
+      const keys = ["billing", "cancellationScheduled", "currentPeriodEnd",
+        "entitlements", "lifecycle", "planId", "schema", "source", "status"];
+      const plans = new Set(["free", "personal", "professional", "team"]);
+      const lifecycles = new Set(["trialing", "active", "past_due", "unpaid",
+        "canceled", "incomplete", "expired"]);
+      const unverified = value?.status === "unverified";
+      const valid = value && typeof value === "object" && !Array.isArray(value)
+        && Object.keys(value).sort().join(",") === keys.sort().join(",")
+        && value.schema === "ordax.account-subscription-view/1"
+        && value.source === "server"
+        && ["verified", "stale", "unverified"].includes(value.status)
+        && typeof value.cancellationScheduled === "boolean"
+        && value.entitlements === "separate-authority"
+        && (value.billing === "unavailable" || value.billing === "separate-authority")
+        && (unverified
+          ? value.planId === null && value.lifecycle === null
+            && value.currentPeriodEnd === null && value.cancellationScheduled === false
+            && value.billing === "unavailable"
+          : plans.has(value.planId) && lifecycles.has(value.lifecycle)
+            && (value.currentPeriodEnd === null ||
+              (typeof value.currentPeriodEnd === "string"
+                && !Number.isNaN(Date.parse(value.currentPeriodEnd)))));
+      if (!valid) throw new Error("account-subscription-view-invalid");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return Object.freeze(value);
+    },
     // Read-only account data uses the same bounded same-origin transport.
     // Authorization remains entirely server-side; no client-side quota claim.
     async readMcpUsage(signal) {
