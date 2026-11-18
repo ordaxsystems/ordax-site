@@ -234,6 +234,9 @@
   // Pending profile mutations never move across an account-session boundary.
   let profileSaveBusy = false;
   let profileSaveNotice = "";
+  let localeSaveBusy = false;
+  let localeSaveNotice = "";
+  let localeFromAccountApplied = false;
   let accountExportBusy = false;
   let accountExportNotice = "";
   let disposeMenu = () => {};
@@ -996,12 +999,14 @@
   function capabilityState(id) {
     const definition = capabilityDefinitions[id];
     if (!definition) throw new Error("public-account-capability-unknown");
-    const verified = signedIn() && (id === "browserSession"
+    const verified = signedIn() && ((id === "portalLocale"
+        && Boolean(session.preferredLocale) && session.preferredLocale === i18n.getLocale())
+      || id === "browserSession"
       || (id === "accountEmail" && Boolean(session.email))
       || (id === "dataExport" && session.dataExportEnabled === true)
       || (id === "subscription" && subscriptionStatus === "ready"
         && subscriptionView?.status === "verified"));
-    const status = definition.local ? "local" : verified ? "verified" : "pending";
+    const status = verified ? "verified" : definition.local ? "local" : "pending";
     return { ...definition, id, status };
   }
   function capabilityLabel(status, compact = false) {
@@ -1641,12 +1646,47 @@
       ${accountExportNotice ? `<p id="account-export-status" role="status" aria-live="polite">${tx(accountExportNotice)}</p>` : ""}
     </section>${relatedAreas(["preferencias", "integracoes"], "Preferências e acesso aos dados")}`;
   }
+  // The chosen locale still works locally for anonymous visitors. Only an
+  // explicit authenticated save writes the Account-owned preference.
+  async function saveAccountLocale() {
+    if (!signedIn() || session.localePreferenceEditEnabled !== true || localeSaveBusy) return;
+    const locale = i18n.getLocale();
+    if (locale !== "pt-BR" && locale !== "en-US") return;
+    const owner = session;
+    localeSaveBusy = true;
+    localeSaveNotice = "Salvando idioma da conta.";
+    if (state.section === "preferencias") renderContent();
+    try {
+      await account.updatePreferredLocale(locale);
+      if (session !== owner || !signedIn()) return;
+      // A mutation receipt is not enough: re-read the persisted preference
+      // from the canonical authenticated session before claiming success.
+      await account.refreshSession();
+      if (!signedIn() || session.preferredLocale !== locale)
+        throw new Error("locale-readback-unconfirmed");
+      localeSaveNotice = "Idioma salvo e confirmado.";
+    } catch {
+      if (session === owner && signedIn())
+        localeSaveNotice = "Não foi possível confirmar o idioma. Tente novamente.";
+    } finally {
+      localeSaveBusy = false;
+      if (state.section === "preferencias" && signedIn()) renderContent();
+    }
+  }
+
   function preferences() {
     const locales = window.OrdaXPublicI18nCatalog?.supportedLocales ?? [];
     const material = document.body.dataset.material === "ink" ? "Escuro" : "Claro";
+    const localeCanSave = signedIn() && session.localePreferenceEditEnabled === true;
+    const localeVerified = localeCanSave && session.preferredLocale === i18n.getLocale();
+    const localeHint = localeSaveNotice ||
+      (localeVerified ? "Idioma sincronizado com sua conta."
+        : localeCanSave ? "Escolha local: salve para sincronizar entre dispositivos."
+          : "Entre na Conta OrdaX para sincronizar. O idioma deste navegador continua disponível.");
     return `<section class="settings-section portal-preferences" aria-labelledby="portal-preferences-heading">
-      ${panelHeading("Preferências do portal", { id: "portal-preferences-heading", iconName: "sliders", tone: "cyan" })}<p class="panel-description">${tx("Idioma e aparência se referem ao navegador atual.")}</p>
-      <div class="preferences-grid"><article class="preference-panel"><div class="preference-heading"><h3>${tx(capabilityDefinitions.portalLocale.title)}</h3>${capabilityBadge("portalLocale")}</div><p class="preference-description" id="account-locale-hint">${tx("Escolha o idioma usado neste portal. Esta escolha vale para este navegador.")}</p><label class="locale-field" for="account-locale"><span>${tx("Idioma preferido")}</span><select id="account-locale" aria-describedby="account-locale-hint">${locales.map(locale => `<option value="${esc(locale)}"${i18n.getLocale() === locale ? " selected" : ""}>${message(`locale.selector.${locale}`)}</option>`).join("")}</select></label></article>
+      ${panelHeading("Preferências do portal", { id: "portal-preferences-heading", iconName: "sliders", tone: "cyan" })}<p class="panel-description">${tx("A aparência permanece local; o idioma pode ser salvo na sua conta.")}</p>
+      <div class="preferences-grid"><article class="preference-panel"><div class="preference-heading"><h3>${tx(capabilityDefinitions.portalLocale.title)}</h3>${capabilityBadge("portalLocale")}</div><p class="preference-description" id="account-locale-hint">${tx("Altere o idioma aqui e salve-o na conta para usar em outros dispositivos.")}</p><label class="locale-field" for="account-locale"><span>${tx("Idioma preferido")}</span><select id="account-locale" aria-describedby="account-locale-hint">${locales.map(locale => `<option value="${esc(locale)}"${i18n.getLocale() === locale ? " selected" : ""}>${message(`locale.selector.${locale}`)}</option>`).join("")}</select></label>
+          <div class="panel-actions"><span id="account-locale-status" role="status" aria-live="polite">${tx(localeHint)}</span>${action("Salvar idioma na conta", null, { disabled: !localeCanSave || localeSaveBusy || localeVerified, data: "data-account-save-locale", describedBy: "account-locale-status" })}</div></article>
         <article class="preference-panel"><div class="preference-heading"><h3>${tx("Aparência")}</h3>${capabilityBadge("portalAppearance")}</div><p class="preference-description">${tx("Esta é a aparência atual deste portal.")}</p><div class="appearance-option"><div class="appearance-preview" aria-hidden="true"><span class="appearance-preview-bar"></span><span class="appearance-preview-rail"></span><span class="appearance-preview-content"><i></i><i></i><i></i></span></div><div class="appearance-current"><span>${tx("Visual atual")}</span><strong>${tx(material)}</strong></div></div></article></div>
     </section>
     <section class="settings-section communication-settings" aria-labelledby="communications-heading">${panelHeading("Notificações e comunicações", { id: "communications-heading", iconName: "bell", tone: "cyan" })}<p class="panel-description">${tx("Preferências da conta estarão disponíveis quando o serviço oficial estiver conectado.")}</p>${communicationOptions.map(option => settingRow({ ...option, status: capabilityBadge("communications") })).join("")}<div class="panel-actions communication-actions">${link("privacidade", "", "text-link", `${tx(byId.get("privacidade").title)}${icon("arrow-right")}`)}</div></section>
@@ -1820,7 +1860,10 @@
       document.getElementById("conteudo").focus();
       return;
     }
-    if (control.matches("[data-account-export]")) {
+    if (control.matches("[data-account-save-locale]")) {
+      event.preventDefault();
+      if (!layoutPreview) void saveAccountLocale();
+    } else if (control.matches("[data-account-export]")) {
       event.preventDefault();
       if (!layoutPreview) void downloadAccountData();
     } else if (control.matches("[data-profile-save]")) {
@@ -1906,7 +1949,10 @@
   document.addEventListener("change", event => {
     if (event.target.id === "usage-period") { state.period = event.target.value; renderContent(); document.getElementById("usage-period").focus({ preventScroll: true }); }
     else if (event.target.id === "activity-period") { state.activityPeriod = event.target.value; renderContent(); document.getElementById("activity-period").focus({ preventScroll: true }); }
-    else if (event.target.id === "account-locale") i18n.setLocale(event.target.value);
+    else if (event.target.id === "account-locale") {
+      localeSaveNotice = "";
+      i18n.setLocale(event.target.value);
+    }
   });
   document.addEventListener("keydown", event => {
     if (event.defaultPrevented || event.isComposing) return;
@@ -1947,6 +1993,15 @@
       const focused = document.activeElement?.id;
       const previousSession = session;
       session = value;
+      if (session.status !== "authenticated") {
+        localeFromAccountApplied = false;
+      } else if (!localeFromAccountApplied) {
+        localeFromAccountApplied = true;
+        if ((session.preferredLocale === "pt-BR" || session.preferredLocale === "en-US")
+            && i18n.getLocale() !== session.preferredLocale) {
+          i18n.setLocale(session.preferredLocale);
+        }
+      }
       if (previousSession !== session) accountExportNotice = "";
       if (session.status !== "authenticated") profileSaveNotice = "";
       if (subscriptionSession !== session) {
