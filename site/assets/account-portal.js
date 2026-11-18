@@ -234,6 +234,8 @@
   // Pending profile mutations never move across an account-session boundary.
   let profileSaveBusy = false;
   let profileSaveNotice = "";
+  let accountExportBusy = false;
+  let accountExportNotice = "";
   let disposeMenu = () => {};
   // Observational data only. Never an entitlement, quota or invoice.
   let subscriptionView = null;
@@ -996,6 +998,7 @@
     if (!definition) throw new Error("public-account-capability-unknown");
     const verified = signedIn() && (id === "browserSession"
       || (id === "accountEmail" && Boolean(session.email))
+      || (id === "dataExport" && session.dataExportEnabled === true)
       || (id === "subscription" && subscriptionStatus === "ready"
         && subscriptionView?.status === "verified"));
     const status = definition.local ? "local" : verified ? "verified" : "pending";
@@ -1017,7 +1020,18 @@
 
   function operationRow(id) {
     const definition = capabilityDefinitions[id];
-    return settingRow({ ...definition, id, title: definition.viewTitle || definition.title, status: capabilityBadge(id), control: action(definition.action, null, { variant: definition.destructive ? "destructive" : "outline", describedBy: `${id}-hint` }) });
+    const exportReady = id === "dataExport" && signedIn() && session.dataExportEnabled === true;
+    const exportControl = id === "dataExport";
+    return settingRow({ ...definition, id, title: definition.viewTitle || definition.title,
+      status: capabilityBadge(id),
+      hint: exportReady ? "O arquivo inclui dados pessoais e deve ser guardado com segurança." : definition.hint,
+      control: action(definition.action, null, {
+        variant: definition.destructive ? "destructive" : "outline",
+        describedBy: `${id}-hint`,
+        disabled: exportControl ? !exportReady || accountExportBusy : true,
+        data: exportControl ? "data-account-export" : "",
+      }),
+    });
   }
 
   function renderSession() {
@@ -1571,6 +1585,41 @@
       <div class="panel-actions device-actions">${link("integracoes", "", "text-link", `${tx("Ver autorizações de aplicativos")}${icon("arrow-right")}`)}${link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`)}</div>
     </section>${relatedAreas(["seguranca", "atividade"], "Proteção e histórico da conta")}`;
   }
+  async function downloadAccountData() {
+    if (!signedIn() || session.dataExportEnabled !== true || accountExportBusy) return;
+    const owner = session;
+    accountExportBusy = true;
+    accountExportNotice = "Preparando cópia privada dos seus dados.";
+    if (state.section === "privacidade") renderContent();
+    try {
+      const payload = await account.readPrivateDataExport();
+      if (session !== owner || !signedIn()) return;
+      const serialized = JSON.stringify(payload, null, 2) + "\n";
+      const file = new Blob([serialized], { type: "application/json;charset=utf-8" });
+      const address = URL.createObjectURL(file);
+      try {
+        const target = document.createElement("a");
+        target.href = address;
+        target.download = "ordax-conta-dados-" + payload.exported_at.slice(0, 10) + ".json";
+        target.hidden = true;
+        document.body.appendChild(target);
+        target.click();
+        target.remove();
+      } finally {
+        // Do not retain a sensitive export in app state or browser storage.
+        setTimeout(() => URL.revokeObjectURL(address), 20000);
+      }
+      accountExportNotice = "Arquivo preparado. Verifique o download no navegador e guarde-o com segurança.";
+    } catch {
+      if (session === owner && signedIn()) {
+        accountExportNotice = "Não foi possível gerar uma exportação confirmada. Tente novamente.";
+      }
+    } finally {
+      accountExportBusy = false;
+      if (state.section === "privacidade" && session === owner) renderContent();
+    }
+  }
+
   function privacy() {
     return `<section class="settings-section consent-settings" aria-labelledby="consent-heading">
       ${panelHeading(capabilityDefinitions.consents.title, { id: "consent-heading", iconName: "fingerprint", tone: "cyan" })}
@@ -1580,6 +1629,7 @@
     <section class="settings-section privacy-data" aria-labelledby="privacy-data-heading">
       ${panelHeading("Gerenciar meus dados", { id: "privacy-data-heading", iconName: "disk", tone: "cyan" })}<p class="panel-description">${tx("Solicite uma cópia dos dados ou gerencie a exclusão da conta.")}</p>
       <div class="data-operations">${["dataExport", "accountDeletion"].map(operationRow).join("")}</div>
+      ${accountExportNotice ? `<p id="account-export-status" role="status" aria-live="polite">${tx(accountExportNotice)}</p>` : ""}
     </section>${relatedAreas(["preferencias", "integracoes"], "Preferências e acesso aos dados")}`;
   }
   function preferences() {
@@ -1761,7 +1811,10 @@
       document.getElementById("conteudo").focus();
       return;
     }
-    if (control.matches("[data-profile-save]")) {
+    if (control.matches("[data-account-export]")) {
+      event.preventDefault();
+      if (!layoutPreview) void downloadAccountData();
+    } else if (control.matches("[data-profile-save]")) {
       event.preventDefault();
       if (!layoutPreview) void saveDisplayName();
     } else if (control.matches("[data-mcp-project-bind]")) {
@@ -1883,7 +1936,9 @@
   } else {
     account.subscribe(value => {
       const focused = document.activeElement?.id;
+      const previousSession = session;
       session = value;
+      if (previousSession !== session) accountExportNotice = "";
       if (session.status !== "authenticated") profileSaveNotice = "";
       if (subscriptionSession !== session) {
         subscriptionSession = session;
