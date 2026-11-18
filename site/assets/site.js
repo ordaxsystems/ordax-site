@@ -107,6 +107,7 @@
     // legal-policy readiness; never follow redirects or accept alias responses.
     if (!sameOriginPath(path, method)) throw new Error("api-path-invalid");
     if (method !== "GET" && (method !== "POST" || ![
+      "/account/profile/display-name",
       "/account/mcp/revoke",
       "/account/mcp/project-grants",
       "/account/mcp/central-selections",
@@ -466,6 +467,11 @@
 
   function validSessionReadiness(value) {
     return value
+      && (value.displayName === undefined || (typeof value.displayName === "string"
+        && value.displayName.length > 0 && [...value.displayName].length <= 120
+        && value.displayName === value.displayName.trim()
+        && !/[\u0000-\u001f\u007f]/.test(value.displayName)))
+      && (value.profileEditEnabled === undefined || typeof value.profileEditEnabled === "boolean")
       && value.$schema === "prototype-ordax.public-identity-session/1"
       && value.provider === "supabase"
       && (
@@ -481,8 +487,8 @@
   const sessionObservers = new Set();
   let sessionView = Object.freeze({ status: "checking", email: "" });
 
-  function publishSessionView(status, email = "") {
-    sessionView = Object.freeze({ status, email });
+  function publishSessionView(status, email = "", displayName = "", profileEditEnabled = false) {
+    sessionView = Object.freeze({ status, email, displayName, profileEditEnabled });
     for (const observer of sessionObservers) {
       // A presentation failure must not change the canonical identity result.
       try { observer(sessionView); } catch { console.error("public-account-view-failed"); }
@@ -510,7 +516,9 @@
         if (!validSessionReadiness(session)) throw new Error("invalid-identity-session");
         if (revision === sessionRevision) {
           publishSessionView(session.authenticated ? "authenticated" : "anonymous",
-            session.authenticated ? sessionEmail(session) : "");
+            session.authenticated ? sessionEmail(session) : "",
+            session.authenticated && typeof session.displayName === "string" ? session.displayName : "",
+            session.authenticated && session.profileEditEnabled === true);
         }
         return session;
       }).catch(error => {
@@ -679,6 +687,28 @@
     getSnapshot: () => sessionView,
     readSession: readPublicSession,
     refreshSession: refreshPublicSession,
+    // Existing subject-bound RLS Account table owns display_name. No browser
+    // user id, provider token or full profile update may pass this boundary.
+    async updateDisplayName(displayName, signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated" || owner.profileEditEnabled !== true)
+        throw new Error("account-profile-edit-unavailable");
+      if (typeof displayName !== "string" || displayName.length < 1
+          || [...displayName].length > 120 || displayName !== displayName.trim()
+          || /[\u0000-\u001f\u007f]/.test(displayName))
+        throw new Error("account-display-name-invalid");
+      const receipt = await loadJson("/account/profile/display-name", signal, {
+        maxBytes: 2048, method: "POST", jsonBody: { display_name: displayName },
+      });
+      if (!receipt || typeof receipt !== "object"
+          || Object.keys(receipt).sort().join(",") !== "displayName,schema,updated"
+          || receipt.schema !== "ordax.account-display-name-update/1"
+          || receipt.updated !== true || receipt.displayName !== displayName)
+        throw new Error("account-profile-update-unconfirmed");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return receipt;
+    },
     // The verified Account session authorizes read only. The owner backend
     // distinguishes a missing record from the Free plan; the browser cannot
     // choose a price, plan or entitlement.
