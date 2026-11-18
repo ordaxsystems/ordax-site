@@ -1433,11 +1433,20 @@
     return template.innerHTML;
   }
 
+  function authDateLabel(field, includeTime = false) {
+    const value = signedIn() && typeof session[field] === "string" ? session[field] : "";
+    if (!value || !Number.isFinite(Date.parse(value))) return tx("Não disponível");
+    const format = includeTime
+      ? { dateStyle: "medium", timeStyle: "short" }
+      : { dateStyle: "medium" };
+    return esc(new Intl.DateTimeFormat(i18n.getLocale(), format).format(new Date(value)));
+  }
+
   function overview() {
     const quickLinks = ["preferencias", "privacidade", "integracoes", "atividade"];
     return `<header class="account-intro"><div><h1 tabindex="-1">${tx("Minha Conta")}</h1><p>${tx("Seu perfil, seus serviços e suas escolhas.")}</p></div>${link("dados-pessoais", "", "button outline", `${icon("user")}${tx("Dados pessoais")}`)}</header>
       <section class="identity-card" aria-labelledby="overview-profile-title">
-        <div class="identity-content"><span class="eyebrow">${tx("SEU PERFIL ORDAX")}</span><div class="identity-person"><span class="identity-avatar">${icon("user")}</span><div><h2 id="overview-profile-title">${signedIn() && session.displayName ? esc(session.displayName) : tx("Sua conta OrdaX")}</h2><p class="verified-email"${signedIn() && session.email ? ' translate="no"' : ""}>${signedIn() && session.email ? esc(session.email) : tx("E-mail não disponível")}</p></div></div><div class="identity-bottom"><dl><div><dt>${tx("Tipo de conta")}</dt><dd>${tx("Não disponível")}</dd></div><div><dt>${tx("Membro desde")}</dt><dd>${tx("Não disponível")}</dd></div></dl>${link("dados-pessoais", "", "text-link", `${tx("Ver perfil")}${icon("arrow-right")}`)}</div></div>
+        <div class="identity-content"><span class="eyebrow">${tx("SEU PERFIL ORDAX")}</span><div class="identity-person"><span class="identity-avatar">${icon("user")}</span><div><h2 id="overview-profile-title">${signedIn() && session.displayName ? esc(session.displayName) : tx("Sua conta OrdaX")}</h2><p class="verified-email"${signedIn() && session.email ? ' translate="no"' : ""}>${signedIn() && session.email ? esc(session.email) : tx("E-mail não disponível")}</p></div></div><div class="identity-bottom"><dl><div><dt>${tx("Tipo de conta")}</dt><dd>${tx("Não disponível")}</dd></div><div><dt>${tx("Membro desde")}</dt><dd>${authDateLabel("registeredAt")}</dd></div></dl>${link("dados-pessoais", "", "text-link", `${tx("Ver perfil")}${icon("arrow-right")}`)}</div></div>
         <div class="identity-art" aria-hidden="true"><img src="${LANDSCAPE}" width="1920" height="640" alt=""><span>${tx("Uma conta.")}<br>${tx("Todos os seus mundos.")}</span></div>
       </section>
       <div class="account-overview-grid"><div class="overview-primary">
@@ -1568,7 +1577,7 @@
         return settingRow({ ...row, title: row.viewTitle || row.title, hint: "", status: capabilityBadge(id), control: action(row.action, null, { describedBy: "protection-status-note" }) });
       }).join("")}
     </section>
-    <section class="settings-section security-history" aria-labelledby="security-history-heading">${panelHeading("Histórico de acesso", { id: "security-history-heading", iconName: "history", tone: "cyan", end: link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`) })}${empty("Histórico de segurança não disponível", "Os eventos de acesso serão consultados pelo serviço de identidade OrdaX.", "history", true)}</section>
+    <section class="settings-section security-history" aria-labelledby="security-history-heading">${panelHeading("Histórico de acesso", { id: "security-history-heading", iconName: "history", tone: "cyan", end: link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`) })}<p class="panel-description"><strong>${tx("Último login registrado")}:</strong> ${signedIn() && session.lastSignInAt ? `<time datetime="${esc(session.lastSignInAt)}">${authDateLabel("lastSignInAt", true)}</time>` : tx("Não disponível")}</p>${empty("Histórico de segurança não disponível", "Os eventos de acesso serão consultados pelo serviço de identidade OrdaX.", "history", true)}</section>
     ${relatedAreas(["dispositivos", "privacidade"], "Acesso e privacidade")}`;
   }
   function devices() {
