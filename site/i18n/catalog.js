@@ -1102,6 +1102,7 @@
     ["ficam disponíveis aqui.", "will be available here."],
     ["Ver perfil", "View profile"],
     ["Membro desde", "Member since"],
+    ["Último login registrado", "Last recorded sign-in"],
     ["Aguardando conexão", "Awaiting connection"],
     ["Status da conta", "Account status"],
     ["Não conectada", "Not connected"],
