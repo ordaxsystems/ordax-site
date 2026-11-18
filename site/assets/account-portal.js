@@ -172,7 +172,7 @@
     { id: "dispositivos", navigationGroup: "security", sessionDependent: true, title: "Meus dispositivos", icon: "devices", description: "Dispositivos e sessões vinculados à sua conta.", owner: "Sessões e dispositivos OrdaX", capabilities: ["deviceSessions", "osDevices", "remoteSignOut"] },
     { id: "privacidade", navigationGroup: "security", title: "Dados e privacidade", icon: "fingerprint", description: "Seus dados, suas escolhas. Você está no controle.", owner: "Privacidade OrdaX", capabilities: ["dataExport", "consents", "accountDeletion"] },
     { id: "integracoes", navigationGroup: "preferences", title: "Integrações", icon: "globe", description: "Contas conectadas e autorizações de aplicativos.", owner: "Integrações OrdaX", capabilities: ["connections", "connectionRevocation"] },
-    { id: "preferencias", navigationGroup: "preferences", title: "Preferências", icon: "sliders", description: "Personalize a experiência da sua conta.", owner: "Preferências OrdaX", capabilities: ["portalLocale", "portalAppearance", "communications"] },
+    { id: "preferencias", navigationGroup: "preferences", sessionDependent: true, title: "Preferências", icon: "sliders", description: "Personalize a experiência da sua conta.", owner: "Preferências OrdaX", capabilities: ["portalLocale", "portalAppearance", "communications"] },
     { id: "atividade", navigationGroup: "preferences", title: "Atividade da conta", icon: "history", description: "Histórico de acesso e alterações importantes.", owner: "Auditoria da conta OrdaX", capabilities: ["accessEvents", "accountChanges", "activityPeriod"] },
     { id: "suporte", mobileOverflow: true, title: "Central de ajuda", icon: "help", description: "Encontre respostas e cuide da sua experiência OrdaX.", capabilities: ["supportChannel"] }
   ]);
@@ -239,6 +239,10 @@
   let localeFromAccountApplied = false;
   let accountExportBusy = false;
   let accountExportNotice = "";
+  let communicationsDraft = null;
+  let communicationsDraftSession = null;
+  let communicationsSaveBusy = false;
+  let communicationsNotice = "";
   let disposeMenu = () => {};
   // Observational data only. Never an entitlement, quota or invoice.
   let subscriptionView = null;
@@ -1674,6 +1678,40 @@
     }
   }
 
+  function currentCommunicationChoices() {
+    if (communicationsDraftSession === session && communicationsDraft) return communicationsDraft;
+    const stored = signedIn() ? session.optionalCommunications : null;
+    return stored && typeof stored.productDigest === "boolean" && typeof stored.news === "boolean"
+      ? stored : { productDigest: false, news: false };
+  }
+
+  async function saveOptionalCommunications() {
+    if (!signedIn() || session.communicationsPreferenceEditEnabled !== true || communicationsSaveBusy) return;
+    const owner = session;
+    const draft = currentCommunicationChoices();
+    const choices = { productDigest: draft.productDigest, news: draft.news };
+    if (typeof choices.productDigest !== "boolean" || typeof choices.news !== "boolean") return;
+    communicationsSaveBusy = true;
+    communicationsNotice = "Registrando preferências opcionais.";
+    if (state.section === "preferencias") renderContent();
+    try {
+      await account.updateOptionalCommunications(choices);
+      if (session !== owner || !signedIn()) return;
+      await account.refreshSession();
+      if (!signedIn()
+          || session.optionalCommunications?.productDigest !== choices.productDigest
+          || session.optionalCommunications?.news !== choices.news)
+        throw new Error("communications-readback-unconfirmed");
+      communicationsNotice = "Preferências registradas. O serviço de envio ainda não está disponível.";
+    } catch {
+      if (session === owner && signedIn())
+        communicationsNotice = "Não foi possível confirmar as preferências. Tente novamente.";
+    } finally {
+      communicationsSaveBusy = false;
+      if (state.section === "preferencias") renderContent();
+    }
+  }
+
   function preferences() {
     const locales = window.OrdaXPublicI18nCatalog?.supportedLocales ?? [];
     const material = document.body.dataset.material === "ink" ? "Escuro" : "Claro";
@@ -1689,7 +1727,43 @@
           <div class="panel-actions"><span id="account-locale-status" role="status" aria-live="polite">${tx(localeHint)}</span>${action("Salvar idioma na conta", null, { disabled: !localeCanSave || localeSaveBusy || localeVerified, data: "data-account-save-locale", describedBy: "account-locale-status" })}</div></article>
         <article class="preference-panel"><div class="preference-heading"><h3>${tx("Aparência")}</h3>${capabilityBadge("portalAppearance")}</div><p class="preference-description">${tx("Esta é a aparência atual deste portal.")}</p><div class="appearance-option"><div class="appearance-preview" aria-hidden="true"><span class="appearance-preview-bar"></span><span class="appearance-preview-rail"></span><span class="appearance-preview-content"><i></i><i></i><i></i></span></div><div class="appearance-current"><span>${tx("Visual atual")}</span><strong>${tx(material)}</strong></div></div></article></div>
     </section>
-    <section class="settings-section communication-settings" aria-labelledby="communications-heading">${panelHeading("Notificações e comunicações", { id: "communications-heading", iconName: "bell", tone: "cyan" })}<p class="panel-description">${tx("Preferências da conta estarão disponíveis quando o serviço oficial estiver conectado.")}</p>${communicationOptions.map(option => settingRow({ ...option, status: capabilityBadge("communications") })).join("")}<div class="panel-actions communication-actions">${link("privacidade", "", "text-link", `${tx(byId.get("privacidade").title)}${icon("arrow-right")}`)}</div></section>
+    <section class="settings-section communication-settings" aria-labelledby="communications-heading">
+      ${panelHeading("Notificações e comunicações", { id: "communications-heading", iconName: "bell", tone: "cyan" })}
+      <p class="panel-description">${tx("Você pode registrar preferências opcionais. Nenhum envio é ativado por esta escolha.")}</p>
+      ${settingRow({ ...communicationOptions[0],
+        description: "Alertas essenciais pertencem ao serviço de identidade e não podem ser desativados aqui.",
+        status: capabilityBadge("communications") })}
+      ${[
+        { id:"productDigest", option:communicationOptions[1],
+          description:"Resumos opcionais de produtos e consumo, quando o canal oficial estiver disponível." },
+        { id:"news", option:communicationOptions[2],
+          description:"Novidades opcionais do ecossistema, quando o serviço de envio estiver disponível." },
+      ].map(item => settingRow({ ...item.option, description:item.description,
+        status: signedIn() && session.optionalCommunications
+          ? `<span class="status-tag is-verified">${tx("Preferência registrada")}</span>`
+          : capabilityBadge("communications"),
+        control: `<label class="communication-choice"><span class="sr-only">${tx(item.option.title)}</span>
+          <input type="checkbox" data-communication-choice="${item.id}"
+            ${currentCommunicationChoices()[item.id] ? "checked" : ""}
+            ${signedIn() && session.communicationsPreferenceEditEnabled === true && !communicationsSaveBusy ? "" : "disabled"}
+            aria-describedby="communications-status"></label>`,
+      })).join("")}
+      <div class="panel-actions communication-actions">
+        <span id="communications-status" role="status" aria-live="polite">${tx(communicationsNotice ||
+          (signedIn() && session.optionalCommunications
+            ? "Escolhas registradas na Conta. Entrega de mensagens ainda indisponível."
+            : "Nenhuma preferência opcional confirmada. Envio ainda indisponível."))}</span>
+        ${action("Salvar preferências de comunicação", null, {
+          disabled: !signedIn() || session.communicationsPreferenceEditEnabled !== true || communicationsSaveBusy ||
+            (session.optionalCommunications !== null
+              && session.optionalCommunications !== undefined
+              && currentCommunicationChoices().productDigest === session.optionalCommunications.productDigest
+              && currentCommunicationChoices().news === session.optionalCommunications.news),
+          data: "data-save-communications", describedBy:"communications-status",
+        })}
+        ${link("privacidade", "", "text-link", `${tx(byId.get("privacidade").title)}${icon("arrow-right")}`)}
+      </div>
+    </section>
     ${relatedAreas(["dados-pessoais", "suporte"], "Perfil e ajuda")}`;
   }
   function integrations() {
@@ -1860,7 +1934,10 @@
       document.getElementById("conteudo").focus();
       return;
     }
-    if (control.matches("[data-account-save-locale]")) {
+    if (control.matches("[data-save-communications]")) {
+      event.preventDefault();
+      if (!layoutPreview) void saveOptionalCommunications();
+    } else if (control.matches("[data-account-save-locale]")) {
       event.preventDefault();
       if (!layoutPreview) void saveAccountLocale();
     } else if (control.matches("[data-account-export]")) {
@@ -1952,6 +2029,16 @@
     else if (event.target.id === "account-locale") {
       localeSaveNotice = "";
       i18n.setLocale(event.target.value);
+    } else if (event.target.matches?.("[data-communication-choice]")) {
+      const key = event.target.dataset.communicationChoice;
+      if ((key === "productDigest" || key === "news") && signedIn()
+          && session.communicationsPreferenceEditEnabled === true && !communicationsSaveBusy) {
+        communicationsDraft = { ...currentCommunicationChoices(), [key]: event.target.checked === true };
+        communicationsDraftSession = session;
+        communicationsNotice = "";
+        renderContent();
+        document.querySelector(`[data-communication-choice="${key}"]`)?.focus({ preventScroll: true });
+      }
     }
   });
   document.addEventListener("keydown", event => {
@@ -1993,6 +2080,11 @@
       const focused = document.activeElement?.id;
       const previousSession = session;
       session = value;
+      if (previousSession !== session) {
+        communicationsDraft = null;
+        communicationsDraftSession = null;
+        communicationsNotice = "";
+      }
       if (session.status !== "authenticated") {
         localeFromAccountApplied = false;
       } else if (!localeFromAccountApplied) {
