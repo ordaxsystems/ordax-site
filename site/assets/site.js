@@ -472,6 +472,7 @@
         && value.displayName === value.displayName.trim()
         && !/[\u0000-\u001f\u007f]/.test(value.displayName)))
       && (value.profileEditEnabled === undefined || typeof value.profileEditEnabled === "boolean")
+      && (value.dataExportEnabled === undefined || typeof value.dataExportEnabled === "boolean")
       && value.$schema === "prototype-ordax.public-identity-session/1"
       && value.provider === "supabase"
       && (
@@ -487,8 +488,8 @@
   const sessionObservers = new Set();
   let sessionView = Object.freeze({ status: "checking", email: "" });
 
-  function publishSessionView(status, email = "", displayName = "", profileEditEnabled = false) {
-    sessionView = Object.freeze({ status, email, displayName, profileEditEnabled });
+  function publishSessionView(status, email = "", displayName = "", profileEditEnabled = false, dataExportEnabled = false) {
+    sessionView = Object.freeze({ status, email, displayName, profileEditEnabled, dataExportEnabled });
     for (const observer of sessionObservers) {
       // A presentation failure must not change the canonical identity result.
       try { observer(sessionView); } catch { console.error("public-account-view-failed"); }
@@ -518,7 +519,8 @@
           publishSessionView(session.authenticated ? "authenticated" : "anonymous",
             session.authenticated ? sessionEmail(session) : "",
             session.authenticated && typeof session.displayName === "string" ? session.displayName : "",
-            session.authenticated && session.profileEditEnabled === true);
+            session.authenticated && session.profileEditEnabled === true,
+            session.authenticated && session.dataExportEnabled === true);
         }
         return session;
       }).catch(error => {
@@ -743,6 +745,35 @@
       if (owner !== sessionView || sessionView.status !== "authenticated")
         throw new Error("public-account-session-changed");
       return Object.freeze(value);
+    },
+    // An explicit user action exports only the server-owned, own-subject
+    // privacy projection. Never persist the sensitive result in page state.
+    async readPrivateDataExport(signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated" || owner.dataExportEnabled !== true)
+        throw new Error("account-export-not-authorized");
+      const value = await loadJson("/account/export", signal, { maxBytes: 4 * 1024 * 1024 });
+      const keys = ["$schema","subject","exported_at","account","spaces",
+        "memberships","space_profile_packs","entitlements","projects","devices",
+        "project_connections","memory_items","sync_objects"];
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!value || typeof value !== "object" || Array.isArray(value)
+          || Object.keys(value).sort().join(",") !== keys.sort().join(",")
+          || value.$schema !== "prototype-ordax.account-export/1"
+          || typeof value.subject !== "string" || !uuid.test(value.subject)
+          || typeof value.exported_at !== "string"
+          || !Number.isFinite(Date.parse(value.exported_at))
+          || !value.account || typeof value.account !== "object"
+          || Array.isArray(value.account)
+          || (Object.keys(value.account).length !== 0
+            && value.account.user_id !== value.subject)
+          || !["spaces","memberships","space_profile_packs","entitlements",
+            "projects","devices","project_connections","memory_items","sync_objects"]
+            .every(key => Array.isArray(value[key])))
+        throw new Error("account-export-contract-invalid");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return value;
     },
     // Read-only account data uses the same bounded same-origin transport.
     // Authorization remains entirely server-side; no client-side quota claim.
