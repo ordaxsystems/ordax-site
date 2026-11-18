@@ -1024,7 +1024,7 @@
     const exportControl = id === "dataExport";
     return settingRow({ ...definition, id, title: definition.viewTitle || definition.title,
       status: capabilityBadge(id),
-      hint: exportReady ? "O arquivo inclui dados pessoais e deve ser guardado com segurança." : definition.hint,
+      hint: exportReady ? "A cópia contém dados pessoais. O transporte admite até 2 MiB; arquivos maiores exigem outra forma de exportação." : definition.hint,
       control: action(definition.action, null, {
         variant: definition.destructive ? "destructive" : "outline",
         describedBy: `${id}-hint`,
