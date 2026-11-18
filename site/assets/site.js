@@ -765,7 +765,7 @@
       const owner = sessionView;
       if (owner.status !== "authenticated" || owner.dataExportEnabled !== true)
         throw new Error("account-export-not-authorized");
-      const value = await loadJson("/account/export", signal, { maxBytes: 4 * 1024 * 1024 });
+      // The canonical Public Edge limits upstream responses to 2 MiB. Never\n      // advertise a larger client budget: an oversized archive is rejected,\n      // not truncated or mistaken for an empty export.\n      const value = await loadJson("/account/export", signal, { maxBytes: 2 * 1024 * 1024 });
       const keys = ["$schema","subject","exported_at","account","spaces",
         "memberships","space_profile_packs","entitlements","projects","devices",
         "project_connections","memory_items","sync_objects"];
