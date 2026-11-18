@@ -109,6 +109,7 @@
     if (method !== "GET" && (method !== "POST" || ![
       "/account/profile/display-name",
       "/account/preferences/locale",
+      "/account/preferences/communications",
       "/account/mcp/revoke",
       "/account/mcp/project-grants",
       "/account/mcp/central-selections",
@@ -483,6 +484,15 @@
       && (value.dataExportEnabled === undefined || typeof value.dataExportEnabled === "boolean")
       && (value.localePreferenceEditEnabled === undefined || typeof value.localePreferenceEditEnabled === "boolean")
       && (value.preferredLocale === undefined || value.preferredLocale === "pt-BR" || value.preferredLocale === "en-US")
+      && (value.communicationsPreferenceEditEnabled === undefined
+        || typeof value.communicationsPreferenceEditEnabled === "boolean")
+      && (value.optionalCommunications === undefined || (
+        value.optionalCommunications && typeof value.optionalCommunications === "object"
+        && !Array.isArray(value.optionalCommunications)
+        && Object.keys(value.optionalCommunications).sort().join(",") === "news,productDigest"
+        && typeof value.optionalCommunications.news === "boolean"
+        && typeof value.optionalCommunications.productDigest === "boolean"
+      ))
       && (value.registeredAt === undefined || validAuthSessionDate(value.registeredAt))
       && (value.lastSignInAt === undefined || validAuthSessionDate(value.lastSignInAt))
       && value.$schema === "prototype-ordax.public-identity-session/1"
@@ -502,10 +512,12 @@
 
   function publishSessionView(status, email = "", displayName = "", profileEditEnabled = false,
     dataExportEnabled = false, registeredAt = "", lastSignInAt = "",
-    preferredLocale = "", localePreferenceEditEnabled = false) {
+    preferredLocale = "", localePreferenceEditEnabled = false,
+    optionalCommunications = null, communicationsPreferenceEditEnabled = false) {
     sessionView = Object.freeze({ status, email, displayName, profileEditEnabled,
       dataExportEnabled, registeredAt, lastSignInAt, preferredLocale,
-      localePreferenceEditEnabled });
+      localePreferenceEditEnabled, optionalCommunications,
+      communicationsPreferenceEditEnabled });
     for (const observer of sessionObservers) {
       // A presentation failure must not change the canonical identity result.
       try { observer(sessionView); } catch { console.error("public-account-view-failed"); }
@@ -540,7 +552,13 @@
             session.authenticated && typeof session.registeredAt === "string" ? session.registeredAt : "",
             session.authenticated && typeof session.lastSignInAt === "string" ? session.lastSignInAt : "",
             session.authenticated && typeof session.preferredLocale === "string" ? session.preferredLocale : "",
-            session.authenticated && session.localePreferenceEditEnabled === true);
+            session.authenticated && session.localePreferenceEditEnabled === true,
+            session.authenticated && session.optionalCommunications
+              ? Object.freeze({
+                productDigest: session.optionalCommunications.productDigest,
+                news: session.optionalCommunications.news,
+              }) : null,
+            session.authenticated && session.communicationsPreferenceEditEnabled === true);
         }
         return session;
       }).catch(error => {
@@ -747,6 +765,31 @@
           || receipt.schema !== "ordax.account-preferred-locale-update/1"
           || receipt.updated !== true || receipt.preferredLocale !== locale)
         throw new Error("account-locale-update-unconfirmed");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return receipt;
+    },
+    // Explicit choices only. This is not consent to send messages or a mail
+    // service; the backend records optional preferences in the own Account row.
+    async updateOptionalCommunications(choices, signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated" || owner.communicationsPreferenceEditEnabled !== true)
+        throw new Error("account-communications-edit-unavailable");
+      if (!choices || typeof choices !== "object" || Array.isArray(choices)
+          || Object.keys(choices).sort().join(",") !== "news,productDigest"
+          || typeof choices.productDigest !== "boolean" || typeof choices.news !== "boolean")
+        throw new Error("account-communications-invalid");
+      const receipt = await loadJson("/account/preferences/communications", signal, {
+        maxBytes: 2048, method: "POST",
+        jsonBody: { product_digest: choices.productDigest, news: choices.news },
+      });
+      if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)
+          || Object.keys(receipt).sort().join(",") !== "news,productDigest,schema,updated"
+          || receipt.schema !== "ordax.account-optional-communications-update/1"
+          || receipt.updated !== true
+          || receipt.productDigest !== choices.productDigest
+          || receipt.news !== choices.news)
+        throw new Error("account-communications-update-unconfirmed");
       if (owner !== sessionView || sessionView.status !== "authenticated")
         throw new Error("public-account-session-changed");
       return receipt;

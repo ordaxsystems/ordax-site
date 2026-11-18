@@ -53,6 +53,7 @@ jobs:
           node --test tests/test_account_private_export.mjs
           node --test tests/test_account_auth_dates.mjs
           node --test tests/test_account_locale_sync.mjs
+          node --test tests/test_account_optional_communications.mjs
       - name: Verify live legal-document integrity contracts
         run: node tests/test_legal_documents.mjs
       - name: Fail-closed architecture and catalog tests
