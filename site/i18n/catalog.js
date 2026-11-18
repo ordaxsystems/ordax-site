@@ -931,7 +931,7 @@
     ["O arquivo inclui dados pessoais e deve ser guardado com segurança.", "This file contains personal data and must be stored securely."],
     ["Preparando cópia privada dos seus dados.", "Preparing a private copy of your data."],
     ["Arquivo preparado. Verifique o download no navegador e guarde-o com segurança.", "File prepared. Check your browser downloads and store it securely."],
-    ["ordax-conta-dados-", "ordax-conta-dados-"],
+    ["ordax-conta-dados-", "ordax-account-data-"],
     ["Não foi possível gerar uma exportação confirmada. Tente novamente.", "The verified export could not be generated. Try again."],
     ["Informe um nome válido de até 120 caracteres.", "Enter a valid name of up to 120 characters."],
     ["Salvando nome de exibição", "Saving display name"],
