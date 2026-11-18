@@ -1600,7 +1600,7 @@
       try {
         const target = document.createElement("a");
         target.href = address;
-        target.download = "ordax-conta-dados-" + payload.exported_at.slice(0, 10) + ".json";
+        target.download = i18n.fromSource("ordax-conta-dados-") + payload.exported_at.slice(0, 10) + ".json";
         target.hidden = true;
         document.body.appendChild(target);
         target.click();
