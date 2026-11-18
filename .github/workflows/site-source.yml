@@ -50,6 +50,7 @@ jobs:
           node --test tests/test_demo_input_policy.mjs
           node --test tests/test_account_subscription_read.mjs
           node --test tests/test_account_display_name_read_write.mjs
+          node --test tests/test_account_private_export.mjs
       - name: Verify live legal-document integrity contracts
         run: node tests/test_legal_documents.mjs
       - name: Fail-closed architecture and catalog tests
