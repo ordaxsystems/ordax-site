@@ -465,6 +465,13 @@
     }
   }
 
+  function validAuthSessionDate(value) {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) && ms > 0
+      && ms <= Date.now() + 300000 && new Date(ms).toISOString() === value;
+  }
+
   function validSessionReadiness(value) {
     return value
       && (value.displayName === undefined || (typeof value.displayName === "string"
@@ -473,6 +480,8 @@
         && !/[\u0000-\u001f\u007f]/.test(value.displayName)))
       && (value.profileEditEnabled === undefined || typeof value.profileEditEnabled === "boolean")
       && (value.dataExportEnabled === undefined || typeof value.dataExportEnabled === "boolean")
+      && (value.registeredAt === undefined || validAuthSessionDate(value.registeredAt))
+      && (value.lastSignInAt === undefined || validAuthSessionDate(value.lastSignInAt))
       && value.$schema === "prototype-ordax.public-identity-session/1"
       && value.provider === "supabase"
       && (
@@ -488,8 +497,10 @@
   const sessionObservers = new Set();
   let sessionView = Object.freeze({ status: "checking", email: "" });
 
-  function publishSessionView(status, email = "", displayName = "", profileEditEnabled = false, dataExportEnabled = false) {
-    sessionView = Object.freeze({ status, email, displayName, profileEditEnabled, dataExportEnabled });
+  function publishSessionView(status, email = "", displayName = "", profileEditEnabled = false,
+    dataExportEnabled = false, registeredAt = "", lastSignInAt = "") {
+    sessionView = Object.freeze({ status, email, displayName, profileEditEnabled,
+      dataExportEnabled, registeredAt, lastSignInAt });
     for (const observer of sessionObservers) {
       // A presentation failure must not change the canonical identity result.
       try { observer(sessionView); } catch { console.error("public-account-view-failed"); }
@@ -520,7 +531,9 @@
             session.authenticated ? sessionEmail(session) : "",
             session.authenticated && typeof session.displayName === "string" ? session.displayName : "",
             session.authenticated && session.profileEditEnabled === true,
-            session.authenticated && session.dataExportEnabled === true);
+            session.authenticated && session.dataExportEnabled === true,
+            session.authenticated && typeof session.registeredAt === "string" ? session.registeredAt : "",
+            session.authenticated && typeof session.lastSignInAt === "string" ? session.lastSignInAt : "");
         }
         return session;
       }).catch(error => {
