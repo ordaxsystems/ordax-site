@@ -929,6 +929,7 @@
     ["Conheça a estrutura de planos OrdaX.","Explore the OrdaX plan structure."],
     ["Assinaturas pagas ainda não estão disponíveis.","Paid subscriptions are not yet available."],
     ["O arquivo inclui dados pessoais e deve ser guardado com segurança.", "This file contains personal data and must be stored securely."],
+    ["A cópia contém dados pessoais. O transporte admite até 2 MiB; arquivos maiores exigem outra forma de exportação.", "This copy contains personal data. Transport supports up to 2 MiB; larger exports require another delivery method."],
     ["Preparando cópia privada dos seus dados.", "Preparing a private copy of your data."],
     ["Arquivo preparado. Verifique o download no navegador e guarde-o com segurança.", "File prepared. Check your browser downloads and store it securely."],
     ["ordax-conta-dados-", "ordax-account-data-"],
