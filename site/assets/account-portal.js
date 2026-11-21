@@ -349,7 +349,8 @@
   async function startMcpGithubAuthorization(control) {
     if (mcpGithubConnecting || mcpGithubSelecting || mcpProjectCreating || mcpProjectBinding
         || mcpProjectGrantCreating
-        || !signedIn() || mcpProjectStatus !== "ready" || !mcpProjectOnboarding) return;
+        || !signedIn() || mcpProjectStatus !== "ready" || !mcpProjectOnboarding
+        || mcpProjectOnboarding.onboarding_availability?.github_authorization_configured !== true) return;
     const projectId = control.dataset.mcpGithubConnect;
     const project = mcpProjectOnboarding.projects.find(item => item.project_id === projectId);
     if (!project || !["needs_github_installation","needs_repository_selection"].includes(project.next_state))
@@ -376,7 +377,8 @@
   async function selectMcpGithubRepository(form) {
     if (mcpGithubSelecting || mcpGithubConnecting || mcpProjectBinding || mcpProjectGrantCreating
         || !signedIn()
-        || mcpGithubStatus !== "ready" || !mcpGithubCandidates || !mcpGithubChallenge)
+        || mcpGithubStatus !== "ready" || !mcpGithubCandidates || !mcpGithubChallenge
+        || mcpProjectOnboarding?.onboarding_availability?.github_authorization_configured !== true)
       return;
     const repositoryId = String(new FormData(form).get("repository_id") ?? "");
     const candidate = mcpGithubCandidates.repositories.find(
@@ -661,7 +663,8 @@
     if (mcpProjectBinding || mcpProjectCreating || mcpProjectGrantCreating
         || mcpGithubConnecting || mcpGithubSelecting
         || !signedIn() || mcpProjectStatus !== "ready" || !mcpProjectOnboarding
-        || !mcpProjectDevice || mcpProjectDevice !== mcpAuthorityDevice) return;
+        || !mcpProjectDevice || mcpProjectDevice !== mcpAuthorityDevice
+        || mcpProjectOnboarding.onboarding_availability?.project_device_binding_enabled !== true) return;
     const projectId = control.dataset.mcpProjectBind;
     const project = mcpProjectOnboarding.projects.find(item => item.project_id === projectId);
     if (!project || project.next_state !== "needs_device_binding"
@@ -1176,6 +1179,8 @@
     }
 
     const value = mcpProjectOnboarding;
+    const githubConfigured = value.onboarding_availability.github_authorization_configured === true;
+    const bindingEnabled = value.onboarding_availability.project_device_binding_enabled === true;
     const stateLabels = {
       needs_github_installation:"GitHub ainda não conectado",
       needs_repository_selection:"Repositório ainda não selecionado",
@@ -1190,7 +1195,7 @@
       const githubControl = canAuthorize
         ? `<button type="button" class="button outline h-8"
             data-mcp-github-connect="${esc(project.project_id)}"
-            ${mcpGithubConnecting || mcpGithubSelecting || mcpProjectCreating || mcpProjectBinding || mcpProjectGrantCreating ? "disabled" : ""}>
+            ${!githubConfigured || mcpGithubConnecting || mcpGithubSelecting || mcpProjectCreating || mcpProjectBinding || mcpProjectGrantCreating ? "disabled" : ""}>
             ${icon("globe")}${tx(project.next_state === "needs_repository_selection"
               ? "Verificar GitHub novamente" : "Conectar GitHub")}</button>`
         : "";
@@ -1202,7 +1207,7 @@
         ? `<button type="button" class="button outline h-8"
             data-mcp-project-bind="${esc(project.project_id)}"
             ${mcpProjectBinding || mcpProjectCreating || mcpProjectGrantCreating
-              || mcpGithubConnecting || mcpGithubSelecting || pendingBinding ? "disabled" : ""}>
+              || mcpGithubConnecting || mcpGithubSelecting || pendingBinding || !bindingEnabled ? "disabled" : ""}>
             ${icon("devices")}${tx(pendingBinding ? "Aguardando Runtime" : "Vincular a este dispositivo")}</button>`
         : "";
       const activeProjectGrants = mcpAuthorityStatus === "ready" && mcpAuthority
@@ -1286,10 +1291,16 @@
         <button type="submit" class="button outline h-8"${mcpProjectCreating || mcpProjectBinding || mcpProjectGrantCreating ? " disabled" : ""}>${tx(mcpProjectCreating ? "Criando projeto" : "Criar projeto")}</button>
       </div>
     </form>` : `<p class="device-revoke-note">${icon("info")}${tx("Nenhum Space administrável foi confirmado. Crie ou recupere um Space antes de criar um projeto.")}</p>`;
+    const setupNotices = [
+      !githubConfigured
+        ? `<p class="device-revoke-note" role="status">${icon("info")}${tx("A conexão GitHub ainda não está disponível.")}</p>` : "",
+      !bindingEnabled
+        ? `<p class="device-revoke-note" role="status">${icon("info")}${tx("O vínculo de projetos ainda não está disponível na Platform.")}</p>` : "",
+    ].join("");
     return `<section class="settings-section" aria-labelledby="mcp-projects-heading">
       <h3 id="mcp-projects-heading">${tx("Projetos MCP")} · ${esc(device.name)}</h3>
       <p class="panel-description">${tx("O estado abaixo vem da Platform. Um projeto sem GitHub verificado não autoriza execução remota.")}</p>
-      ${table}${form}${notice}</section>`;
+      ${table}${form}${setupNotices}${notice}</section>`;
   }
 
   function mcpGithubPanel() {
