@@ -911,7 +911,8 @@
     },
     async createMcpProjectGrant(input, signal) {
       const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-      const profiles = new Set(["project-native-terminal", "project-native-process"]);
+      // Exact Product Owner profile keys; project scope, grant and client consent remain server-authoritative.
+      const profiles = new Set(["project-native-terminal", "project-native-process", "project-blender-control"]);
       const owner = sessionView;
       if (owner.status !== "authenticated") throw new Error("public-account-session-required");
       if (!input || Object.keys(input).sort().join(",")

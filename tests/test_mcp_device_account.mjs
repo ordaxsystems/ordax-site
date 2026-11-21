@@ -543,7 +543,7 @@ test("Account grant inspection is scoped to one UUID, rejects forgery and duplic
     "absent rollout scope is never inferred as Project authority");
 });
 
-test("Project grant browser port accepts only exact Process/Terminal scope and sanitizes response", async () => {
+test("Project grant browser port accepts exact Terminal/Process/Blender scope and sanitizes response", async () => {
   const expiry=new Date(Date.now()+60*60*1000).toISOString();
   const input={device_id:first.device_id,client_id:client,space_id:space,project_id:project,
     profile_key:"project-native-terminal",valid_until:expiry,confirm:"authorize_project"};
@@ -569,6 +569,21 @@ test("Project grant browser port accepts only exact Process/Terminal scope and s
   const unbounded={...input,profile_key:"project-native-process",valid_until:null};
   const processReply={...upstream,profile_key:"project-native-process",valid_until:null};
   assert.equal((await ownerHarness({status:"authenticated"},async()=>processReply).grant(unbounded)).valid_until,null);
+
+  // The same scoped Owner endpoint already supports the canonical Blender profile.
+  // Do not mint capabilities, local paths or consent in the browser response.
+  const blenderInput={...input,profile_key:"project-blender-control"};
+  const blenderReply={...upstream,profile_key:"project-blender-control",
+    capabilities:["blender.live_rig_create"],local_project_ref:"should-not-leak"};
+  const blender=await ownerHarness({status:"authenticated"},async()=>blenderReply).grant(blenderInput);
+  assert.equal(blender.profile_key,"project-blender-control");
+  assert.equal(blender.device_id,blenderInput.device_id);
+  assert.equal(blender.space_id,blenderInput.space_id);
+  assert.equal(blender.project_id,blenderInput.project_id);
+  assert.equal("capabilities" in blender,false);
+  assert.equal("local_project_ref" in blender,false);
+  await assert.rejects(ownerHarness({status:"authenticated"},async()=>({...blenderReply,
+    profile_key:"project-native-terminal"})).grant(blenderInput),/project-grant-unconfirmed/);
 
   for(const extra of [
     {local_project_ref:"project-1"},{path:"C:/repo"},{capabilities:["terminal.exec"]},
@@ -737,6 +752,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
     'const document={getElementById:()=>({focus:()=>{}})};',
     'const dialog={open:false,close:()=>{}};',
     'const closeMore=()=>{},renderNavigation=()=>{},renderContent=()=>{};',
+    'const subscriptionStatus="ready",loadSubscription=()=>{};',
     'let mcpRevoking=revoking,mcpCentralSelecting=selecting,mcpProjectCreating=creating,mcpProjectBinding=binding,mcpProjectGrantCreating=granting,mcpProjectGrantRevision=9,mcpDevicesRevision=3,mcpAuthorityRevision=5;',
     'const mcpGithubConnecting=false,mcpGithubSelecting=false,mcpGithubChallenge=null,mcpGithubStatus="idle";',
     'let mcpDevices=[{device_id:"old"}],mcpDevicesStatus="ready";',
@@ -816,7 +832,7 @@ test("re-entering devices refreshes Owner data without interrupting a revocation
   assert.equal(granting.projectResets(),0,"revisit must preserve an uncertain Project grant receipt");
 });
 
-test("Project UI keeps Runtime binding separate and exposes only explicit Terminal/Process grants after binding",()=>{
+test("Project UI keeps Runtime binding separate and exposes Terminal/Process/Blender grants after binding",()=>{
   const portal=readFileSync(new URL("../site/assets/account-portal.js",import.meta.url),"utf8");
   assert.match(portal,/data-mcp-project-form/);
   assert.match(portal,/data-mcp-github-connect/);
@@ -825,6 +841,8 @@ test("Project UI keeps Runtime binding separate and exposes only explicit Termin
   assert.match(portal,/data-mcp-project-grant-form/);
   assert.match(portal,/project-native-terminal/);
   assert.match(portal,/project-native-process/);
+  assert.match(portal,/project-blender-control/);
+  assert.match(portal,/Blender do projeto/);
   assert.match(portal,/project\.next_state === "ready_without_grants"/);
   assert.match(portal,/await account\.createMcpProjectGrant\(/);
   assert.match(portal,/Never replay an uncertain grant POST/);

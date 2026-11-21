@@ -742,7 +742,7 @@
     const unbounded = data.get("unbounded") === "on";
     const localExpiry = String(data.get("valid_until") ?? "").trim();
     const client = mcpAuthority.clients.find(item => item.client_id === clientId);
-    if (!client || !["project-native-terminal","project-native-process"].includes(profileKey))
+    if (!client || !["project-native-terminal","project-native-process","project-blender-control"].includes(profileKey))
       return;
     let validUntil = null;
     if (!unbounded) {
@@ -764,7 +764,8 @@
 
     const device = mcpDevices?.find(item => item.device_id === mcpProjectDevice);
     const profileLabel = profileKey === "project-native-terminal"
-      ? tx("Terminal do projeto") : tx("Processos do projeto");
+      ? tx("Terminal do projeto") : profileKey === "project-native-process"
+        ? tx("Processos do projeto") : tx("Blender do projeto");
     const expiryLabel = validUntil
       ? new Date(validUntil).toLocaleString(i18n.getLocale()) : tx("Sem expiração");
     if (!window.confirm(
@@ -1215,7 +1216,8 @@
       const grantNames = activeProjectGrants.map(group =>
         group.profile_key === "project-native-terminal" ? tx("Terminal do projeto")
           : group.profile_key === "project-native-process" ? tx("Processos do projeto")
-            : esc(group.profile_key));
+            : group.profile_key === "project-blender-control" ? tx("Blender do projeto")
+              : esc(group.profile_key));
       const grantSummary = grantNames.length
         ? `<small class="device-revoke-note">${tx("Autorizações ativas")}: ${grantNames.join(" · ")}</small>`
         : "";
@@ -1233,6 +1235,7 @@
                 <select name="profile_key" required>
                   <option value="project-native-terminal">${tx("Terminal do projeto")}</option>
                   <option value="project-native-process">${tx("Processos do projeto")}</option>
+                  <option value="project-blender-control">${tx("Blender do projeto")}</option>
                 </select></label>
               <label class="form-field"><span>${tx("Validade")}</span>
                 <input name="valid_until" type="datetime-local" autocomplete="off"></label>

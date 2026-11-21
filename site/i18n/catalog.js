@@ -128,6 +128,7 @@
     ["Autorizar ações do projeto","Authorize project actions"],
     ["Terminal do projeto","Project terminal"],
     ["Processos do projeto","Project processes"],
+    ["Blender do projeto","Project Blender control"],
     ["Autorizações ativas","Active authorizations"],
     ["Sem expiração","No expiration"],
     ["Autorizar ações","Authorize actions"],
