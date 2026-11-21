@@ -746,3 +746,8 @@ body.account-portal .usage-history>summary{min-height:44px;padding:12px 0}
  body.account-portal .mobile-nav .active{color:var(--md-rail-text)}
  body.account-portal .mobile-nav .active:before{content:'';position:absolute;top:-9px;width:25px;height:2px;background:var(--primary);box-shadow:0 2px 9px var(--primary)}
 }
+
+/* Optional preferences are explicit own-account choices, not mail status. */
+body.account-portal .communication-choice{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-width:36px;min-height:40px;cursor:pointer}
+body.account-portal .communication-choice input{width:18px;height:18px;accent-color:var(--primary);cursor:inherit}
+body.account-portal .communication-choice input:disabled{cursor:not-allowed}

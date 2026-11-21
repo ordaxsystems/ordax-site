@@ -165,14 +165,14 @@
   const sections = Object.freeze([
     { id: "visao-geral", navigationGroup: "account", mobileLabel: "Resumo", sessionDependent: true, title: "Visão geral", icon: "dashboard", description: "Sua identidade, assinatura e recursos em um só lugar." },
     { id: "dados-pessoais", navigationGroup: "account", sessionDependent: true, title: "Dados pessoais", icon: "user", description: "Seu perfil e suas informações cadastrais.", owner: "Identidade OrdaX", capabilities: ["accountEmail", "profileEdit", "profilePhoto"] },
-    { id: "assinatura", navigationGroup: "services", mobileLabel: "Plano", title: "Plano e assinatura", icon: "crown", description: "Seu plano, benefícios e opções de assinatura.", owner: "Direitos e assinaturas OrdaX", capabilities: ["subscription", "planCatalog", "subscriptionChange"] },
+    { id: "assinatura", navigationGroup: "services", mobileLabel: "Plano", sessionDependent: true, title: "Plano e assinatura", icon: "crown", description: "Seu plano, benefícios e opções de assinatura.", owner: "Direitos e assinaturas OrdaX", capabilities: ["subscription", "planCatalog", "subscriptionChange"] },
     { id: "consumo", navigationGroup: "services", mobileLabel: "Consumo", title: "Consumo e limites", icon: "chart", description: "Acompanhe seus recursos em todo o ecossistema OrdaX.", owner: "Medição de uso OrdaX", capabilities: ["aiUsage", "storageUsage", "apiUsage", "usageHistory", "usageExport"] },
     { id: "faturamento", navigationGroup: "services", title: "Pagamentos e faturas", icon: "card", description: "Métodos de pagamento, cobranças e documentos fiscais.", owner: "Faturamento OrdaX", capabilities: ["upcomingCharge", "paymentMethods", "invoices", "fiscalDetails"] },
     { id: "seguranca", navigationGroup: "security", mobileLabel: "Segurança", sessionDependent: true, title: "Segurança e acesso", icon: "shield", description: "Proteja sua identidade e controle o acesso à sua conta.", owner: "Identidade OrdaX", capabilities: ["browserSession", "password", "twoFactor", "recovery", "accessEvents"] },
     { id: "dispositivos", navigationGroup: "security", sessionDependent: true, title: "Meus dispositivos", icon: "devices", description: "Dispositivos e sessões vinculados à sua conta.", owner: "Sessões e dispositivos OrdaX", capabilities: ["deviceSessions", "osDevices", "remoteSignOut"] },
     { id: "privacidade", navigationGroup: "security", title: "Dados e privacidade", icon: "fingerprint", description: "Seus dados, suas escolhas. Você está no controle.", owner: "Privacidade OrdaX", capabilities: ["dataExport", "consents", "accountDeletion"] },
     { id: "integracoes", navigationGroup: "preferences", title: "Integrações", icon: "globe", description: "Contas conectadas e autorizações de aplicativos.", owner: "Integrações OrdaX", capabilities: ["connections", "connectionRevocation"] },
-    { id: "preferencias", navigationGroup: "preferences", title: "Preferências", icon: "sliders", description: "Personalize a experiência da sua conta.", owner: "Preferências OrdaX", capabilities: ["portalLocale", "portalAppearance", "communications"] },
+    { id: "preferencias", navigationGroup: "preferences", sessionDependent: true, title: "Preferências", icon: "sliders", description: "Personalize a experiência da sua conta.", owner: "Preferências OrdaX", capabilities: ["portalLocale", "portalAppearance", "communications"] },
     { id: "atividade", navigationGroup: "preferences", title: "Atividade da conta", icon: "history", description: "Histórico de acesso e alterações importantes.", owner: "Auditoria da conta OrdaX", capabilities: ["accessEvents", "accountChanges", "activityPeriod"] },
     { id: "suporte", mobileOverflow: true, title: "Central de ajuda", icon: "help", description: "Encontre respostas e cuide da sua experiência OrdaX.", capabilities: ["supportChannel"] }
   ]);
@@ -231,8 +231,24 @@
     return { challenge, status };
   })();
   let session = account.getSnapshot();
+  // Pending profile mutations never move across an account-session boundary.
+  let profileSaveBusy = false;
+  let profileSaveNotice = "";
+  let localeSaveBusy = false;
+  let localeSaveNotice = "";
+  let localeFromAccountApplied = false;
+  let accountExportBusy = false;
+  let accountExportNotice = "";
+  let communicationsDraft = null;
+  let communicationsDraftSession = null;
+  let communicationsSaveBusy = false;
+  let communicationsNotice = "";
   let disposeMenu = () => {};
   // Observational data only. Never an entitlement, quota or invoice.
+  let subscriptionView = null;
+  let subscriptionStatus = "unavailable";
+  let subscriptionSession = null;
+  let subscriptionRevision = 0;
   let mcpUsage = null;
   let mcpUsageStatus = "unavailable";
   // Identity is the immutable published session snapshot, not a public email.
@@ -333,7 +349,8 @@
   async function startMcpGithubAuthorization(control) {
     if (mcpGithubConnecting || mcpGithubSelecting || mcpProjectCreating || mcpProjectBinding
         || mcpProjectGrantCreating
-        || !signedIn() || mcpProjectStatus !== "ready" || !mcpProjectOnboarding) return;
+        || !signedIn() || mcpProjectStatus !== "ready" || !mcpProjectOnboarding
+        || mcpProjectOnboarding.onboarding_availability?.github_authorization_configured !== true) return;
     const projectId = control.dataset.mcpGithubConnect;
     const project = mcpProjectOnboarding.projects.find(item => item.project_id === projectId);
     if (!project || !["needs_github_installation","needs_repository_selection"].includes(project.next_state))
@@ -360,7 +377,8 @@
   async function selectMcpGithubRepository(form) {
     if (mcpGithubSelecting || mcpGithubConnecting || mcpProjectBinding || mcpProjectGrantCreating
         || !signedIn()
-        || mcpGithubStatus !== "ready" || !mcpGithubCandidates || !mcpGithubChallenge)
+        || mcpGithubStatus !== "ready" || !mcpGithubCandidates || !mcpGithubChallenge
+        || mcpProjectOnboarding?.onboarding_availability?.github_authorization_configured !== true)
       return;
     const repositoryId = String(new FormData(form).get("repository_id") ?? "");
     const candidate = mcpGithubCandidates.repositories.find(
@@ -480,9 +498,13 @@
     if (!available || !ticket || Date.parse(ticket.expires_at) <= Date.now()) return;
     const device = mcpDevices?.find(d => d.device_id === deviceId);
     const client = mcpAuthority.clients.find(c => c.client_id === mcpCentralClient);
+    // The challenge belongs to this conversation, not simply any OAuth client.
+    // Show the exact code and endpoint in the *first-party* Owner confirmation.
+    // No user reply inside ChatGPT is a device-selection authorization.
     if (!window.confirm(
-      `${tx("Vincular conversa MCP a este computador")} — ${client?.client_name || mcpCentralClient}
-      / ${device?.name || deviceId}?\n\n${tx("O Runtime precisará confirmar o vínculo. Esta ação não concede novas permissões. Depois da confirmação, offline ou reinício não trocam o computador vinculado.")}`
+      `${tx("Autorizar esta conversa para o dispositivo ou instalação OrdaX")} — ${client?.client_name || mcpCentralClient}
+      / ${device?.name || deviceId} (${deviceId})?\n\n${tx("Confira se este desafio é exatamente o mostrado pelo ChatGPT")}:
+      ${ticket.challenge_id}\n\n${tx("O Runtime precisará confirmar o vínculo. Esta ação não concede novas permissões. Depois da confirmação, a instalação escolhida não muda automaticamente quando fica offline ou reinicia.")}`
     )) return;
     const revision = ++mcpCentralRevision, owner = session;
     const clientId = mcpCentralClient;
@@ -641,7 +663,8 @@
     if (mcpProjectBinding || mcpProjectCreating || mcpProjectGrantCreating
         || mcpGithubConnecting || mcpGithubSelecting
         || !signedIn() || mcpProjectStatus !== "ready" || !mcpProjectOnboarding
-        || !mcpProjectDevice || mcpProjectDevice !== mcpAuthorityDevice) return;
+        || !mcpProjectDevice || mcpProjectDevice !== mcpAuthorityDevice
+        || mcpProjectOnboarding.onboarding_availability?.project_device_binding_enabled !== true) return;
     const projectId = control.dataset.mcpProjectBind;
     const project = mcpProjectOnboarding.projects.find(item => item.project_id === projectId);
     if (!project || project.next_state !== "needs_device_binding"
@@ -722,7 +745,7 @@
     const unbounded = data.get("unbounded") === "on";
     const localExpiry = String(data.get("valid_until") ?? "").trim();
     const client = mcpAuthority.clients.find(item => item.client_id === clientId);
-    if (!client || !["project-native-terminal","project-native-process"].includes(profileKey))
+    if (!client || !["project-native-terminal","project-native-process","project-blender-control"].includes(profileKey))
       return;
     let validUntil = null;
     if (!unbounded) {
@@ -744,7 +767,8 @@
 
     const device = mcpDevices?.find(item => item.device_id === mcpProjectDevice);
     const profileLabel = profileKey === "project-native-terminal"
-      ? tx("Terminal do projeto") : tx("Processos do projeto");
+      ? tx("Terminal do projeto") : profileKey === "project-native-process"
+        ? tx("Processos do projeto") : tx("Blender do projeto");
     const expiryLabel = validUntil
       ? new Date(validUntil).toLocaleString(i18n.getLocale()) : tx("Sem expiração");
     if (!window.confirm(
@@ -930,6 +954,47 @@
     if (state.section === "dispositivos") renderContent();
   }
 
+  async function loadSubscription() {
+    const revision = ++subscriptionRevision;
+    if (!signedIn()) return;
+    subscriptionStatus = "loading";
+    if (["assinatura", "visao-geral"].includes(state.section)) renderContent();
+    try {
+      const value = await account.readSubscription();
+      if (revision !== subscriptionRevision || !signedIn()) return;
+      subscriptionView = value;
+      subscriptionStatus = "ready";
+    } catch {
+      if (revision !== subscriptionRevision || !signedIn()) return;
+      subscriptionView = null;
+      subscriptionStatus = "unavailable";
+    }
+    if (["assinatura", "visao-geral"].includes(state.section)) renderContent();
+  }
+
+  function subscriptionPresentation() {
+    const view = subscriptionStatus === "ready" ? subscriptionView : null;
+    const recorded = view && view.status !== "unverified";
+    const name = recorded ? "OrdaX " + view.planId.charAt(0).toUpperCase()
+      + view.planId.slice(1) : "Plano não disponível";
+    const lifecycleNames = {
+      trialing: "Em avaliação", active: "Ativa", past_due: "Pagamento pendente",
+      unpaid: "Pagamento não confirmado", canceled: "Cancelada",
+      incomplete: "Incompleta", expired: "Expirada",
+    };
+    const status = recorded
+      ? view.status === "stale" ? "Vigência não confirmada"
+        : lifecycleNames[view.lifecycle]
+      : subscriptionStatus === "loading" ? "Consultando assinatura"
+        : view ? "Nenhuma assinatura confirmada no registro"
+        : "Assinatura indisponível";
+    const period = recorded && view.currentPeriodEnd
+      ? new Intl.DateTimeFormat(i18n.getLocale(), { dateStyle: "medium" })
+        .format(new Date(view.currentPeriodEnd))
+      : "Não disponível";
+    return { name, status, period, recorded, view };
+  }
+
   async function loadMcpUsage() {
     const revision = ++mcpUsageRevision;
     if (!signedIn()) return;
@@ -991,8 +1056,14 @@
   function capabilityState(id) {
     const definition = capabilityDefinitions[id];
     if (!definition) throw new Error("public-account-capability-unknown");
-    const verified = signedIn() && (id === "browserSession" || (id === "accountEmail" && Boolean(session.email)));
-    const status = definition.local ? "local" : verified ? "verified" : "pending";
+    const verified = signedIn() && ((id === "portalLocale"
+        && Boolean(session.preferredLocale) && session.preferredLocale === i18n.getLocale())
+      || id === "browserSession"
+      || (id === "accountEmail" && Boolean(session.email))
+      || (id === "dataExport" && session.dataExportEnabled === true)
+      || (id === "subscription" && subscriptionStatus === "ready"
+        && subscriptionView?.status === "verified"));
+    const status = verified ? "verified" : definition.local ? "local" : "pending";
     return { ...definition, id, status };
   }
   function capabilityLabel(status, compact = false) {
@@ -1011,7 +1082,18 @@
 
   function operationRow(id) {
     const definition = capabilityDefinitions[id];
-    return settingRow({ ...definition, id, title: definition.viewTitle || definition.title, status: capabilityBadge(id), control: action(definition.action, null, { variant: definition.destructive ? "destructive" : "outline", describedBy: `${id}-hint` }) });
+    const exportReady = id === "dataExport" && signedIn() && session.dataExportEnabled === true;
+    const exportControl = id === "dataExport";
+    return settingRow({ ...definition, id, title: definition.viewTitle || definition.title,
+      status: capabilityBadge(id),
+      hint: exportReady ? "A cópia contém dados pessoais. O transporte admite até 2 MiB; arquivos maiores exigem outra forma de exportação." : definition.hint,
+      control: action(definition.action, null, {
+        variant: definition.destructive ? "destructive" : "outline",
+        describedBy: `${id}-hint`,
+        disabled: exportControl ? !exportReady || accountExportBusy : true,
+        data: exportControl ? "data-account-export" : "",
+      }),
+    });
   }
 
   function renderSession() {
@@ -1146,6 +1228,8 @@
     }
 
     const value = mcpProjectOnboarding;
+    const githubConfigured = value.onboarding_availability.github_authorization_configured === true;
+    const bindingEnabled = value.onboarding_availability.project_device_binding_enabled === true;
     const stateLabels = {
       needs_github_installation:"GitHub ainda não conectado",
       needs_repository_selection:"Repositório ainda não selecionado",
@@ -1160,7 +1244,7 @@
       const githubControl = canAuthorize
         ? `<button type="button" class="button outline h-8"
             data-mcp-github-connect="${esc(project.project_id)}"
-            ${mcpGithubConnecting || mcpGithubSelecting || mcpProjectCreating || mcpProjectBinding || mcpProjectGrantCreating ? "disabled" : ""}>
+            ${!githubConfigured || mcpGithubConnecting || mcpGithubSelecting || mcpProjectCreating || mcpProjectBinding || mcpProjectGrantCreating ? "disabled" : ""}>
             ${icon("globe")}${tx(project.next_state === "needs_repository_selection"
               ? "Verificar GitHub novamente" : "Conectar GitHub")}</button>`
         : "";
@@ -1172,7 +1256,7 @@
         ? `<button type="button" class="button outline h-8"
             data-mcp-project-bind="${esc(project.project_id)}"
             ${mcpProjectBinding || mcpProjectCreating || mcpProjectGrantCreating
-              || mcpGithubConnecting || mcpGithubSelecting || pendingBinding ? "disabled" : ""}>
+              || mcpGithubConnecting || mcpGithubSelecting || pendingBinding || !bindingEnabled ? "disabled" : ""}>
             ${icon("devices")}${tx(pendingBinding ? "Aguardando Runtime" : "Vincular a este dispositivo")}</button>`
         : "";
       const activeProjectGrants = mcpAuthorityStatus === "ready" && mcpAuthority
@@ -1186,7 +1270,8 @@
       const grantNames = activeProjectGrants.map(group =>
         group.profile_key === "project-native-terminal" ? tx("Terminal do projeto")
           : group.profile_key === "project-native-process" ? tx("Processos do projeto")
-            : esc(group.profile_key));
+            : group.profile_key === "project-blender-control" ? tx("Blender do projeto")
+              : esc(group.profile_key));
       const grantSummary = grantNames.length
         ? `<small class="device-revoke-note">${tx("Autorizações ativas")}: ${grantNames.join(" · ")}</small>`
         : "";
@@ -1204,6 +1289,7 @@
                 <select name="profile_key" required>
                   <option value="project-native-terminal">${tx("Terminal do projeto")}</option>
                   <option value="project-native-process">${tx("Processos do projeto")}</option>
+                  <option value="project-blender-control">${tx("Blender do projeto")}</option>
                 </select></label>
               <label class="form-field"><span>${tx("Validade")}</span>
                 <input name="valid_until" type="datetime-local" autocomplete="off"></label>
@@ -1254,10 +1340,16 @@
         <button type="submit" class="button outline h-8"${mcpProjectCreating || mcpProjectBinding || mcpProjectGrantCreating ? " disabled" : ""}>${tx(mcpProjectCreating ? "Criando projeto" : "Criar projeto")}</button>
       </div>
     </form>` : `<p class="device-revoke-note">${icon("info")}${tx("Nenhum Space administrável foi confirmado. Crie ou recupere um Space antes de criar um projeto.")}</p>`;
+    const setupNotices = [
+      !githubConfigured
+        ? `<p class="device-revoke-note" role="status">${icon("info")}${tx("A conexão GitHub ainda não está disponível.")}</p>` : "",
+      !bindingEnabled
+        ? `<p class="device-revoke-note" role="status">${icon("info")}${tx("O vínculo de projetos ainda não está disponível na Platform.")}</p>` : "",
+    ].join("");
     return `<section class="settings-section" aria-labelledby="mcp-projects-heading">
       <h3 id="mcp-projects-heading">${tx("Projetos MCP")} · ${esc(device.name)}</h3>
       <p class="panel-description">${tx("O estado abaixo vem da Platform. Um projeto sem GitHub verificado não autoriza execução remota.")}</p>
-      ${table}${form}${notice}</section>`;
+      ${table}${form}${setupNotices}${notice}</section>`;
   }
 
   function mcpGithubPanel() {
@@ -1347,6 +1439,11 @@
       const ready = mcpCentralStatus === "ready" && target
         && mcpCentralSelections?.count === 1 && ticket
         && Date.parse(ticket.expires_at) > Date.now();
+      const challengeReceipt = mcpCentralStatus === "ready" && ticket
+        ? `<p class="panel-description"><strong>${tx("Desafio desta conversa — compare com o código do ChatGPT")}:</strong>
+          <code translate="no">${esc(ticket.challenge_id)}</code>
+          <small>${tx("Expira em")} ${esc(new Date(ticket.expires_at).toLocaleString(i18n.getLocale()))}</small></p>`
+        : "";
       const description = mcpCentralStatus === "loading"
         ? "Consultando desafios e computadores autorizados."
         : mcpCentralStatus === "pending"
@@ -1356,17 +1453,18 @@
               ? "Este dispositivo não possui grant de ação e Runtime elegível para este novo vínculo."
               : !ticket
                 ? "Não existe um desafio único e válido aguardando seleção."
-                : "O dispositivo e o desafio foram verificados para seleção Owner."
+                : "O dispositivo está elegível. Compare o código do desafio com o informado pelo ChatGPT antes de confirmar."
             : "A criação de vínculo MCP está indisponível.";
       centralDetail = `<div class="device-revoke-note" role="status">${tx(description)}
-        ${ready ? action("Vincular esta conversa ao computador", "shield", {
+        ${challengeReceipt}
+        ${ready ? action("Confirmar esta instalação para a conversa", "shield", {
           disabled:mcpRevoking || mcpCentralSelecting || mcpProjectGrantCreating, small:true,
           data:`data-mcp-central-select="${esc(mcpCentralClient)}"`,
         }) : ""}</div>`;
     }
     const centralPanel = availableClients.length
       ? `<div class="panel-actions" aria-label="${tx("Vínculo MCP Owner")}">
-        <p>${tx("Selecione o cliente OAuth autorizado somente para um desafio pendente. O vínculo confirmado persiste na Platform até revogação explícita; offline, heartbeat atrasado ou reinício não escolhem outro computador.")}</p>
+        <p>${tx("Selecione o cliente OAuth autorizado somente para um desafio pendente. O vínculo confirmado persiste na Platform até revogação explícita; offline, heartbeat atrasado ou reinício não escolhem outra instalação.")}</p>
         <div>${centralButtons}</div></div>${centralDetail}`
       : "";
     const centralNotice = mcpCentralNotice
@@ -1412,15 +1510,24 @@
     return template.innerHTML;
   }
 
+  function authDateLabel(field, includeTime = false) {
+    const value = signedIn() && typeof session[field] === "string" ? session[field] : "";
+    if (!value || !Number.isFinite(Date.parse(value))) return tx("Não disponível");
+    const format = includeTime
+      ? { dateStyle: "medium", timeStyle: "short" }
+      : { dateStyle: "medium" };
+    return esc(new Intl.DateTimeFormat(i18n.getLocale(), format).format(new Date(value)));
+  }
+
   function overview() {
     const quickLinks = ["preferencias", "privacidade", "integracoes", "atividade"];
     return `<header class="account-intro"><div><h1 tabindex="-1">${tx("Minha Conta")}</h1><p>${tx("Seu perfil, seus serviços e suas escolhas.")}</p></div>${link("dados-pessoais", "", "button outline", `${icon("user")}${tx("Dados pessoais")}`)}</header>
       <section class="identity-card" aria-labelledby="overview-profile-title">
-        <div class="identity-content"><span class="eyebrow">${tx("SEU PERFIL ORDAX")}</span><div class="identity-person"><span class="identity-avatar">${icon("user")}</span><div><h2 id="overview-profile-title">${tx("Sua conta OrdaX")}</h2><p class="verified-email"${signedIn() && session.email ? ' translate="no"' : ""}>${signedIn() && session.email ? esc(session.email) : tx("E-mail não disponível")}</p></div></div><div class="identity-bottom"><dl><div><dt>${tx("Tipo de conta")}</dt><dd>${tx("Não disponível")}</dd></div><div><dt>${tx("Membro desde")}</dt><dd>${tx("Não disponível")}</dd></div></dl>${link("dados-pessoais", "", "text-link", `${tx("Ver perfil")}${icon("arrow-right")}`)}</div></div>
+        <div class="identity-content"><span class="eyebrow">${tx("SEU PERFIL ORDAX")}</span><div class="identity-person"><span class="identity-avatar">${icon("user")}</span><div><h2 id="overview-profile-title">${signedIn() && session.displayName ? esc(session.displayName) : tx("Sua conta OrdaX")}</h2><p class="verified-email"${signedIn() && session.email ? ' translate="no"' : ""}>${signedIn() && session.email ? esc(session.email) : tx("E-mail não disponível")}</p></div></div><div class="identity-bottom"><dl><div><dt>${tx("Tipo de conta")}</dt><dd>${tx("Não disponível")}</dd></div><div><dt>${tx("Membro desde")}</dt><dd>${authDateLabel("registeredAt")}</dd></div></dl>${link("dados-pessoais", "", "text-link", `${tx("Ver perfil")}${icon("arrow-right")}`)}</div></div>
         <div class="identity-art" aria-hidden="true"><img src="${LANDSCAPE}" width="1920" height="640" alt=""><span>${tx("Uma conta.")}<br>${tx("Todos os seus mundos.")}</span></div>
       </section>
       <div class="account-overview-grid"><div class="overview-primary">
-        <section class="account-card account-services">${panelHeading("Plano e faturamento", { iconName: "crown", tone: "violet", end: `<span class="status-tag">${tx("Recursos pendentes")}</span>` })}<dl class="service-facts">${["Plano atual", "Próxima renovação", "Próxima cobrança"].map(label => `<div><dt>${tx(label)}</dt><dd>${tx("Não disponível")}</dd></div>`).join("")}</dl><div class="panel-actions">${link("assinatura", "", "button", `${tx("Ver assinatura")}${icon("arrow-right")}`)}${link("faturamento", "", "text-link", `${tx("Pagamentos e faturas")}${icon("chevron-right")}`)}</div></section>
+        <section class="account-card account-services">${panelHeading("Plano e faturamento", { iconName: "crown", tone: "violet", end: `<span class="status-tag">${tx("Recursos pendentes")}</span>` })}<dl class="service-facts">${[["Plano atual", subscriptionPresentation().name], ["Vigência", subscriptionPresentation().period], ["Próxima cobrança", "Não disponível"]].map(([label,value]) => `<div><dt>${tx(label)}</dt><dd>${tx(value)}</dd></div>`).join("")}</dl><div class="panel-actions">${link("assinatura", "", "button", `${tx("Ver assinatura")}${icon("arrow-right")}`)}${link("faturamento", "", "text-link", `${tx("Pagamentos e faturas")}${icon("chevron-right")}`)}</div></section>
         <section class="account-card account-usage">${panelHeading("Consumo de recursos", { iconName: "chart", tone: "cyan", end: `${link("consumo", "", "text-link", `${tx("Ver detalhes")}${icon("arrow-up-right")}`)}` })}${resourceTable()}<p class="data-note">${icon("info")}${tx("Aguardando dados de consumo")}</p><details class="usage-history"><summary>${icon("history")}<span>${tx("Histórico de consumo")}</span>${icon("chevron-down")}</summary><div class="chart-legend">${resources.map(resource => `<span><i class="legend-${resource.tone}"></i>${tx(resource.label)}</span>`).join("")}</div>${chart()}${link("consumo", "", "text-link", `${tx("Explorar consumo")}${icon("arrow-right")}`)}</details></section>
       </div><aside class="overview-aside" aria-label="${tx("Acesso e preferências")}">
         <section class="account-card account-safety">${panelHeading("Segurança e acesso", { iconName: "shield", tone: "mint" })}<p class="panel-description">${tx("Cuide do acesso à sua conta e dos dispositivos conectados.")}</p><dl class="safety-facts"><div><dt>${tx("Verificação em duas etapas")}</dt><dd>${tx("Não disponível")}</dd></div><div><dt>${tx("Sessões e dispositivos")}</dt><dd>${tx("Não disponível")}</dd></div></dl>${link("seguranca", "", "button outline", `${tx("Gerenciar segurança")}${icon("arrow-right")}`)}${link("dispositivos", "", "text-link", `${tx("Meus dispositivos")}${icon("chevron-right")}`)}</section>
@@ -1429,24 +1536,78 @@
       <section class="account-help-strip">${icon("help")}<div><h2>${tx("Precisa de ajuda?")}</h2><p>${tx("Encontre respostas sobre sua conta, assinatura e segurança.")}</p></div>${link("suporte", "", "text-link", `${tx("Central de ajuda")}${icon("arrow-right")}`)}</section>`;
   }
 
+  async function saveDisplayName() {
+    if (profileSaveBusy || !signedIn() || session.profileEditEnabled !== true) return;
+    const input = document.getElementById("profile-display-name");
+    const notice = document.getElementById("profile-edit-status");
+    if (!input || !notice) return;
+    const proposed = input.value.trim();
+    if (!proposed || [...proposed].length > 120
+        || /[\u0000-\u001f\u007f]/.test(proposed)) {
+      notice.textContent = tx("Informe um nome válido de até 120 caracteres.");
+      return;
+    }
+    const owner = session;
+    profileSaveBusy = true;
+    const button = document.querySelector("[data-profile-save]");
+    if (button) button.disabled = true;
+    notice.textContent = tx("Salvando nome de exibição");
+    try {
+      await account.updateDisplayName(proposed);
+      if (session !== owner || !signedIn()) return;
+      // Read back the persisted value through the one canonical session port.
+      await account.refreshSession();
+      if (!signedIn() || session.displayName !== proposed) {
+        throw new Error("account-display-name-readback-unconfirmed");
+      }
+      profileSaveNotice = "Nome de exibição atualizado e confirmado.";
+    } catch {
+      if (!signedIn()) return;
+      profileSaveNotice = "Não foi possível confirmar a alteração. Verifique sua sessão e tente novamente.";
+    } finally {
+      profileSaveBusy = false;
+      if (signedIn() && state.section === "dados-pessoais") {
+        if (profileSaveNotice === "Nome de exibição atualizado e confirmado.") {
+          renderContent();
+        } else {
+          // A failed write retains the user's typed text for an explicit retry.
+          const status = document.getElementById("profile-edit-status");
+          if (status) status.textContent = tx(profileSaveNotice);
+          const submit = document.querySelector("[data-profile-save]");
+          if (submit && session.profileEditEnabled === true) submit.disabled = false;
+        }
+      }
+    }
+  }
+
   function personal() {
+    const canEditDisplayName = signedIn() && session.profileEditEnabled === true;
+    const currentName = signedIn() ? (session.displayName || "") : "";
+    const nameField = `<label class="form-field"><span>${tx("Nome de exibição")}</span>
+      <input id="profile-display-name" type="text" autocomplete="nickname"
+        maxlength="120" value="${esc(currentName)}"
+        ${canEditDisplayName && !profileSaveBusy ? "" : "disabled"}
+        aria-describedby="profile-display-name-hint profile-edit-status">
+      <small id="profile-display-name-hint">${tx("Nome pelo qual você prefere ser chamado.")}</small>
+    </label>`;
     return `<section class="settings-section personal-photo" aria-labelledby="personal-photo-heading">
       ${panelHeading("Seu perfil", { id: "personal-photo-heading", iconName: "user", tone: "cyan", end: capabilityBadge("profilePhoto") })}
       <div class="profile-edit"><span class="large-avatar" aria-hidden="true">${icon("user")}</span><div><h3>${tx(capabilityDefinitions.profilePhoto.title)}</h3><p>${tx("Uma imagem para identificar seu perfil nos serviços OrdaX.")}</p><small id="profile-photo-status">${tx("A alteração da foto aguarda integração.")}</small></div>${action("Alterar foto", "camera", { small: true, describedBy: "profile-photo-status" })}</div>
     </section>
     <section class="settings-section personal-info" aria-labelledby="personal-info-heading">
       ${panelHeading("Informações pessoais", { id: "personal-info-heading", iconName: "user", tone: "cyan", end: capabilityBadge("profileEdit") })}<p class="panel-description">${tx("Como você se identifica nos serviços OrdaX.")}</p>
-      <div class="form-grid">${field("Nome completo", "Não disponível", "text", "", { id: "profile-full-name" })}${field("Nome de exibição", "Não disponível", "text", "", { id: "profile-display-name", hint: "Nome pelo qual você prefere ser chamado." })}${field("País ou região", "Não disponível", "text", "", { id: "profile-country" })}${field("Documento fiscal", "Não disponível", "text", "", { id: "profile-tax-document" })}</div>
+      <div class="form-grid">${field("Nome completo", "Não disponível", "text", "", { id: "profile-full-name" })}${nameField}${field("País ou região", "Não disponível", "text", "", { id: "profile-country" })}${field("Documento fiscal", "Não disponível", "text", "", { id: "profile-tax-document" })}</div>
     </section>
     <section class="settings-section personal-contact" aria-labelledby="personal-contact-heading">
       ${panelHeading("Contato", { id: "personal-contact-heading", iconName: "mail", tone: "cyan" })}<p class="panel-description">${tx("Seu e-mail de acesso e suas informações de contato.")}</p>
       <div class="form-grid">${field("E-mail", "Não disponível", "email", "accountEmail", { id: "profile-email", hint: "O e-mail será exibido quando a consulta da conta estiver disponível." })}${field("Telefone", "Não disponível", "tel", "", { id: "profile-phone", hint: "A consulta e a edição do telefone aguardam integração." })}</div>
     </section>
-    <div class="form-actions personal-actions"><span id="profile-edit-status">${icon("info")}${tx("As alterações de perfil e contato ainda não estão disponíveis.")}</span>${action("Salvar alterações", null, { variant: "", describedBy: "profile-edit-status" })}</div>
+    <div class="form-actions personal-actions"><span id="profile-edit-status" role="status" aria-live="polite">${icon("info")}${tx(profileSaveNotice || (canEditDisplayName ? "Somente o nome de exibição pode ser alterado aqui." : "A edição do perfil aguarda ativação do serviço oficial."))}</span>${action("Salvar nome de exibição", null, { disabled: !canEditDisplayName || profileSaveBusy, variant: "", data: "data-profile-save", describedBy: "profile-edit-status" })}</div>
     ${relatedAreas(["seguranca", "privacidade"], "Segurança e privacidade do perfil")}`;
   }
   function subscription() {
-    return `<section class="settings-section subscription-summary" aria-labelledby="subscription-heading">${panelHeading("Assinatura atual", { id: "subscription-heading", iconName: "crown", tone: "violet", end: capabilityBadge("subscription") })}<div class="subscription-plan"><span>${tx(capabilityDefinitions.subscription.title)}</span><h3>${tx("Plano não disponível")}</h3><p>${tx("Seu plano será exibido quando os dados da assinatura estiverem disponíveis.")}</p></div><dl class="subscription-facts">${["Ciclo de cobrança", "Próxima renovação", "Valor da assinatura"].map(label => `<div><dt>${tx(label)}</dt><dd>${tx("Não disponível")}</dd></div>`).join("")}</dl><div class="panel-actions subscription-actions"><p>${icon("info")}${tx("Alterações e cancelamento aguardam a conexão com o serviço de assinatura.")}</p><div>${action("Alterar plano", "crown")}${action("Cancelar assinatura", null, { variant: "ghost" })}</div></div></section>
+    const commercial = subscriptionPresentation();
+    return `<section class="settings-section subscription-summary" aria-labelledby="subscription-heading">${panelHeading("Assinatura atual", { id: "subscription-heading", iconName: "crown", tone: "violet", end: capabilityBadge("subscription") })}<div class="subscription-plan"><span>${tx(capabilityDefinitions.subscription.title)}</span><h3>${tx(commercial.name)}</h3><p role="status">${tx(commercial.status)}${commercial.view?.cancellationScheduled ? ` · ${tx("Cancelamento agendado")}` : ""}</p></div><dl class="subscription-facts">${[["Situação", commercial.status], ["Fim do período confirmado", commercial.period], ["Valor da assinatura", "Não disponível"]].map(([label,value]) => `<div><dt>${tx(label)}</dt><dd>${tx(value)}</dd></div>`).join("")}</dl><div class="panel-actions subscription-actions"><p>${icon("info")}${tx("Alterações e cancelamento aguardam a conexão com o serviço de assinatura.")}</p><div>${action("Alterar plano", "crown")}${action("Cancelar assinatura", null, { variant: "ghost" })}</div></div></section>
       <section class="settings-section subscription-limits">${panelHeading("Limites da conta", { iconName: "chart", tone: "cyan", end: link("consumo", "", "text-link", `${tx("Ver consumo")}${icon("arrow-right")}`) })}<p class="panel-description">${tx("Consulte a capacidade disponível para cada recurso da sua conta.")}</p>${resourceTable({ showUsage: false })}<p class="data-note">${icon("info")}${tx("Os limites serão exibidos quando os benefícios da conta estiverem conectados.")}</p></section>
       <section class="settings-section subscription-catalog">${panelHeading("Planos e benefícios", { iconName: "sparkles", tone: "cyan" })}<p class="panel-description">${tx("Consulte os benefícios previstos e os valores de referência.")}</p>${planCatalog()}<div class="catalog-availability"><p>${icon("info")}${tx("Assinaturas pagas ainda não estão disponíveis.")}</p><p><span>${tx("Contratação")}</span><strong>${tx("Em preparação")}</strong></p></div></section>${relatedAreas(["consumo", "faturamento"], "Consumo e faturamento")}`;
   }
@@ -1493,7 +1654,7 @@
         return settingRow({ ...row, title: row.viewTitle || row.title, hint: "", status: capabilityBadge(id), control: action(row.action, null, { describedBy: "protection-status-note" }) });
       }).join("")}
     </section>
-    <section class="settings-section security-history" aria-labelledby="security-history-heading">${panelHeading("Histórico de acesso", { id: "security-history-heading", iconName: "history", tone: "cyan", end: link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`) })}${empty("Histórico de segurança não disponível", "Os eventos de acesso serão consultados pelo serviço de identidade OrdaX.", "history", true)}</section>
+    <section class="settings-section security-history" aria-labelledby="security-history-heading">${panelHeading("Histórico de acesso", { id: "security-history-heading", iconName: "history", tone: "cyan", end: link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`) })}<p class="panel-description"><strong>${tx("Último login registrado")}:</strong> ${signedIn() && session.lastSignInAt ? `<time datetime="${esc(session.lastSignInAt)}">${authDateLabel("lastSignInAt", true)}</time>` : tx("Não disponível")}</p>${empty("Histórico de segurança não disponível", "Os eventos de acesso serão consultados pelo serviço de identidade OrdaX.", "history", true)}</section>
     ${relatedAreas(["dispositivos", "privacidade"], "Acesso e privacidade")}`;
   }
   function devices() {
@@ -1510,6 +1671,41 @@
       <div class="panel-actions device-actions">${link("integracoes", "", "text-link", `${tx("Ver autorizações de aplicativos")}${icon("arrow-right")}`)}${link("atividade", "", "text-link", `${tx(byId.get("atividade").title)}${icon("arrow-right")}`)}</div>
     </section>${relatedAreas(["seguranca", "atividade"], "Proteção e histórico da conta")}`;
   }
+  async function downloadAccountData() {
+    if (!signedIn() || session.dataExportEnabled !== true || accountExportBusy) return;
+    const owner = session;
+    accountExportBusy = true;
+    accountExportNotice = "Preparando cópia privada dos seus dados.";
+    if (state.section === "privacidade") renderContent();
+    try {
+      const payload = await account.readPrivateDataExport();
+      if (session !== owner || !signedIn()) return;
+      const serialized = JSON.stringify(payload, null, 2) + "\n";
+      const file = new Blob([serialized], { type: "application/json;charset=utf-8" });
+      const address = URL.createObjectURL(file);
+      try {
+        const target = document.createElement("a");
+        target.href = address;
+        target.download = i18n.fromSource("ordax-conta-dados-") + payload.exported_at.slice(0, 10) + ".json";
+        target.hidden = true;
+        document.body.appendChild(target);
+        target.click();
+        target.remove();
+      } finally {
+        // Do not retain a sensitive export in app state or browser storage.
+        setTimeout(() => URL.revokeObjectURL(address), 20000);
+      }
+      accountExportNotice = "Arquivo preparado. Verifique o download no navegador e guarde-o com segurança.";
+    } catch {
+      if (session === owner && signedIn()) {
+        accountExportNotice = "Não foi possível gerar uma exportação confirmada. Tente novamente.";
+      }
+    } finally {
+      accountExportBusy = false;
+      if (state.section === "privacidade" && session === owner) renderContent();
+    }
+  }
+
   function privacy() {
     return `<section class="settings-section consent-settings" aria-labelledby="consent-heading">
       ${panelHeading(capabilityDefinitions.consents.title, { id: "consent-heading", iconName: "fingerprint", tone: "cyan" })}
@@ -1519,17 +1715,123 @@
     <section class="settings-section privacy-data" aria-labelledby="privacy-data-heading">
       ${panelHeading("Gerenciar meus dados", { id: "privacy-data-heading", iconName: "disk", tone: "cyan" })}<p class="panel-description">${tx("Solicite uma cópia dos dados ou gerencie a exclusão da conta.")}</p>
       <div class="data-operations">${["dataExport", "accountDeletion"].map(operationRow).join("")}</div>
+      ${accountExportNotice ? `<p id="account-export-status" role="status" aria-live="polite">${tx(accountExportNotice)}</p>` : ""}
     </section>${relatedAreas(["preferencias", "integracoes"], "Preferências e acesso aos dados")}`;
   }
+  // The chosen locale still works locally for anonymous visitors. Only an
+  // explicit authenticated save writes the Account-owned preference.
+  async function saveAccountLocale() {
+    if (!signedIn() || session.localePreferenceEditEnabled !== true || localeSaveBusy) return;
+    const locale = i18n.getLocale();
+    if (locale !== "pt-BR" && locale !== "en-US") return;
+    const owner = session;
+    localeSaveBusy = true;
+    localeSaveNotice = "Salvando idioma da conta.";
+    if (state.section === "preferencias") renderContent();
+    try {
+      await account.updatePreferredLocale(locale);
+      if (session !== owner || !signedIn()) return;
+      // A mutation receipt is not enough: re-read the persisted preference
+      // from the canonical authenticated session before claiming success.
+      await account.refreshSession();
+      if (!signedIn() || session.preferredLocale !== locale)
+        throw new Error("locale-readback-unconfirmed");
+      localeSaveNotice = "Idioma salvo e confirmado.";
+    } catch {
+      if (session === owner && signedIn())
+        localeSaveNotice = "Não foi possível confirmar o idioma. Tente novamente.";
+    } finally {
+      localeSaveBusy = false;
+      if (state.section === "preferencias" && signedIn()) renderContent();
+    }
+  }
+
+  function currentCommunicationChoices() {
+    if (communicationsDraftSession === session && communicationsDraft) return communicationsDraft;
+    const stored = signedIn() ? session.optionalCommunications : null;
+    return stored && typeof stored.productDigest === "boolean" && typeof stored.news === "boolean"
+      ? stored : { productDigest: false, news: false };
+  }
+
+  async function saveOptionalCommunications() {
+    if (!signedIn() || session.communicationsPreferenceEditEnabled !== true || communicationsSaveBusy) return;
+    const owner = session;
+    const draft = currentCommunicationChoices();
+    const choices = { productDigest: draft.productDigest, news: draft.news };
+    if (typeof choices.productDigest !== "boolean" || typeof choices.news !== "boolean") return;
+    communicationsSaveBusy = true;
+    communicationsNotice = "Registrando preferências opcionais.";
+    if (state.section === "preferencias") renderContent();
+    try {
+      await account.updateOptionalCommunications(choices);
+      if (session !== owner || !signedIn()) return;
+      await account.refreshSession();
+      if (!signedIn()
+          || session.optionalCommunications?.productDigest !== choices.productDigest
+          || session.optionalCommunications?.news !== choices.news)
+        throw new Error("communications-readback-unconfirmed");
+      communicationsNotice = "Preferências registradas. O serviço de envio ainda não está disponível.";
+    } catch {
+      if (session === owner && signedIn())
+        communicationsNotice = "Não foi possível confirmar as preferências. Tente novamente.";
+    } finally {
+      communicationsSaveBusy = false;
+      if (state.section === "preferencias") renderContent();
+    }
+  }
+
   function preferences() {
     const locales = window.OrdaXPublicI18nCatalog?.supportedLocales ?? [];
     const material = document.body.dataset.material === "ink" ? "Escuro" : "Claro";
+    const localeCanSave = signedIn() && session.localePreferenceEditEnabled === true;
+    const localeVerified = localeCanSave && session.preferredLocale === i18n.getLocale();
+    const localeHint = localeSaveNotice ||
+      (localeVerified ? "Idioma sincronizado com sua conta."
+        : localeCanSave ? "Escolha local: salve para sincronizar entre dispositivos."
+          : "Entre na Conta OrdaX para sincronizar. O idioma deste navegador continua disponível.");
     return `<section class="settings-section portal-preferences" aria-labelledby="portal-preferences-heading">
-      ${panelHeading("Preferências do portal", { id: "portal-preferences-heading", iconName: "sliders", tone: "cyan" })}<p class="panel-description">${tx("Idioma e aparência se referem ao navegador atual.")}</p>
-      <div class="preferences-grid"><article class="preference-panel"><div class="preference-heading"><h3>${tx(capabilityDefinitions.portalLocale.title)}</h3>${capabilityBadge("portalLocale")}</div><p class="preference-description" id="account-locale-hint">${tx("Escolha o idioma usado neste portal. Esta escolha vale para este navegador.")}</p><label class="locale-field" for="account-locale"><span>${tx("Idioma preferido")}</span><select id="account-locale" aria-describedby="account-locale-hint">${locales.map(locale => `<option value="${esc(locale)}"${i18n.getLocale() === locale ? " selected" : ""}>${message(`locale.selector.${locale}`)}</option>`).join("")}</select></label></article>
+      ${panelHeading("Preferências do portal", { id: "portal-preferences-heading", iconName: "sliders", tone: "cyan" })}<p class="panel-description">${tx("A aparência permanece local; o idioma pode ser salvo na sua conta.")}</p>
+      <div class="preferences-grid"><article class="preference-panel"><div class="preference-heading"><h3>${tx(capabilityDefinitions.portalLocale.title)}</h3>${capabilityBadge("portalLocale")}</div><p class="preference-description" id="account-locale-hint">${tx("Altere o idioma aqui e salve-o na conta para usar em outros dispositivos.")}</p><label class="locale-field" for="account-locale"><span>${tx("Idioma preferido")}</span><select id="account-locale" aria-describedby="account-locale-hint">${locales.map(locale => `<option value="${esc(locale)}"${i18n.getLocale() === locale ? " selected" : ""}>${message(`locale.selector.${locale}`)}</option>`).join("")}</select></label>
+          <div class="panel-actions"><span id="account-locale-status" role="status" aria-live="polite">${tx(localeHint)}</span>${action("Salvar idioma na conta", null, { disabled: !localeCanSave || localeSaveBusy || localeVerified, data: "data-account-save-locale", describedBy: "account-locale-status" })}</div></article>
         <article class="preference-panel"><div class="preference-heading"><h3>${tx("Aparência")}</h3>${capabilityBadge("portalAppearance")}</div><p class="preference-description">${tx("Esta é a aparência atual deste portal.")}</p><div class="appearance-option"><div class="appearance-preview" aria-hidden="true"><span class="appearance-preview-bar"></span><span class="appearance-preview-rail"></span><span class="appearance-preview-content"><i></i><i></i><i></i></span></div><div class="appearance-current"><span>${tx("Visual atual")}</span><strong>${tx(material)}</strong></div></div></article></div>
     </section>
-    <section class="settings-section communication-settings" aria-labelledby="communications-heading">${panelHeading("Notificações e comunicações", { id: "communications-heading", iconName: "bell", tone: "cyan" })}<p class="panel-description">${tx("Preferências da conta estarão disponíveis quando o serviço oficial estiver conectado.")}</p>${communicationOptions.map(option => settingRow({ ...option, status: capabilityBadge("communications") })).join("")}<div class="panel-actions communication-actions">${link("privacidade", "", "text-link", `${tx(byId.get("privacidade").title)}${icon("arrow-right")}`)}</div></section>
+    <section class="settings-section communication-settings" aria-labelledby="communications-heading">
+      ${panelHeading("Notificações e comunicações", { id: "communications-heading", iconName: "bell", tone: "cyan" })}
+      <p class="panel-description">${tx("Você pode registrar preferências opcionais. Nenhum envio é ativado por esta escolha.")}</p>
+      ${settingRow({ ...communicationOptions[0],
+        description: "Alertas essenciais pertencem ao serviço de identidade e não podem ser desativados aqui.",
+        status: capabilityBadge("communications") })}
+      ${[
+        { id:"productDigest", option:communicationOptions[1],
+          description:"Resumos opcionais de produtos e consumo, quando o canal oficial estiver disponível." },
+        { id:"news", option:communicationOptions[2],
+          description:"Novidades opcionais do ecossistema, quando o serviço de envio estiver disponível." },
+      ].map(item => settingRow({ ...item.option, description:item.description,
+        status: signedIn() && session.optionalCommunications
+          ? `<span class="status-tag is-verified">${tx("Preferência registrada")}</span>`
+          : capabilityBadge("communications"),
+        control: `<label class="communication-choice"><span class="sr-only">${tx(item.option.title)}</span>
+          <input type="checkbox" data-communication-choice="${item.id}"
+            ${currentCommunicationChoices()[item.id] ? "checked" : ""}
+            ${signedIn() && session.communicationsPreferenceEditEnabled === true && !communicationsSaveBusy ? "" : "disabled"}
+            aria-describedby="communications-status"></label>`,
+      })).join("")}
+      <div class="panel-actions communication-actions">
+        <span id="communications-status" role="status" aria-live="polite">${tx(communicationsNotice ||
+          (signedIn() && session.optionalCommunications
+            ? "Escolhas registradas na Conta. Entrega de mensagens ainda indisponível."
+            : "Nenhuma preferência opcional confirmada. Envio ainda indisponível."))}</span>
+        ${action("Salvar preferências de comunicação", null, {
+          disabled: !signedIn() || session.communicationsPreferenceEditEnabled !== true || communicationsSaveBusy ||
+            (session.optionalCommunications !== null
+              && session.optionalCommunications !== undefined
+              && currentCommunicationChoices().productDigest === session.optionalCommunications.productDigest
+              && currentCommunicationChoices().news === session.optionalCommunications.news),
+          data: "data-save-communications", describedBy:"communications-status",
+        })}
+        ${link("privacidade", "", "text-link", `${tx(byId.get("privacidade").title)}${icon("arrow-right")}`)}
+      </div>
+    </section>
     ${relatedAreas(["dados-pessoais", "suporte"], "Perfil e ajuda")}`;
   }
   function integrations() {
@@ -1634,6 +1936,7 @@
     if (dialog.open) dialog.close();
     renderNavigation();
     renderContent({ focus: !initial });
+    if (["assinatura", "visao-geral"].includes(state.section) && signedIn() && subscriptionStatus === "unavailable") void loadSubscription();
     if (state.section === "dispositivos" && signedIn() && mcpDevicesStatus === "unavailable") void loadMcpDevices();
     if (state.section === "dispositivos" && signedIn() && mcpGithubChallenge
         && mcpGithubStatus === "unavailable") void loadMcpGithubCandidates();
@@ -1699,7 +2002,19 @@
       document.getElementById("conteudo").focus();
       return;
     }
-    if (control.matches("[data-mcp-project-bind]")) {
+    if (control.matches("[data-save-communications]")) {
+      event.preventDefault();
+      if (!layoutPreview) void saveOptionalCommunications();
+    } else if (control.matches("[data-account-save-locale]")) {
+      event.preventDefault();
+      if (!layoutPreview) void saveAccountLocale();
+    } else if (control.matches("[data-account-export]")) {
+      event.preventDefault();
+      if (!layoutPreview) void downloadAccountData();
+    } else if (control.matches("[data-profile-save]")) {
+      event.preventDefault();
+      if (!layoutPreview) void saveDisplayName();
+    } else if (control.matches("[data-mcp-project-bind]")) {
       event.preventDefault();
       if (!layoutPreview) void requestMcpProjectDeviceBinding(control);
     } else if (control.matches("[data-mcp-github-connect]")) {
@@ -1782,7 +2097,20 @@
   document.addEventListener("change", event => {
     if (event.target.id === "usage-period") { state.period = event.target.value; renderContent(); document.getElementById("usage-period").focus({ preventScroll: true }); }
     else if (event.target.id === "activity-period") { state.activityPeriod = event.target.value; renderContent(); document.getElementById("activity-period").focus({ preventScroll: true }); }
-    else if (event.target.id === "account-locale") i18n.setLocale(event.target.value);
+    else if (event.target.id === "account-locale") {
+      localeSaveNotice = "";
+      i18n.setLocale(event.target.value);
+    } else if (event.target.matches?.("[data-communication-choice]")) {
+      const key = event.target.dataset.communicationChoice;
+      if ((key === "productDigest" || key === "news") && signedIn()
+          && session.communicationsPreferenceEditEnabled === true && !communicationsSaveBusy) {
+        communicationsDraft = { ...currentCommunicationChoices(), [key]: event.target.checked === true };
+        communicationsDraftSession = session;
+        communicationsNotice = "";
+        renderContent();
+        document.querySelector(`[data-communication-choice="${key}"]`)?.focus({ preventScroll: true });
+      }
+    }
   });
   document.addEventListener("keydown", event => {
     if (event.defaultPrevented || event.isComposing) return;
@@ -1821,7 +2149,33 @@
   } else {
     account.subscribe(value => {
       const focused = document.activeElement?.id;
+      const previousSession = session;
       session = value;
+      if (previousSession !== session) {
+        communicationsDraft = null;
+        communicationsDraftSession = null;
+        communicationsNotice = "";
+      }
+      if (session.status !== "authenticated") {
+        localeFromAccountApplied = false;
+      } else if (!localeFromAccountApplied) {
+        localeFromAccountApplied = true;
+        if ((session.preferredLocale === "pt-BR" || session.preferredLocale === "en-US")
+            && i18n.getLocale() !== session.preferredLocale) {
+          i18n.setLocale(session.preferredLocale);
+        }
+      }
+      if (previousSession !== session) accountExportNotice = "";
+      if (session.status !== "authenticated") profileSaveNotice = "";
+      if (subscriptionSession !== session) {
+        subscriptionSession = session;
+        subscriptionRevision += 1;
+        subscriptionView = null;
+        subscriptionStatus = "unavailable";
+        if (signedIn() && ["assinatura", "visao-geral"].includes(state.section)) {
+          void loadSubscription();
+        }
+      }
       if (mcpUsageSession !== session) {
         mcpUsageSession = session;
         mcpUsageRevision += 1;

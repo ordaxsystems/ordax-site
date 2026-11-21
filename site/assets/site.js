@@ -108,6 +108,9 @@
     // legal-policy readiness; never follow redirects or accept alias responses.
     if (!sameOriginPath(path, method)) throw new Error("api-path-invalid");
     if (method !== "GET" && (method !== "POST" || ![
+      "/account/profile/display-name",
+      "/account/preferences/locale",
+      "/account/preferences/communications",
       "/account/mcp/revoke",
       "/account/mcp/reauthorize",
       "/account/mcp/project-grants",
@@ -466,8 +469,34 @@
     }
   }
 
+  function validAuthSessionDate(value) {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) && ms > 0
+      && ms <= Date.now() + 300000 && new Date(ms).toISOString() === value;
+  }
+
   function validSessionReadiness(value) {
     return value
+      && (value.displayName === undefined || (typeof value.displayName === "string"
+        && value.displayName.length > 0 && [...value.displayName].length <= 120
+        && value.displayName === value.displayName.trim()
+        && !/[\u0000-\u001f\u007f]/.test(value.displayName)))
+      && (value.profileEditEnabled === undefined || typeof value.profileEditEnabled === "boolean")
+      && (value.dataExportEnabled === undefined || typeof value.dataExportEnabled === "boolean")
+      && (value.localePreferenceEditEnabled === undefined || typeof value.localePreferenceEditEnabled === "boolean")
+      && (value.preferredLocale === undefined || value.preferredLocale === "pt-BR" || value.preferredLocale === "en-US")
+      && (value.communicationsPreferenceEditEnabled === undefined
+        || typeof value.communicationsPreferenceEditEnabled === "boolean")
+      && (value.optionalCommunications === undefined || (
+        value.optionalCommunications && typeof value.optionalCommunications === "object"
+        && !Array.isArray(value.optionalCommunications)
+        && Object.keys(value.optionalCommunications).sort().join(",") === "news,productDigest"
+        && typeof value.optionalCommunications.news === "boolean"
+        && typeof value.optionalCommunications.productDigest === "boolean"
+      ))
+      && (value.registeredAt === undefined || validAuthSessionDate(value.registeredAt))
+      && (value.lastSignInAt === undefined || validAuthSessionDate(value.lastSignInAt))
       && value.$schema === "prototype-ordax.public-identity-session/1"
       && value.provider === "supabase"
       && (
@@ -483,8 +512,14 @@
   const sessionObservers = new Set();
   let sessionView = Object.freeze({ status: "checking", email: "" });
 
-  function publishSessionView(status, email = "") {
-    sessionView = Object.freeze({ status, email });
+  function publishSessionView(status, email = "", displayName = "", profileEditEnabled = false,
+    dataExportEnabled = false, registeredAt = "", lastSignInAt = "",
+    preferredLocale = "", localePreferenceEditEnabled = false,
+    optionalCommunications = null, communicationsPreferenceEditEnabled = false) {
+    sessionView = Object.freeze({ status, email, displayName, profileEditEnabled,
+      dataExportEnabled, registeredAt, lastSignInAt, preferredLocale,
+      localePreferenceEditEnabled, optionalCommunications,
+      communicationsPreferenceEditEnabled });
     for (const observer of sessionObservers) {
       // A presentation failure must not change the canonical identity result.
       try { observer(sessionView); } catch { console.error("public-account-view-failed"); }
@@ -512,7 +547,20 @@
         if (!validSessionReadiness(session)) throw new Error("invalid-identity-session");
         if (revision === sessionRevision) {
           publishSessionView(session.authenticated ? "authenticated" : "anonymous",
-            session.authenticated ? sessionEmail(session) : "");
+            session.authenticated ? sessionEmail(session) : "",
+            session.authenticated && typeof session.displayName === "string" ? session.displayName : "",
+            session.authenticated && session.profileEditEnabled === true,
+            session.authenticated && session.dataExportEnabled === true,
+            session.authenticated && typeof session.registeredAt === "string" ? session.registeredAt : "",
+            session.authenticated && typeof session.lastSignInAt === "string" ? session.lastSignInAt : "",
+            session.authenticated && typeof session.preferredLocale === "string" ? session.preferredLocale : "",
+            session.authenticated && session.localePreferenceEditEnabled === true,
+            session.authenticated && session.optionalCommunications
+              ? Object.freeze({
+                productDigest: session.optionalCommunications.productDigest,
+                news: session.optionalCommunications.news,
+              }) : null,
+            session.authenticated && session.communicationsPreferenceEditEnabled === true);
         }
         return session;
       }).catch(error => {
@@ -681,6 +729,140 @@
     getSnapshot: () => sessionView,
     readSession: readPublicSession,
     refreshSession: refreshPublicSession,
+    // Existing subject-bound RLS Account table owns display_name. No browser
+    // user id, provider token or full profile update may pass this boundary.
+    async updateDisplayName(displayName, signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated" || owner.profileEditEnabled !== true)
+        throw new Error("account-profile-edit-unavailable");
+      if (typeof displayName !== "string" || displayName.length < 1
+          || [...displayName].length > 120 || displayName !== displayName.trim()
+          || /[\u0000-\u001f\u007f]/.test(displayName))
+        throw new Error("account-display-name-invalid");
+      const receipt = await loadJson("/account/profile/display-name", signal, {
+        maxBytes: 2048, method: "POST", jsonBody: { display_name: displayName },
+      });
+      if (!receipt || typeof receipt !== "object"
+          || Object.keys(receipt).sort().join(",") !== "displayName,schema,updated"
+          || receipt.schema !== "ordax.account-display-name-update/1"
+          || receipt.updated !== true || receipt.displayName !== displayName)
+        throw new Error("account-profile-update-unconfirmed");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return receipt;
+    },
+    // A saved language is owned by the existing Account row, not localStorage.
+    // The browser carries no user ID, RLS bypass, or provider credentials.
+    async updatePreferredLocale(locale, signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated" || owner.localePreferenceEditEnabled !== true)
+        throw new Error("account-locale-edit-unavailable");
+      if (locale !== "pt-BR" && locale !== "en-US")
+        throw new Error("account-locale-invalid");
+      const receipt = await loadJson("/account/preferences/locale", signal, {
+        maxBytes: 2048, method: "POST", jsonBody: { preferred_locale: locale },
+      });
+      if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)
+          || Object.keys(receipt).sort().join(",") !== "preferredLocale,schema,updated"
+          || receipt.schema !== "ordax.account-preferred-locale-update/1"
+          || receipt.updated !== true || receipt.preferredLocale !== locale)
+        throw new Error("account-locale-update-unconfirmed");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return receipt;
+    },
+    // Explicit choices only. This is not consent to send messages or a mail
+    // service; the backend records optional preferences in the own Account row.
+    async updateOptionalCommunications(choices, signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated" || owner.communicationsPreferenceEditEnabled !== true)
+        throw new Error("account-communications-edit-unavailable");
+      if (!choices || typeof choices !== "object" || Array.isArray(choices)
+          || Object.keys(choices).sort().join(",") !== "news,productDigest"
+          || typeof choices.productDigest !== "boolean" || typeof choices.news !== "boolean")
+        throw new Error("account-communications-invalid");
+      const receipt = await loadJson("/account/preferences/communications", signal, {
+        maxBytes: 2048, method: "POST",
+        jsonBody: { product_digest: choices.productDigest, news: choices.news },
+      });
+      if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)
+          || Object.keys(receipt).sort().join(",") !== "news,productDigest,schema,updated"
+          || receipt.schema !== "ordax.account-optional-communications-update/1"
+          || receipt.updated !== true
+          || receipt.productDigest !== choices.productDigest
+          || receipt.news !== choices.news)
+        throw new Error("account-communications-update-unconfirmed");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return receipt;
+    },
+    // The verified Account session authorizes read only. The owner backend
+    // distinguishes a missing record from the Free plan; the browser cannot
+    // choose a price, plan or entitlement.
+    async readSubscription(signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated")
+        throw new Error("public-account-session-required");
+      const value = await loadJson("/account/subscription", signal, { maxBytes: 4096 });
+      const keys = ["billing", "cancellationScheduled", "currentPeriodEnd",
+        "entitlements", "lifecycle", "planId", "schema", "source", "status"];
+      const plans = new Set(["free", "personal", "professional", "team"]);
+      const lifecycles = new Set(["trialing", "active", "past_due", "unpaid",
+        "canceled", "incomplete", "expired"]);
+      const unverified = value?.status === "unverified";
+      const valid = value && typeof value === "object" && !Array.isArray(value)
+        && Object.keys(value).sort().join(",") === keys.sort().join(",")
+        && value.schema === "ordax.account-subscription-view/1"
+        && value.source === "server"
+        && ["verified", "stale", "unverified"].includes(value.status)
+        && typeof value.cancellationScheduled === "boolean"
+        && value.entitlements === "separate-authority"
+        && (value.billing === "unavailable" || value.billing === "separate-authority")
+        && (unverified
+          ? value.planId === null && value.lifecycle === null
+            && value.currentPeriodEnd === null && value.cancellationScheduled === false
+            && value.billing === "unavailable"
+          : plans.has(value.planId) && lifecycles.has(value.lifecycle)
+            && (value.currentPeriodEnd === null ||
+              (typeof value.currentPeriodEnd === "string"
+                && !Number.isNaN(Date.parse(value.currentPeriodEnd)))));
+      if (!valid) throw new Error("account-subscription-view-invalid");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return Object.freeze(value);
+    },
+    // An explicit user action exports only the server-owned, own-subject
+    // privacy projection. Never persist the sensitive result in page state.
+    async readPrivateDataExport(signal) {
+      const owner = sessionView;
+      if (owner.status !== "authenticated" || owner.dataExportEnabled !== true)
+        throw new Error("account-export-not-authorized");
+      // The canonical Public Edge limits upstream responses to 2 MiB. Never
+      // advertise a larger client budget: an oversized archive is rejected,
+      // not truncated or mistaken for an empty export.
+      const value = await loadJson("/account/export", signal, { maxBytes: 2 * 1024 * 1024 });
+      const keys = ["$schema","subject","exported_at","account","spaces",
+        "memberships","space_profile_packs","entitlements","projects","devices",
+        "project_connections","memory_items","sync_objects"];
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!value || typeof value !== "object" || Array.isArray(value)
+          || Object.keys(value).sort().join(",") !== keys.sort().join(",")
+          || value.$schema !== "prototype-ordax.account-export/1"
+          || typeof value.subject !== "string" || !uuid.test(value.subject)
+          || typeof value.exported_at !== "string"
+          || !Number.isFinite(Date.parse(value.exported_at))
+          || !value.account || typeof value.account !== "object"
+          || Array.isArray(value.account)
+          || (Object.keys(value.account).length !== 0
+            && value.account.user_id !== value.subject)
+          || !["spaces","memberships","space_profile_packs","entitlements",
+            "projects","devices","project_connections","memory_items","sync_objects"]
+            .every(key => Array.isArray(value[key])))
+        throw new Error("account-export-contract-invalid");
+      if (owner !== sessionView || sessionView.status !== "authenticated")
+        throw new Error("public-account-session-changed");
+      return value;
+    },
     // Read-only account data uses the same bounded same-origin transport.
     // Authorization remains entirely server-side; no client-side quota claim.
     async readMcpUsage(signal) {
@@ -731,7 +913,8 @@
     },
     async createMcpProjectGrant(input, signal) {
       const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-      const profiles = new Set(["project-native-terminal", "project-native-process"]);
+      // Exact Product Owner profile keys; project scope, grant and client consent remain server-authoritative.
+      const profiles = new Set(["project-native-terminal", "project-native-process", "project-blender-control"]);
       const owner = sessionView;
       if (owner.status !== "authenticated") throw new Error("public-account-session-required");
       if (!input || Object.keys(input).sort().join(",")
@@ -914,8 +1097,12 @@
       const value=await loadJson("/account/mcp/project-onboarding?device_id="+deviceId,signal,
         {maxBytes:128*1024});
       const spaces=value?.spaces,projects=value?.projects;
+      const availability=value?.onboarding_availability;
       if(!value||value.ok!==true||value.schema!=="ordax.owner-project-onboarding-view/1"
-          ||value.device_id!==deviceId||!Array.isArray(spaces)||spaces.length>64
+          ||value.device_id!==deviceId
+          ||!availability||typeof availability.github_authorization_configured!=="boolean"
+          ||typeof availability.project_device_binding_enabled!=="boolean"
+          ||!Array.isArray(spaces)||spaces.length>64
           ||!Array.isArray(projects)||projects.length>512
           ||new Set(spaces.map(s=>s?.space_id)).size!==spaces.length
           ||new Set(projects.map(p=>p?.project_id)).size!==projects.length

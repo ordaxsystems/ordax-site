@@ -1,5 +1,15 @@
 # OrdaX Site
 
+## Governança documental multi-repositório
+
+A [entrada canônica da documentação transversal](https://github.com/ordaxsystems/ordax-os/blob/main/docs/README.md) e o [contrato de ownership](https://github.com/ordaxsystems/ordax-os/blob/main/docs/contracts/repository-ownership.json) definem **onde encontrar a autoridade**, não transferem para o OS o código, as APIs locais ou as responsabilidades dos outros owners.
+
+- Normas globais de arquitetura, composição, segurança e integração pertencem aos documentos e contratos canônicos indicados pelo índice do OS. Não duplicar essas regras aqui nem criar um SSOT paralelo.
+- Este repositório continua autoridade para seu próprio source, contratos que produz, guias de operação, testes e evidências. Documentos locais não podem alterar silenciosamente contratos de outro owner.
+- Em conflito, prevalecem o source/contrato vigente do owner aplicável e o índice de autoridades; planos, handoffs e evidências datadas não substituem estado vivo.
+- Alterações cross-repo devem atualizar a autoridade primária e somente os links/consumidores afetados, sem sincronização artificial de versões, rebuilds ou PRs.
+
+
 Repositório de **apresentação pública** do OrdaX. Independente dos builds do kernel, USB, Surface Web, Creator e Identity.
 
 > **Cutover de desenvolvimento integrado (2026-10-24).** O `ordax-site/main` é o owner do código e build independentes. O repoint dos builds Vercel do OS foi integrado em [ordax-os#2225](https://github.com/ordaxsystems/ordax-os/pull/2225); a apresentação histórica duplicada foi removida por [ordax-os#2229](https://github.com/ordaxsystems/ordax-os/pull/2229) (merge `c7533bc6`). Este estado **não** autoriza deploy de produção, alteração de DNS, ativação de Identity nem uso público dos artefatos temporários.
