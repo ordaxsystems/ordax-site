@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
-DOC_FILES = frozenset({"README.md", "AGENTS.md"})
+DOC_FILES = frozenset({"README.md", "AGENTS.md", "URGENTE-LEIA.md"})
 DOC_PREFIXES = ("docs/",)
 HOST_ONLY_PREFIXES = ("tests/", ".github/")
 
