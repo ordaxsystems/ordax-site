@@ -219,7 +219,9 @@ function projectHarness(session,fetcher){
 const projectState={ok:true,schema:"ordax.owner-project-onboarding-view/1",
   device_id:first.device_id,
   spaces:[{space_id:space,name:"Owner",kind:"work",state:"active"}],
-  projects:[],next_state:"needs_project"};
+  projects:[],next_state:"needs_project",
+  onboarding_availability:{github_authorization_configured:false,
+    project_device_binding_enabled:false}};
 const projectStateWithProject={...projectState,next_state:null,projects:[{
   project_id:project,space_id:space,name:"OrdaX Platform",kind:"development",
   state:"active",github_connection_count:0,repository_full_name:null,
@@ -237,6 +239,11 @@ test("Account project onboarding is scoped to one device and never invents GitHu
     {...projectState,schema:"other"},
     {...projectState,device_id:other},
     {...projectState,next_state:null},
+    {...projectState,onboarding_availability:undefined},
+    {...projectState,onboarding_availability:{github_authorization_configured:true,
+      project_device_binding_enabled:"enabled"}},
+    {...projectState,onboarding_availability:{github_authorization_configured:null,
+      project_device_binding_enabled:false}},
     {...projectStateWithProject,projects:[{...projectStateWithProject.projects[0],
       github_connection_count:1,repository_full_name:null}]},
     {...projectStateWithProject,projects:[{...projectStateWithProject.projects[0],
@@ -842,6 +849,10 @@ test("Project UI keeps Runtime binding separate and exposes Terminal/Process/Ble
   assert.match(portal,/project-native-terminal/);
   assert.match(portal,/project-native-process/);
   assert.match(portal,/project-blender-control/);
+  assert.match(portal,/!githubConfigured \|\| mcpGithubConnecting/);
+  assert.match(portal,/pendingBinding \|\| !bindingEnabled/);
+  assert.match(portal,/onboarding_availability\?\.project_device_binding_enabled !== true/);
+  assert.match(portal,/onboarding_availability\?\.github_authorization_configured !== true/);
   assert.match(portal,/Blender do projeto/);
   assert.match(portal,/project\.next_state === "ready_without_grants"/);
   assert.match(portal,/await account\.createMcpProjectGrant\(/);

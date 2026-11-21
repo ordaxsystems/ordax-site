@@ -1064,8 +1064,12 @@
       const value=await loadJson("/account/mcp/project-onboarding?device_id="+deviceId,signal,
         {maxBytes:128*1024});
       const spaces=value?.spaces,projects=value?.projects;
+      const availability=value?.onboarding_availability;
       if(!value||value.ok!==true||value.schema!=="ordax.owner-project-onboarding-view/1"
-          ||value.device_id!==deviceId||!Array.isArray(spaces)||spaces.length>64
+          ||value.device_id!==deviceId
+          ||!availability||typeof availability.github_authorization_configured!=="boolean"
+          ||typeof availability.project_device_binding_enabled!=="boolean"
+          ||!Array.isArray(spaces)||spaces.length>64
           ||!Array.isArray(projects)||projects.length>512
           ||new Set(spaces.map(s=>s?.space_id)).size!==spaces.length
           ||new Set(projects.map(p=>p?.project_id)).size!==projects.length

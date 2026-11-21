@@ -125,6 +125,7 @@
     ["O pedido de vínculo não foi confirmado e o estado atual não pôde ser consultado. Nenhuma nova tentativa será feita automaticamente.","The binding request was not confirmed and the current state could not be checked. No new attempt will be made automatically."],
     ["Aguardando Runtime","Waiting for Runtime"],
     ["Vincular a este dispositivo","Bind to this device"],
+    ["O vínculo de projetos ainda não está disponível na Platform.","Project device binding is not available in the Platform yet."],
     ["Autorizar ações do projeto","Authorize project actions"],
     ["Terminal do projeto","Project terminal"],
     ["Processos do projeto","Project processes"],
